@@ -50,7 +50,15 @@ Build once, then add a stdio MCP server using the absolute project path:
 }
 ```
 
-Install or link the two folders under `skills/` into the skills location used by your agent. Then ask it to “save this URL to uShelf” or “search my uShelf for writing about local-first software.”
+Symlink the repository-owned skills into your user skill directory so they stay available from any workspace and automatically reflect repository updates:
+
+```sh
+mkdir -p ~/.agents/skills
+ln -s /absolute/path/to/ushelf/skills/ushelf-ingest ~/.agents/skills/ushelf-ingest
+ln -s /absolute/path/to/ushelf/skills/ushelf-library ~/.agents/skills/ushelf-library
+```
+
+Restart the agent if the skills do not appear immediately. Then ask it to “save this URL to uShelf” or “search my uShelf for writing about local-first software.”
 
 ## Storage contract
 
