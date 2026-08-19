@@ -1,4 +1,5 @@
 ARG USHELF_WEB_BASE_PATH=/
+ARG USHELF_PORT=43110
 
 FROM node:24-bookworm-slim AS base
 
@@ -40,10 +41,8 @@ RUN pnpm install --frozen-lockfile --prod --filter @ushelf/server...
 FROM node:24-bookworm-slim AS runtime
 
 ARG USHELF_WEB_BASE_PATH
+ARG USHELF_PORT
 ENV NODE_ENV=production
-ENV USHELF_HOST=0.0.0.0
-ENV USHELF_PORT=43110
-ENV USHELF_ROOT=/data
 ENV USHELF_WEB_BASE_PATH=$USHELF_WEB_BASE_PATH
 
 WORKDIR /app
@@ -64,9 +63,9 @@ RUN mkdir -p /data/library/items /data/library/history /data/.ushelf \
 
 USER node
 
-EXPOSE 43110
+EXPOSE $USHELF_PORT
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "const base = process.env.USHELF_WEB_BASE_PATH === '/' ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, ''); fetch(`http://127.0.0.1:43110${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
+  CMD ["node", "-e", "const base = process.env.USHELF_WEB_BASE_PATH === '/' ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, ''); const port = process.env.USHELF_PORT; fetch(`http://127.0.0.1:${port}${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 
 CMD ["node", "apps/server/dist/index.js"]

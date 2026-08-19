@@ -25,8 +25,13 @@ export async function extractUrl(input: string): Promise<ExtractedSource> {
     return extracted;
   }
 
+  return extractReadableArticle(dom, canonicalUrl);
+}
+
+export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): ExtractedSource {
   const document = dom.window.document;
-  const reader = new Readability(document.cloneNode(true) as Document);
+  const classesToPreserve = prepareDocumentForExtraction(document, canonicalUrl);
+  const reader = new Readability(document.cloneNode(true) as Document, { classesToPreserve });
   const article = reader.parse();
   if (!article?.content || (article.textContent ?? "").trim().length < 120) {
     throw new Error("The page did not contain a readable article");
@@ -137,12 +142,73 @@ function extractPublicX(dom: JSDOM, url: string): ExtractedSource | undefined {
 function htmlToMarkdown(value: string): string {
   const safe = sanitizeHtml(value, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "figure", "figcaption"]),
-    allowedAttributes: { a: ["href", "title"], img: ["src", "alt", "title"] },
+    allowedAttributes: {
+      a: ["href", "title"],
+      code: ["class"],
+      img: ["src", "alt", "title"],
+    },
     allowedSchemes: ["http", "https", "mailto"],
   });
-  const turndown = new TurndownService({ headingStyle: "atx", bulletListMarker: "-" });
+  const turndown = new TurndownService({
+    headingStyle: "atx",
+    bulletListMarker: "-",
+    codeBlockStyle: "fenced",
+  });
   turndown.remove(["script", "style", "noscript", "iframe"]);
   return turndown.turndown(safe).trim();
+}
+
+function prepareDocumentForExtraction(document: Document, baseUrl: string): string[] {
+  const classesToPreserve = new Set<string>();
+  for (const image of document.querySelectorAll("img")) {
+    const pictureSource = image.closest("picture")?.querySelector("source");
+    const source = [
+      image.getAttribute("data-src"),
+      image.getAttribute("data-original"),
+      firstSrcsetUrl(image.getAttribute("data-srcset")),
+      image.getAttribute("src"),
+      firstSrcsetUrl(image.getAttribute("srcset")),
+      firstSrcsetUrl(pictureSource?.getAttribute("srcset") ?? null),
+    ].find(
+      (candidate) => candidate && !candidate.startsWith("data:") && !candidate.startsWith("blob:"),
+    );
+    if (source) image.setAttribute("src", resolveUrl(source, baseUrl));
+  }
+
+  // Readability can discard the deeply nested, scrollable wrappers used by documentation
+  // sites for syntax-highlighted code. Replace each block with its semantic content first.
+  for (const pre of document.querySelectorAll("pre")) {
+    const tabPanel = pre.closest('[data-component-part="tab-content"]');
+    const replacement = document.createElement("pre");
+    const code = document.createElement("code");
+    const language =
+      pre.getAttribute("language") || pre.querySelector("code")?.getAttribute("language");
+    if (language) {
+      code.className = `language-${language}`;
+      classesToPreserve.add(code.className);
+    }
+    code.textContent = pre.textContent ?? "";
+    replacement.append(code);
+    if (tabPanel) {
+      pre.remove();
+      tabPanel.append(replacement);
+    } else {
+      pre.replaceWith(replacement);
+    }
+  }
+  return [...classesToPreserve];
+}
+
+function firstSrcsetUrl(srcset: string | null): string | undefined {
+  return srcset?.split(",")[0]?.trim().split(/\s+/)[0] || undefined;
+}
+
+function resolveUrl(value: string, baseUrl: string): string {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return value;
+  }
 }
 
 function clean(value: string): string {

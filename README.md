@@ -62,6 +62,12 @@ directories are not writable by UID 1000, fix their ownership before starting:
 sudo chown -R 1000:1000 library .ushelf
 ```
 
+Compose loads `.env` as the deployment configuration source. `USHELF_HOST` and `USHELF_PORT`
+control the published host address and port, `USHELF_ROOT` selects the host directory containing
+`library/`, `.ushelf/`, and `recipes/`, and `USHELF_WEB_BASE_PATH` configures both the web build and
+runtime route prefix. Compose maps those host settings to the fixed `/data` root and `0.0.0.0`
+listener inside the container.
+
 The reader is available at `http://127.0.0.1:43110` on the VPS. It is deliberately not published on
 all network interfaces because uShelf does not provide HTTP authentication. Put an authenticated
 HTTPS reverse proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or reach it through a

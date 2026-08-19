@@ -4,26 +4,31 @@ services:
       context: .
       args:
         USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
+        USHELF_PORT: ${USHELF_PORT:-43110}
     image: ushelf:local
     init: true
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
+      # These two values describe paths and networking inside the container.
+      # Host-side values still come from .env below for bind mounts and ports.
       USHELF_HOST: 0.0.0.0
-      USHELF_PORT: 43110
       USHELF_ROOT: /data
+      USHELF_PORT: ${USHELF_PORT:-43110}
       USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
     ports:
-      - "127.0.0.1:43110:43110"
+      - "${USHELF_HOST:-127.0.0.1}:${USHELF_PORT:-43110}:${USHELF_PORT:-43110}"
     volumes:
       - type: bind
-        source: ./library
+        source: ${USHELF_ROOT:-.}/library
         target: /data/library
       - type: bind
-        source: ./.ushelf
+        source: ${USHELF_ROOT:-.}/.ushelf
         target: /data/.ushelf
       - type: bind
-        source: ./recipes
+        source: ${USHELF_ROOT:-.}/recipes
         target: /data/recipes
         read_only: true
     read_only: true
@@ -39,7 +44,8 @@ services:
         - >-
           const base = process.env.USHELF_WEB_BASE_PATH === '/'
             ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, '');
-          fetch(`http://127.0.0.1:43110$${base}/api/health`).then((response) => {
+          const port = process.env.USHELF_PORT;
+          fetch(`http://127.0.0.1:$${port}$${base}/api/health`).then((response) => {
             if (!response.ok) process.exit(1);
           }).catch(() => process.exit(1));
       interval: 30s
