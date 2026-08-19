@@ -44,8 +44,14 @@ export interface ShelfItem {
   revision: string;
 }
 
+const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function apiUrl(path: string): string {
+  return `${BASE_PATH}${path}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers: { "content-type": "application/json", ...options?.headers },
   });
@@ -87,7 +93,7 @@ export function updateReadingOnExit(
   status: ReadingStatus,
   progress: number,
 ): void {
-  void fetch(`/api/items/${item.id}/reading`, {
+  void fetch(apiUrl(`/api/items/${item.id}/reading`), {
     method: "PATCH",
     keepalive: true,
     headers: { "content-type": "application/json" },

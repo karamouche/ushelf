@@ -2,6 +2,8 @@ services:
   ushelf:
     build:
       context: .
+      args:
+        USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
     image: ushelf:local
     init: true
     restart: unless-stopped
@@ -10,6 +12,7 @@ services:
       USHELF_HOST: 0.0.0.0
       USHELF_PORT: 43110
       USHELF_ROOT: /data
+      USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
     ports:
       - "127.0.0.1:43110:43110"
     volumes:
@@ -34,7 +37,9 @@ services:
         - node
         - -e
         - >-
-          fetch('http://127.0.0.1:43110/api/health').then((response) => {
+          const base = process.env.USHELF_WEB_BASE_PATH === '/'
+            ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, '');
+          fetch(`http://127.0.0.1:43110$${base}/api/health`).then((response) => {
             if (!response.ok) process.exit(1);
           }).catch(() => process.exit(1));
       interval: 30s

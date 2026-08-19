@@ -1,3 +1,5 @@
+ARG USHELF_WEB_BASE_PATH=/
+
 FROM node:24-bookworm-slim AS base
 
 ENV PNPM_HOME=/pnpm
@@ -23,7 +25,8 @@ COPY apps/web apps/web
 COPY packages/core packages/core
 COPY recipes recipes
 
-RUN pnpm build
+ARG USHELF_WEB_BASE_PATH
+RUN USHELF_WEB_BASE_PATH="$USHELF_WEB_BASE_PATH" pnpm build
 
 FROM base AS production-dependencies
 
@@ -36,10 +39,12 @@ RUN pnpm install --frozen-lockfile --prod --filter @ushelf/server...
 
 FROM node:24-bookworm-slim AS runtime
 
+ARG USHELF_WEB_BASE_PATH
 ENV NODE_ENV=production
 ENV USHELF_HOST=0.0.0.0
 ENV USHELF_PORT=43110
 ENV USHELF_ROOT=/data
+ENV USHELF_WEB_BASE_PATH=$USHELF_WEB_BASE_PATH
 
 WORKDIR /app
 
@@ -62,6 +67,6 @@ USER node
 EXPOSE 43110
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:43110/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
+  CMD ["node", "-e", "const base = process.env.USHELF_WEB_BASE_PATH === '/' ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, ''); fetch(`http://127.0.0.1:43110${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 
 CMD ["node", "apps/server/dist/index.js"]

@@ -6,9 +6,11 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 
 - This is a React 19 single-page app built with Vite.
 - `src/App.tsx` contains the library and reader routes; `src/api.ts` is the API client.
-- The app does not read library files directly. All data and updates go through `/api`.
+- The app does not read library files directly. All data and updates go through the API path below
+  the configured `USHELF_WEB_BASE_PATH`.
 - Rendered Markdown is sanitized. Remote images are lazy-loaded with a no-referrer policy.
-- In development, Vite runs on `127.0.0.1:43111` and proxies `/api` to the server on port `43110`.
+- In development, Vite runs on `127.0.0.1:43111` and proxies the configured base path's `/api`
+  endpoint to the server on port `43110`.
 - In production, the server serves the generated `dist/` directory and handles SPA fallback.
 - The API response types in `src/api.ts` intentionally describe the client boundary; update them when the server contract changes.
 
@@ -17,6 +19,7 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 Run from the repository root:
 
 ```sh
+cp .env.example .env
 pnpm --filter @ushelf/web dev
 pnpm --filter @ushelf/web build
 pnpm --filter @ushelf/web typecheck

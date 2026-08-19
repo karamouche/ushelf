@@ -12,7 +12,8 @@ const webRoot =
   process.env.NODE_ENV === "production" ? path.resolve(here, "../../web/dist") : undefined;
 const port = Number(process.env.USHELF_PORT ?? 43110);
 const hostname = process.env.USHELF_HOST ?? "127.0.0.1";
+const basePath = process.env.USHELF_WEB_BASE_PATH?.trim() || "/";
 
-serve({ fetch: createApp(service, webRoot).fetch, port, hostname }, (info) => {
+serve({ fetch: createApp(service, webRoot, basePath).fetch, port, hostname }, (info) => {
   console.log(`uShelf is reading at http://${hostname}:${info.port}`);
 });

@@ -22,6 +22,7 @@ uShelf has no model SDK, AI key, embeddings, or autonomous model process.
 
 ```sh
 pnpm install
+cp .env.example .env
 pnpm dev
 ```
 
@@ -34,6 +35,12 @@ NODE_ENV=production pnpm start
 
 The production reader is served from `http://127.0.0.1:43110`.
 
+`USHELF_WEB_BASE_PATH` optionally configures the web build and development server. It defaults to
+`/`, which serves uShelf at the host root.
+For a subpath deployment, set an absolute URL path such as `/reader/`; the trailing slash is added
+automatically. A reverse proxy must preserve that prefix when forwarding browser and API requests
+to uShelf.
+
 ## Run continuously with Docker Compose
 
 The Compose deployment builds the production reader and API into one container, restarts it after
@@ -42,6 +49,7 @@ failures or host reboots, and keeps the canonical Markdown and rebuildable SQLit
 Prepare the writable bind-mount directories, then start the service:
 
 ```sh
+cp .env.example .env
 mkdir -p library/items library/history .ushelf
 docker compose up -d --build
 docker compose ps
