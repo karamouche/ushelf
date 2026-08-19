@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-types/
+*.tsbuildinfo
+.vite/
+.ushelf/
+playwright-report/
+test-results/
+coverage/
+.DS_Store
+library/items/
+library/history/
+!library/items/.gitkeep
+!library/history/.gitkeep

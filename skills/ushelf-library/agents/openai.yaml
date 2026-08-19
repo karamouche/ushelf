@@ -1,0 +1,4 @@
+interface:
+  display_name: "uShelf Library"
+  short_description: "Search and manage your uShelf library"
+  default_prompt: "Use $ushelf-library to find relevant pieces in my reading library."

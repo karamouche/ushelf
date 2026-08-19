@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-types/
+.ushelf/
+library/items/
+library/history/
+playwright-report/
+test-results/
+coverage/
+pnpm-lock.yaml

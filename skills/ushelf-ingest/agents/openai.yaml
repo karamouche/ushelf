@@ -1,0 +1,4 @@
+interface:
+  display_name: "uShelf Ingest"
+  short_description: "Save and enrich reading with uShelf"
+  default_prompt: "Use $ushelf-ingest to save this URL to my reading library."

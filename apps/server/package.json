@@ -1,0 +1,21 @@
+{
+  "name": "@ushelf/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "rebuild-index": "tsx src/cli.ts rebuild-index",
+    "import": "tsx src/cli.ts import"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.1",
+    "@ushelf/core": "workspace:*",
+    "hono": "^4.9.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5"
+  }
+}
