@@ -1,0 +1,44 @@
+services:
+  ushelf:
+    build:
+      context: .
+    image: ushelf:local
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      USHELF_HOST: 0.0.0.0
+      USHELF_PORT: 43110
+      USHELF_ROOT: /data
+    ports:
+      - "127.0.0.1:43110:43110"
+    volumes:
+      - type: bind
+        source: ./library
+        target: /data/library
+      - type: bind
+        source: ./.ushelf
+        target: /data/.ushelf
+      - type: bind
+        source: ./recipes
+        target: /data/recipes
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:43110/api/health').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 10s
