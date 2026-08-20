@@ -232,14 +232,30 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     if (source) image.setAttribute("src", resolveUrl(source, baseUrl));
   }
 
+  // Mermaid is commonly embedded as either a div/pre with a `mermaid` class or a
+  // code element carrying a language marker. Normalize those variants before
+  // Readability can flatten their structure or discard their identifying class.
+  const mermaidElements = [...document.querySelectorAll("div, pre, code")].filter(
+    (element) =>
+      languageForElement(element) === "mermaid" && !hasMermaidAncestor(element.parentElement),
+  );
+  for (const element of mermaidElements) {
+    const target = element.tagName === "CODE" ? (element.closest("pre") ?? element) : element;
+    const replacement = document.createElement("pre");
+    const code = document.createElement("code");
+    code.className = "language-mermaid";
+    code.textContent = element.textContent ?? "";
+    replacement.append(code);
+    target.replaceWith(replacement);
+  }
+
   // Readability can discard the deeply nested, scrollable wrappers used by documentation
   // sites for syntax-highlighted code. Replace each block with its semantic content first.
   for (const pre of document.querySelectorAll("pre")) {
     const tabPanel = pre.closest('[data-component-part="tab-content"]');
     const replacement = document.createElement("pre");
     const code = document.createElement("code");
-    const language =
-      pre.getAttribute("language") || pre.querySelector("code")?.getAttribute("language");
+    const language = languageForElement(pre) ?? languageForElement(pre.querySelector("code"));
     if (language) {
       code.className = `language-${language}`;
       classesToPreserve.add(code.className);
@@ -254,6 +270,26 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     }
   }
   return [...classesToPreserve];
+}
+
+function languageForElement(element: Element | null): string | undefined {
+  if (!element) return undefined;
+  const explicit = element.getAttribute("language") ?? element.getAttribute("data-language");
+  if (explicit?.trim()) return explicit.trim().toLowerCase();
+  for (const token of element.classList) {
+    const normalized = token.toLowerCase();
+    if (normalized === "mermaid") return "mermaid";
+    if (normalized.startsWith("language-") && normalized.length > "language-".length)
+      return normalized.slice("language-".length);
+  }
+  return undefined;
+}
+
+function hasMermaidAncestor(element: Element | null): boolean {
+  for (let current = element; current; current = current.parentElement) {
+    if (languageForElement(current) === "mermaid") return true;
+  }
+  return false;
 }
 
 function firstSrcsetUrl(srcset: string | null): string | undefined {

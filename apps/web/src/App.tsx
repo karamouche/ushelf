@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  isValidElement,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import rehypeSanitize from "rehype-sanitize";
@@ -20,6 +29,21 @@ const statuses: Array<{ value: "" | ReadingStatus; label: string }> = [
   { value: "read", label: "Read" },
   { value: "archived", label: "Archived" },
 ];
+
+let mermaidModule: Promise<typeof import("mermaid").default> | undefined;
+
+function loadMermaid(): Promise<typeof import("mermaid").default> {
+  mermaidModule ??= import("mermaid").then(({ default: mermaid }) => {
+    mermaid.initialize({
+      securityLevel: "strict",
+      startOnLoad: false,
+      suppressErrorRendering: true,
+      theme: "neutral",
+    });
+    return mermaid;
+  });
+  return mermaidModule;
+}
 
 export function App() {
   return (
@@ -369,6 +393,7 @@ function Markdown({ value }: { value: string }) {
           </a>
         ),
         img: (props) => <img {...props} loading="lazy" referrerPolicy="no-referrer" />,
+        pre: MermaidPre,
         table: ({ children, ...props }) => (
           <div className="table-scroll" tabIndex={0}>
             <table {...props}>{children}</table>
@@ -378,6 +403,68 @@ function Markdown({ value }: { value: string }) {
     >
       {value}
     </ReactMarkdown>
+  );
+}
+
+function MermaidPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+  if (isValidElement(children)) {
+    const code = children.props as { className?: string; children?: ReactNode };
+    if (code.className?.split(/\s+/).includes("language-mermaid")) {
+      return <MermaidDiagram source={String(code.children ?? "").replace(/\n$/, "")} />;
+    }
+  }
+  return <pre {...props}>{children}</pre>;
+}
+
+function MermaidDiagram({ source }: { source: string }) {
+  const reactId = useId();
+  const renderId = useMemo(
+    () => `ushelf-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    [reactId],
+  );
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setSvg("");
+    setError(false);
+    void loadMermaid()
+      .then((mermaid) => mermaid.render(renderId, source))
+      .then(({ svg: rendered }) => {
+        if (current) setSvg(rendered);
+      })
+      .catch(() => {
+        if (current) setError(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [renderId, source]);
+
+  if (error) {
+    return (
+      <div className="mermaid-fallback" aria-label="Mermaid diagram source">
+        <p role="alert">Diagram could not be rendered. Showing its source instead.</p>
+        <pre>
+          <code className="language-mermaid">{source}</code>
+        </pre>
+      </div>
+    );
+  }
+  if (!svg)
+    return (
+      <div className="mermaid-loading" role="status">
+        Rendering diagram…
+      </div>
+    );
+  return (
+    <div
+      className="mermaid-diagram"
+      aria-label="Mermaid diagram"
+      role="img"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   );
 }
 

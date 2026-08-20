@@ -23,6 +23,41 @@ describe("readable article extraction", () => {
     );
   });
 
+  it.each([
+    ["pre class", '<pre class="mermaid">graph TD\nA--&gt;B</pre>'],
+    ["div class", '<div class="mermaid">graph LR\nA--&gt;B</div>'],
+    [
+      "nested code language",
+      '<pre><code class="language-mermaid">sequenceDiagram\nA-&gt;&gt;B: Hello</code></pre>',
+    ],
+    ["language attribute", '<pre data-language="mermaid">flowchart TD\nA--&gt;B</pre>'],
+  ])("preserves Mermaid source from a %s as a fenced block", (_name, diagram) => {
+    const dom = articleDom(`
+      <h1>Diagram guide</h1>
+      <p>A useful introduction with enough text for Readability to identify this as an article.</p>
+      ${diagram}
+      <p>This closing explanation contains enough additional prose to keep extraction deterministic and useful.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/diagram");
+
+    expect(result.markdown).toMatch(/```mermaid\n(?:graph|sequenceDiagram|flowchart)/);
+    expect(result.markdown.match(/```mermaid/g)).toHaveLength(1);
+  });
+
+  it("does not change the language of ordinary fenced code", () => {
+    const dom = articleDom(`
+      <h1>Code guide</h1>
+      <p>A useful introduction with enough text for Readability to identify this as an article.</p>
+      <pre><code class="language-typescript">const answer = 42;</code></pre>
+      <p>This closing explanation contains enough additional prose to keep extraction deterministic and useful.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/code");
+
+    expect(result.markdown).toContain("```typescript\nconst answer = 42;\n```");
+  });
+
   it("imports lazy and relative article images", () => {
     const dom = articleDom(`
       <h1>Illustrated guide</h1>
