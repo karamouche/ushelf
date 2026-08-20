@@ -349,6 +349,56 @@ footer {
 .document code {
   font-size: 0.85em;
 }
+.table-scroll {
+  width: min(960px, calc(100vw - 40px));
+  margin: 34px 50%;
+  overflow-x: auto;
+  border: 1px solid #d7d7d7;
+  transform: translateX(-50%);
+  scrollbar-color: #aaa #f2f2f2;
+}
+.table-scroll:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 3px;
+}
+.document table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.document th,
+.document td {
+  padding: 15px 18px;
+  text-align: left;
+  vertical-align: top;
+  border-right: 1px solid #e3e3e3;
+  border-bottom: 1px solid #e3e3e3;
+}
+.document th:last-child,
+.document td:last-child {
+  border-right: 0;
+}
+.document tr:last-child td {
+  border-bottom: 0;
+}
+.document th {
+  background: #f3f3f3;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.document tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+.document td > :first-child {
+  margin-top: 0;
+}
+.document td > :last-child {
+  margin-bottom: 0;
+}
 .source {
   margin-top: 44px;
   border-top: 5px solid #111;
@@ -423,6 +473,13 @@ footer {
   .document p,
   .document li {
     font-size: 18px;
+  }
+  .table-scroll {
+    width: calc(100vw - 24px);
+  }
+  .document th,
+  .document td {
+    padding: 13px 14px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

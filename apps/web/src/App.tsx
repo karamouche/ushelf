@@ -369,6 +369,11 @@ function Markdown({ value }: { value: string }) {
           </a>
         ),
         img: (props) => <img {...props} loading="lazy" referrerPolicy="no-referrer" />,
+        table: ({ children, ...props }) => (
+          <div className="table-scroll" tabIndex={0}>
+            <table {...props}>{children}</table>
+          </div>
+        ),
       }}
     >
       {value}
