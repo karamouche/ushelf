@@ -86,7 +86,7 @@ h1 {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 400;
-  font-size: clamp(46px, 7vw, 78px);
+  font-size: clamp(41px, 6.3vw, 70px);
   letter-spacing: -0.045em;
   line-height: 0.95;
 }
@@ -171,14 +171,15 @@ h1 {
 }
 .item-card h2 {
   font-family: Georgia, serif;
-  font-size: clamp(24px, 3.2vw, 36px);
+  font-size: clamp(22px, 2.9vw, 32px);
   font-weight: 400;
   letter-spacing: -0.025em;
   margin: 12px 0 8px;
 }
 .item-card p {
   max-width: 760px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.6;
   margin: 0 0 22px;
 }
 .card-foot {
@@ -265,13 +266,13 @@ footer {
   transition: width 0.2s;
 }
 .article {
-  width: min(720px, calc(100% - 40px));
+  width: min(680px, calc(100% - 40px));
   margin: 0 auto;
   padding: 90px 0 100px;
 }
 .article > h1 {
-  font-size: clamp(43px, 7vw, 72px);
-  line-height: 1.02;
+  font-size: clamp(39px, 6.3vw, 65px);
+  line-height: 1.05;
   margin-bottom: 25px;
 }
 .byline {
@@ -302,7 +303,7 @@ footer {
 }
 .document > h2 {
   font:
-    400 34px Georgia,
+    400 31px Georgia,
     serif;
   letter-spacing: -0.03em;
   padding-bottom: 15px;
@@ -310,15 +311,15 @@ footer {
 }
 .document h3 {
   font:
-    400 25px Georgia,
+    400 23px Georgia,
     serif;
   margin-top: 40px;
 }
 .document p,
 .document li {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 19px;
-  line-height: 1.72;
+  font-size: 17px;
+  line-height: 1.68;
 }
 .document li {
   padding-left: 5px;
@@ -447,6 +448,10 @@ footer {
   .library-head {
     padding-top: 48px;
   }
+  h1 {
+    font-size: clamp(36px, 11vw, 46px);
+    line-height: 1;
+  }
   .controls {
     grid-template-columns: 1fr;
   }
@@ -470,9 +475,20 @@ footer {
   .article {
     padding-top: 60px;
   }
+  .article > h1 {
+    font-size: clamp(34px, 10vw, 42px);
+    line-height: 1.08;
+  }
+  .document > h2 {
+    font-size: 28px;
+  }
+  .document h3 {
+    font-size: 21px;
+  }
   .document p,
   .document li {
-    font-size: 18px;
+    font-size: 16px;
+    line-height: 1.65;
   }
   .table-scroll {
     width: calc(100vw - 24px);
