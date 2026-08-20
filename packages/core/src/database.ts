@@ -5,9 +5,11 @@ import type { IngestionState, ItemSummary, LibraryListQuery, ShelfItem } from ".
 
 export class ShelfDatabase {
   readonly db: DatabaseSync;
+  readonly itemsDir: string | undefined;
 
-  constructor(databasePath: string) {
+  constructor(databasePath: string, itemsDir?: string) {
     mkdirSync(path.dirname(databasePath), { recursive: true });
+    this.itemsDir = itemsDir ? path.resolve(itemsDir) : undefined;
     this.db = new DatabaseSync(databasePath);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.migrate();
@@ -71,7 +73,7 @@ export class ShelfDatabase {
           JSON.stringify(item.tags),
           state,
           item.enrichment.summary ?? null,
-          item.filePath,
+          this.encodeFilePath(item.filePath),
           item.revision,
         );
       this.db.prepare("DELETE FROM item_search WHERE id = ?").run(item.id);
@@ -111,9 +113,23 @@ export class ShelfDatabase {
   }
 
   filePath(id: string): string | undefined {
+    return this.itemLocation(id)?.filePath;
+  }
+
+  itemLocation(id: string): { filePath?: string; portable: boolean } | undefined {
     const row = this.db.prepare("SELECT file_path FROM items WHERE id = ?").get(id) as
       { file_path: string } | undefined;
-    return row?.file_path;
+    if (!row) return undefined;
+    const filePath = this.decodeFilePath(row.file_path);
+    return {
+      ...(filePath ? { filePath } : {}),
+      portable:
+        this.itemsDir === undefined || (!path.isAbsolute(row.file_path) && filePath !== undefined),
+    };
+  }
+
+  hasItem(id: string): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM items WHERE id = ?").get(id));
   }
 
   list(query: LibraryListQuery = {}): ItemSummary[] {
@@ -175,6 +191,41 @@ export class ShelfDatabase {
       throw error;
     }
   }
+
+  private encodeFilePath(filePath: string): string {
+    if (!this.itemsDir) return filePath;
+    const relative = path.relative(this.itemsDir, path.resolve(filePath));
+    if (
+      !relative ||
+      path.isAbsolute(relative) ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`)
+    )
+      throw new Error(`Item path is outside the library: ${filePath}`);
+    return relative.split(path.sep).join(path.posix.sep);
+  }
+
+  private decodeFilePath(storedPath: string): string | undefined {
+    if (!this.itemsDir) return storedPath;
+    if (path.isAbsolute(storedPath)) {
+      const resolved = path.resolve(storedPath);
+      return isWithin(this.itemsDir, resolved) ? resolved : undefined;
+    }
+    const parts = storedPath.split("/");
+    if (parts.some((part) => !part || part === "." || part === "..")) return undefined;
+    const resolved = path.resolve(this.itemsDir, ...parts);
+    return isWithin(this.itemsDir, resolved) ? resolved : undefined;
+  }
+}
+
+function isWithin(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    Boolean(relative) &&
+    !path.isAbsolute(relative) &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`)
+  );
 }
 
 interface DatabaseItemRow {

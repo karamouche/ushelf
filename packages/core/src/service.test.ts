@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -116,5 +116,51 @@ describe("agent-driven workflow", () => {
         bodyMarkdown: "",
       }),
     ).rejects.toThrow(/not present/);
+  });
+
+  it("shares portable index paths across different roots", async () => {
+    const { root, config, service, item } = await fixture();
+    const aliasRoot = `${root}-alias`;
+    roots.push(aliasRoot);
+    await symlink(root, aliasRoot, "dir");
+
+    const aliasService = new ShelfService(resolveConfig(aliasRoot));
+    await aliasService.initialize();
+    const throughAlias = await aliasService.getItem(item.id);
+    expect(throughAlias.filePath.startsWith(path.join(aliasRoot, "library", "items"))).toBe(true);
+
+    await aliasService.updateReading(item.id, "reading", 0.5, throughAlias.revision);
+    const throughOriginal = await service.getItem(item.id);
+    expect(throughOriginal.reading).toMatchObject({ status: "reading", progress: 0.5 });
+
+    const row = service.database.db
+      .prepare("SELECT file_path FROM items WHERE id = ?")
+      .get(item.id) as { file_path: string };
+    expect(row.file_path).toBe(
+      path.relative(config.itemsDir, item.filePath).split(path.sep).join("/"),
+    );
+  });
+
+  it("recovers from and repairs a foreign absolute index path", async () => {
+    const { service, item } = await fixture();
+    service.database.db
+      .prepare("UPDATE items SET file_path = ? WHERE id = ?")
+      .run(`/different-runtime/library/items/2026/${path.basename(item.filePath)}`, item.id);
+
+    const recovered = await service.getItem(item.id);
+    expect(recovered.id).toBe(item.id);
+    const row = service.database.db
+      .prepare("SELECT file_path FROM items WHERE id = ?")
+      .get(item.id) as { file_path: string };
+    expect(row.file_path).toBe(`2026/${path.basename(item.filePath)}`);
+  });
+
+  it("ignores unsafe indexed paths and falls back to canonical Markdown", async () => {
+    const { service, item } = await fixture();
+    service.database.db
+      .prepare("UPDATE items SET file_path = ? WHERE id = ?")
+      .run("../../outside.md", item.id);
+
+    await expect(service.getItem(item.id)).resolves.toMatchObject({ id: item.id });
   });
 });

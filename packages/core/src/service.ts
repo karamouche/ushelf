@@ -30,7 +30,7 @@ export class ShelfService {
   constructor(config = resolveConfig()) {
     this.config = config;
     this.repository = new MarkdownRepository(config);
-    this.database = new ShelfDatabase(config.databasePath);
+    this.database = new ShelfDatabase(config.databasePath, config.itemsDir);
   }
 
   async initialize(): Promise<void> {
@@ -224,7 +224,10 @@ export class ShelfService {
   }
 
   async getItem(id: string): Promise<ShelfItem> {
-    return this.repository.loadById(id, this.database.filePath(id));
+    const location = this.database.itemLocation(id);
+    const item = await this.repository.loadById(id, location?.filePath);
+    if (!location?.portable || location.filePath !== item.filePath) this.database.upsert(item);
+    return item;
   }
 
   listItems(query: LibraryListQuery = {}) {
@@ -312,7 +315,7 @@ export class ShelfService {
   }
 
   requestDelete(id: string): { token: string; expiresAt: string } {
-    if (!this.database.filePath(id)) throw new Error(`Item ${id} was not found`);
+    if (!this.database.hasItem(id)) throw new Error(`Item ${id} was not found`);
     const token = randomBytes(24).toString("base64url");
     const expiresAt = Date.now() + 5 * 60_000;
     this.database.createDeleteToken(token, id, expiresAt);

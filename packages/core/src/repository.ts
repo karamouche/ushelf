@@ -22,7 +22,14 @@ export class MarkdownRepository {
   }
 
   async loadById(id: string, indexedPath?: string): Promise<ShelfItem> {
-    if (indexedPath) return this.load(indexedPath);
+    if (indexedPath) {
+      try {
+        const indexed = await this.load(indexedPath);
+        if (indexed.id === id) return indexed;
+      } catch (error) {
+        if (!isMissingFileError(error)) throw error;
+      }
+    }
     for (const filePath of await this.itemFiles()) {
       const item = await this.load(filePath);
       if (item.id === id) return item;
@@ -86,6 +93,12 @@ export class MarkdownRepository {
     if (!recipe) throw new Error(`Recipe ${name} was not found`);
     return recipe;
   }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 async function atomicWrite(filePath: string, contents: string): Promise<void> {
