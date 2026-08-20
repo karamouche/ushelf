@@ -30,17 +30,23 @@ export async function extractUrl(input: string): Promise<ExtractedSource> {
 
 export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): ExtractedSource {
   const document = dom.window.document;
+  const metadataImage = metadataImageUrl(document, canonicalUrl);
   const classesToPreserve = prepareDocumentForExtraction(document, canonicalUrl);
   const reader = new Readability(document.cloneNode(true) as Document, { classesToPreserve });
   const article = reader.parse();
   if (!article?.content || (article.textContent ?? "").trim().length < 120) {
     throw new Error("The page did not contain a readable article");
   }
+  const title = clean(article.title ?? "") || new URL(canonicalUrl).hostname;
+  let markdown = htmlToMarkdown(article.content);
+  if (metadataImage && !containsMarkdownImage(markdown)) {
+    markdown = `![${escapeImageAlt(title)}](${metadataImage})\n\n${markdown}`;
+  }
   return {
     sourceType: "blog",
-    title: clean(article.title ?? "") || new URL(canonicalUrl).hostname,
+    title,
     ...(article.byline ? { author: clean(article.byline) } : {}),
-    markdown: htmlToMarkdown(article.content),
+    markdown,
     method: "readability",
   };
 }
@@ -146,6 +152,8 @@ function htmlToMarkdown(value: string): string {
       a: ["href", "title"],
       code: ["class"],
       img: ["src", "alt", "title"],
+      td: ["align"],
+      th: ["align"],
     },
     allowedSchemes: ["http", "https", "mailto"],
   });
@@ -155,11 +163,60 @@ function htmlToMarkdown(value: string): string {
     codeBlockStyle: "fenced",
   });
   turndown.remove(["script", "style", "noscript", "iframe"]);
+  addTableRules(turndown);
   return turndown.turndown(safe).trim();
+}
+
+function addTableRules(turndown: TurndownService): void {
+  turndown.addRule("tableCell", {
+    filter: ["th", "td"],
+    replacement(content, node) {
+      const value = content
+        .replace(/\s*\n\s*/g, " ")
+        .trim()
+        .replaceAll("|", "\\|");
+      return `${node.parentElement?.firstElementChild === node ? "| " : " "}${value} |`;
+    },
+  });
+  turndown.addRule("tableRow", {
+    filter: "tr",
+    replacement(content, node) {
+      const row = node as HTMLTableRowElement;
+      const cells = [...row.cells];
+      const isFirstRow = row.closest("table")?.querySelector("tr") === row;
+      if (!isFirstRow) return `${content}\n`;
+      const separator = cells
+        .map((cell) => {
+          const alignment = cell.getAttribute("align")?.toLowerCase();
+          if (alignment === "left") return ":---";
+          if (alignment === "right") return "---:";
+          if (alignment === "center") return ":---:";
+          return "---";
+        })
+        .join(" | ");
+      return `${content}\n| ${separator} |\n`;
+    },
+  });
+  turndown.addRule("table", {
+    filter: "table",
+    replacement(content) {
+      return `\n\n${content.trim()}\n\n`;
+    },
+  });
+  turndown.addRule("tableSection", {
+    filter: ["thead", "tbody", "tfoot"],
+    replacement(content) {
+      return content;
+    },
+  });
 }
 
 function prepareDocumentForExtraction(document: Document, baseUrl: string): string[] {
   const classesToPreserve = new Set<string>();
+  for (const anchor of document.querySelectorAll("a[href]")) {
+    const href = anchor.getAttribute("href");
+    if (href) anchor.setAttribute("href", resolveUrl(href, baseUrl));
+  }
   for (const image of document.querySelectorAll("img")) {
     const pictureSource = image.closest("picture")?.querySelector("source");
     const source = [
@@ -209,6 +266,28 @@ function resolveUrl(value: string, baseUrl: string): string {
   } catch {
     return value;
   }
+}
+
+function metadataImageUrl(document: Document, baseUrl: string): string | undefined {
+  const value =
+    document.querySelector('meta[property="og:image"]')?.getAttribute("content") ||
+    document.querySelector('meta[name="twitter:image"]')?.getAttribute("content");
+  if (!value) return undefined;
+  const resolved = resolveUrl(value, baseUrl);
+  try {
+    const protocol = new URL(resolved).protocol;
+    return protocol === "http:" || protocol === "https:" ? resolved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function containsMarkdownImage(markdown: string): boolean {
+  return markdown.includes("![");
+}
+
+function escapeImageAlt(value: string): string {
+  return value.replaceAll("[", "\\[").replaceAll("]", "\\]");
 }
 
 function clean(value: string): string {

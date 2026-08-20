@@ -38,10 +38,45 @@ describe("readable article extraction", () => {
     );
     expect(result.markdown).toContain("Runtime flow");
   });
+
+  it("uses the metadata image when the article has no inline image", () => {
+    const dom = articleDom(
+      `<h1>Metadata image guide</h1>
+       <p>This article contains enough useful explanatory text for Readability to extract it reliably without requiring any unrelated navigation content.</p>
+       <p>Its page artwork is exposed through metadata rather than an image element in the article body.</p>`,
+      '<meta property="og:image" content="/generated/cover.png">',
+    );
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guides/overview");
+
+    expect(result.markdown).toContain("![Guide](https://docs.example.test/generated/cover.png)");
+  });
+
+  it("converts article tables to GitHub-Flavored Markdown", () => {
+    const dom = articleDom(`
+      <h1>Capability guide</h1>
+      <p>This guide explains the available capabilities and contains enough prose for reliable article extraction.</p>
+      <table>
+        <thead><tr><th>Capability</th><th>Path</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><a href="/model">Model</a></td><td><code>agent.py</code></td><td>Required core options.</td></tr>
+          <tr><td>Tools</td><td><code>tools/</code></td><td>Application logic | services.</td></tr>
+        </tbody>
+      </table>
+      <p>The remaining explanatory text describes how each capability maps to a file or directory in the project.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guide");
+
+    expect(result.markdown).toContain(`| Capability | Path | Description |
+| --- | --- | --- |
+| [Model](https://docs.example.test/model) | \`agent.py\` | Required core options. |
+| Tools | \`tools/\` | Application logic \\| services. |`);
+  });
 });
 
-function articleDom(content: string): JSDOM {
+function articleDom(content: string, metadata = ""): JSDOM {
   return new JSDOM(
-    `<html><head><title>Guide</title></head><body><main><article>${content}</article></main></body></html>`,
+    `<html><head><title>Guide</title>${metadata}</head><body><main><article>${content}</article></main></body></html>`,
   );
 }
