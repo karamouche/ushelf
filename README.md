@@ -1,52 +1,142 @@
-# uShelf
+<p align="center">
+  <img src="docs/assets/ushelf-hero.svg" alt="uShelf - a quiet place for unfinished reading" width="100%" />
+</p>
 
-A local, agent-native shelf for blog posts and X threads you want to read later. uShelf stores completed items as readable Markdown, uses SQLite only as a rebuildable search/index layer, and delegates all AI reasoning to your connected agent through MCP.
+<p align="center">
+  <strong>A local, agent-native library for the writing worth keeping.</strong><br />
+  Capture deterministically. Enrich with your agent. Keep everything as readable Markdown.
+</p>
 
-## What is included
+<p align="center">
+  <img alt="Node.js 24+" src="https://img.shields.io/badge/Node.js-24%2B-111111?style=flat-square" />
+  <img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-111111?style=flat-square" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-111111?style=flat-square" />
+  <img alt="Model Context Protocol" src="https://img.shields.io/badge/MCP-native-111111?style=flat-square" />
+  <img alt="Local first" src="https://img.shields.io/badge/storage-local--first-111111?style=flat-square" />
+</p>
 
-- Deterministic article extraction with Readability, sanitization, URL safety checks, and an agent-supplied fallback for X.
-- Versioned Markdown recipes and typed, cited insight capture.
-- Full library CRUD over MCP, optimistic concurrency, resumable ingestion, stale-recipe detection, and confirmation-gated deletion.
-- SQLite FTS5 search over titles, sources, insights, and tags.
-- A responsive, monochrome reader with reading states and scroll restoration.
-- Two agent skills in `skills/ushelf-ingest` and `skills/ushelf-library`.
+## Why uShelf?
 
-uShelf has no model SDK, AI key, embeddings, or autonomous model process.
+Most read-later tools own the database and bolt AI onto the side. uShelf takes the opposite approach:
 
-## Requirements
+- **Your files are the product.** Every completed item lives as portable, readable Markdown.
+- **Your agent does the thinking.** uShelf exposes an MCP server and recipe-driven workflows, not a bundled model.
+- **Capture stays deterministic.** Web sources are extracted, sanitized, normalized, and checked before enrichment begins.
+- **The index is disposable.** SQLite FTS5 makes the library fast to search and can always be rebuilt from Markdown.
+- **Reading is first-class.** The web reader tracks inbox, reading, read, and archived states, plus scroll progress.
 
-- Node.js 24 or newer
-- pnpm 10
+> uShelf includes no model SDK, AI API key, embeddings store, or autonomous LLM process.
 
-## Start locally
+## How it works
+
+<p align="center">
+  <img src="docs/assets/ushelf-workflow.svg" alt="uShelf architecture: agents and browsers use thin adapters around ShelfService, with Markdown as the canonical record and SQLite as a rebuildable index" width="100%" />
+</p>
+
+1. Ask your connected agent to save something from the web.
+2. uShelf captures and normalizes the source with deterministic code.
+3. The agent follows a versioned recipe to add cited summaries, insights, and tags.
+4. You search and read everything in the web app, while the canonical record stays in Markdown.
+
+## Quick start
+
+You need **Node.js 24+** and **pnpm 10**.
 
 ```sh
+git clone https://github.com/karamouche/ushelf.git
+cd ushelf
 pnpm install
 cp .env.example .env
 pnpm dev
 ```
 
-The API listens on `http://127.0.0.1:43110`; Vite opens the reader on `http://127.0.0.1:43111`. For a production build:
+Open the reader at [http://127.0.0.1:43111](http://127.0.0.1:43111). The API runs at `http://127.0.0.1:43110`.
+
+For a production build:
 
 ```sh
 pnpm build
 NODE_ENV=production pnpm start
 ```
 
-The production reader is served from `http://127.0.0.1:43110`.
+The production server hosts both the API and reader at [http://127.0.0.1:43110](http://127.0.0.1:43110).
 
-`USHELF_WEB_BASE_PATH` optionally configures the web build and development server. It defaults to
-`/`, which serves uShelf at the host root.
-For a subpath deployment, set an absolute URL path such as `/reader/`; the trailing slash is added
-automatically. A reverse proxy must preserve that prefix when forwarding browser and API requests
-to uShelf.
+## Connect your agent
+
+Build the project, then register the compiled stdio MCP server with your agent client. Replace both paths with the absolute path to your clone.
+
+```json
+{
+  "mcpServers": {
+    "ushelf": {
+      "command": "node",
+      "args": ["/absolute/path/to/ushelf/apps/mcp/dist/index.js"],
+      "env": {
+        "USHELF_ROOT": "/absolute/path/to/ushelf"
+      }
+    }
+  }
+}
+```
+
+Make the repository-owned workflows available to the agent with symlinks:
+
+```sh
+mkdir -p ~/.agents/skills
+ln -s /absolute/path/to/ushelf/skills/ushelf-ingest ~/.agents/skills/ushelf-ingest
+ln -s /absolute/path/to/ushelf/skills/ushelf-library ~/.agents/skills/ushelf-library
+```
+
+Restart the agent if the skills do not appear immediately. Then try:
+
+```text
+Save this URL to uShelf.
+Search my uShelf for writing about local-first software.
+Show me unread pieces tagged architecture.
+```
+
+## What is included
+
+| Layer            | What it does                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Core**         | URL safety, extraction, schemas, recipes, Markdown persistence, SQLite indexing, and all domain rules               |
+| **MCP**          | Ingestion, enrichment, search, reading state, refresh, re-enrichment, and confirmation-gated deletion tools         |
+| **HTTP server**  | A thin Hono API, production web hosting, index rebuilding, and Markdown import commands                             |
+| **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering |
+| **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                           |
+
+Extraction includes Readability, sanitization, response and redirect limits, and private-network protections. X threads use a limited public extraction path with an explicitly agent-supplied fallback.
+
+<p align="center">
+  <img src="docs/assets/ushelf-principles.svg" alt="The uShelf promise: own the source, bring the agent, and return to the ideas" width="100%" />
+</p>
+
+## Data you can understand
+
+```text
+library/items/      Canonical current Markdown documents
+library/history/    Archived enrichment revisions
+recipes/            Editable, hash-versioned agent instructions
+.ushelf/ushelf.db   Rebuildable search index and transient workflow state
+```
+
+Markdown remains the source of truth. Canonical URLs deduplicate ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
+
+```sh
+pnpm rebuild-index
+```
+
+To import an externally edited compatible item, stop the app first, then run:
+
+```sh
+pnpm import -- /absolute/path/to/item.md
+```
+
+Remote source images are not downloaded. The reader renders sanitized Markdown, loads images lazily, and sends no referrer.
 
 ## Run continuously with Docker Compose
 
-The Compose deployment builds the production reader and API into one container, restarts it after
-failures or host reboots, and keeps the canonical Markdown and rebuildable SQLite index on the host.
-
-Prepare the writable bind-mount directories, then start the service:
+The Compose setup builds the API and reader into one container, restarts after failures or reboots, and keeps canonical data on the host.
 
 ```sh
 cp .env.example .env
@@ -55,23 +145,13 @@ docker compose up -d --build
 docker compose ps
 ```
 
-The container runs as the unprivileged `node` user (UID/GID `1000:1000`). On a VPS where those
-directories are not writable by UID 1000, fix their ownership before starting:
+The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
+
+The container runs as UID/GID `1000:1000`. If the bind-mount directories are not writable by that user:
 
 ```sh
 sudo chown -R 1000:1000 library .ushelf
 ```
-
-Compose loads `.env` as the deployment configuration source. `USHELF_HOST` and `USHELF_PORT`
-control the published host address and port, `USHELF_ROOT` selects the host directory containing
-`library/`, `.ushelf/`, and `recipes/`, and `USHELF_WEB_BASE_PATH` configures both the web build and
-runtime route prefix. Compose maps those host settings to the fixed `/data` root and `0.0.0.0`
-listener inside the container.
-
-The reader is available at `http://127.0.0.1:43110` on the VPS. It is deliberately not published on
-all network interfaces because uShelf does not provide HTTP authentication. Put an authenticated
-HTTPS reverse proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or reach it through a
-VPN or SSH tunnel. Do not expose port 43110 directly to the public internet.
 
 Common operations:
 
@@ -84,8 +164,7 @@ git pull
 docker compose up -d --build
 ```
 
-To rebuild the disposable SQLite index, stop the server so it is not modifying the library, run the
-compiled maintenance command against the same bind mounts, and start it again:
+To rebuild the disposable index against the same bind mounts:
 
 ```sh
 docker compose stop ushelf
@@ -93,55 +172,44 @@ docker compose run --rm --no-deps ushelf node apps/server/dist/cli.js rebuild-in
 docker compose up -d
 ```
 
-For a consistent backup, stop the service and back up `library/` and `recipes/`, then start it again.
-The `.ushelf/` directory does not need to be backed up because it can be rebuilt from Markdown.
+For a consistent backup, stop the service and copy `library/` and `recipes/`. `.ushelf/` does not need to be backed up.
 
-The stdio MCP adapter is not a long-running Compose service. An agent running on the VPS can use the
-normal MCP configuration below and point `USHELF_ROOT` at this repository; the bind mounts ensure the
-server and host-side MCP process share the same canonical files.
+### Configuration
 
-## Connect an agent
+| Variable               | Default     | Purpose                                                     |
+| ---------------------- | ----------- | ----------------------------------------------------------- |
+| `USHELF_ROOT`          | `.`         | Directory containing `library/`, `.ushelf/`, and `recipes/` |
+| `USHELF_HOST`          | `127.0.0.1` | Address published by the HTTP server or Compose             |
+| `USHELF_PORT`          | `43110`     | HTTP port                                                   |
+| `USHELF_WEB_BASE_PATH` | `/`         | Root or subpath where the web app and API are served        |
 
-Build once, then add a stdio MCP server using the absolute project path:
+For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and your reverse proxy must preserve the prefix.
 
-```json
-{
-  "mcpServers": {
-    "ushelf": {
-      "command": "node",
-      "args": ["/absolute/path/to/ushelf/apps/mcp/dist/index.js"],
-      "env": { "USHELF_ROOT": "/absolute/path/to/ushelf" }
-    }
-  }
-}
+## Repository map
+
+```text
+packages/core   Shared domain and storage layer
+apps/server     HTTP and CLI adapter
+apps/mcp        stdio MCP adapter
+apps/web        React and Vite reader
+recipes         Versioned enrichment instructions
+skills          Agent ingestion and library workflows
+library         Canonical saved documents and history
 ```
 
-Symlink the repository-owned skills into your user skill directory so they stay available from any workspace and automatically reflect repository updates:
+Package-specific runtime notes live in the README inside each package.
 
-```sh
-mkdir -p ~/.agents/skills
-ln -s /absolute/path/to/ushelf/skills/ushelf-ingest ~/.agents/skills/ushelf-ingest
-ln -s /absolute/path/to/ushelf/skills/ushelf-library ~/.agents/skills/ushelf-library
-```
-
-Restart the agent if the skills do not appear immediately. Then ask it to “save this URL to uShelf” or “search my uShelf for writing about local-first software.”
-
-## Storage contract
-
-- `library/items/`: canonical current Markdown documents.
-- `library/history/`: prior enrichment revisions.
-- `recipes/`: editable, hash-versioned agent instructions.
-- `.ushelf/ushelf.db`: disposable index and short-lived workflow data.
-
-The app owns files under `library/` while running. To recover the index, run `pnpm rebuild-index`. To bring in an externally edited compatible item, stop the app and run `pnpm import -- /absolute/path/item.md`.
-
-Remote article images are not downloaded. Rendering uses sanitized Markdown, lazy image loading, and a no-referrer policy.
-
-## Quality checks
+## Development
 
 ```sh
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:e2e
+pnpm format:check
 pnpm validate:skills
 ```
+
+Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, because Playwright launches the compiled production server.
+
+Contributions should preserve the central boundary: deterministic code captures and stores sources; a connected agent performs explicit, recipe-driven enrichment.

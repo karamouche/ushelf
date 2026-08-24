@@ -1,0 +1,97 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1440"
+  height="420"
+  viewBox="0 0 1440 420"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">How uShelf works</title>
+  <desc id="desc">
+    Agents and the browser use thin adapters around one core, which stores canonical Markdown and a
+    rebuildable SQLite index.
+  </desc>
+  <rect width="1440" height="420" fill="#ffffff" />
+  <rect x="48" y="48" width="1344" height="324" fill="none" stroke="#111111" stroke-width="2" />
+  <text
+    x="88"
+    y="98"
+    fill="#777777"
+    font-family="Inter, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+    letter-spacing="3"
+  >
+    ONE CORE. TWO THIN ADAPTERS. FILES YOU OWN.
+  </text>
+  <g font-family="Inter, Arial, sans-serif" text-anchor="middle">
+    <g transform="translate(88 143)">
+      <rect width="190" height="64" fill="#111111" />
+      <text x="95" y="40" fill="#ffffff" font-size="20" font-weight="650">Agent</text>
+    </g>
+    <g transform="translate(336 143)">
+      <rect width="190" height="64" fill="#f4f4f2" stroke="#bdbdbd" />
+      <text x="95" y="40" fill="#111111" font-size="18" font-weight="600">MCP adapter</text>
+    </g>
+    <g transform="translate(584 143)">
+      <rect width="252" height="134" fill="#111111" />
+      <text
+        x="126"
+        y="63"
+        fill="#ffffff"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="30"
+      >
+        ShelfService
+      </text>
+      <text x="126" y="95" fill="#bfbfbf" font-size="13" font-weight="600" letter-spacing="2">
+        CORE DOMAIN RULES
+      </text>
+    </g>
+    <g transform="translate(894 143)">
+      <rect width="190" height="64" fill="#f4f4f2" stroke="#bdbdbd" />
+      <text x="95" y="40" fill="#111111" font-size="18" font-weight="600">Markdown</text>
+    </g>
+    <g transform="translate(1142 143)">
+      <rect width="190" height="64" fill="#f4f4f2" stroke="#bdbdbd" />
+      <text x="95" y="32" fill="#111111" font-size="18" font-weight="600">SQLite FTS5</text>
+      <text x="95" y="50" fill="#777777" font-size="11" font-weight="600" letter-spacing="1">
+        REBUILDABLE
+      </text>
+    </g>
+    <g transform="translate(88 265)">
+      <rect width="190" height="64" fill="#ffffff" stroke="#111111" stroke-width="2" />
+      <text x="95" y="40" fill="#111111" font-size="20" font-weight="650">Browser</text>
+    </g>
+    <g transform="translate(336 265)">
+      <rect width="190" height="64" fill="#f4f4f2" stroke="#bdbdbd" />
+      <text x="95" y="40" fill="#111111" font-size="18" font-weight="600">HTTP adapter</text>
+    </g>
+  </g>
+  <g fill="none" stroke="#111111" stroke-width="2">
+    <path d="M278 175h58" />
+    <path d="m327 168 9 7-9 7" />
+    <path d="M526 175h58" />
+    <path d="m575 168 9 7-9 7" />
+    <path d="M278 297h58" />
+    <path d="m327 290 9 7-9 7" />
+    <path d="M526 297h88v-20" />
+    <path d="m607 286 7-9 7 9" />
+    <path d="M836 175h58" />
+    <path d="m885 168 9 7-9 7" />
+    <path d="M1084 175h58" />
+    <path d="m1133 168 9 7-9 7" />
+  </g>
+  <text
+    x="988"
+    y="244"
+    fill="#666666"
+    font-family="Inter, Arial, sans-serif"
+    font-size="12"
+    font-weight="600"
+    text-anchor="middle"
+    letter-spacing="1.5"
+  >
+    CANONICAL RECORD
+  </text>
+</svg>

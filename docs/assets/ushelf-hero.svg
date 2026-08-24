@@ -1,0 +1,76 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1440"
+  height="640"
+  viewBox="0 0 1440 640"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">uShelf</title>
+  <desc id="desc">A quiet place for unfinished reading. Local, portable, and agent-driven.</desc>
+  <rect width="1440" height="640" fill="#ffffff" />
+  <rect x="48" y="48" width="1344" height="544" fill="none" stroke="#111111" stroke-width="2" />
+  <text
+    x="112"
+    y="140"
+    fill="#777777"
+    font-family="Inter, Arial, sans-serif"
+    font-size="18"
+    font-weight="700"
+    letter-spacing="4"
+  >
+    YOUR READING, ON YOUR SHELF
+  </text>
+  <text
+    x="112"
+    y="342"
+    fill="#111111"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="170"
+    font-style="italic"
+    font-weight="400"
+    letter-spacing="-8"
+  >
+    u
+  </text>
+  <text
+    x="224"
+    y="342"
+    fill="#111111"
+    font-family="Inter, Arial, sans-serif"
+    font-size="154"
+    font-weight="650"
+    letter-spacing="-11"
+  >
+    Shelf
+  </text>
+  <line x1="112" y1="395" x2="1328" y2="395" stroke="#111111" stroke-width="2" />
+  <text
+    x="112"
+    y="454"
+    fill="#111111"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="34"
+  >
+    A quiet place for unfinished reading.
+  </text>
+  <g
+    fill="#666666"
+    font-family="Inter, Arial, sans-serif"
+    font-size="17"
+    font-weight="600"
+    letter-spacing="2"
+  >
+    <text x="112" y="528">LOCAL-FIRST</text>
+    <text x="322" y="528">MARKDOWN</text>
+    <text x="506" y="528">AI-NATIVE</text>
+  </g>
+  <circle cx="292" cy="522" r="3" fill="#111111" />
+  <circle cx="476" cy="522" r="3" fill="#111111" />
+  <g transform="translate(1116 129)" fill="none" stroke="#111111" stroke-width="3">
+    <path d="M0 146h212" />
+    <path d="M18 29h176v117H18z" />
+    <path d="M42 0h128v29H42z" />
+    <path d="M49 62h114M49 88h86M49 114h101" />
+  </g>
+</svg>

@@ -1,0 +1,43 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1440"
+  height="360"
+  viewBox="0 0 1440 360"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">uShelf principles</title>
+  <desc id="desc">Own the source, bring the agent, and return to the ideas.</desc>
+  <rect width="1440" height="360" fill="#111111" />
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="72" y="80" fill="#8f8f8f" font-size="15" font-weight="700" letter-spacing="3">
+      THE uSHELF PROMISE
+    </text>
+    <line x1="72" y1="108" x2="1368" y2="108" stroke="#3d3d3d" />
+    <g transform="translate(72 154)">
+      <text fill="#777777" font-size="14" font-weight="700" letter-spacing="2">01</text>
+      <text y="52" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="34">
+        Own the source.
+      </text>
+      <text y="91" fill="#a7a7a7" font-size="16">Readable Markdown stays canonical.</text>
+    </g>
+    <line x1="482" y1="147" x2="482" y2="288" stroke="#3d3d3d" />
+    <g transform="translate(535 154)">
+      <text fill="#777777" font-size="14" font-weight="700" letter-spacing="2">02</text>
+      <text y="52" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="34">
+        Bring the agent.
+      </text>
+      <text y="91" fill="#a7a7a7" font-size="16">No bundled model, keys, or background AI.</text>
+    </g>
+    <line x1="944" y1="147" x2="944" y2="288" stroke="#3d3d3d" />
+    <g transform="translate(997 154)">
+      <text fill="#777777" font-size="14" font-weight="700" letter-spacing="2">03</text>
+      <text y="52" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="34">
+        Return to the ideas.
+      </text>
+      <text y="91" fill="#a7a7a7" font-size="16">
+        Search, read, and pick up where you left off.
+      </text>
+    </g>
+  </g>
+</svg>
