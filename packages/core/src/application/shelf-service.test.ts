@@ -2,10 +2,12 @@ import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveConfig } from "./config.js";
-import { sha256 } from "./markdown.js";
-import { ShelfService } from "./service.js";
-import type { ItemFrontmatter } from "./types.js";
+import { resolveConfig } from "../configuration/ushelf-config.js";
+import type { ItemFrontmatter } from "../domain/library-item.js";
+import { sha256 } from "../persistence/markdown/item-markdown.js";
+import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
+import { ShelfDatabase } from "../persistence/sqlite/shelf-database.js";
+import { ShelfService } from "./shelf-service.js";
 
 const roots: string[] = [];
 afterEach(async () =>
@@ -16,8 +18,10 @@ async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-test-"));
   roots.push(root);
   const config = resolveConfig(root);
+  const repository = new MarkdownRepository(config);
+  const database = new ShelfDatabase(config.databasePath, config.itemsDir);
   const service = new ShelfService(config);
-  await service.repository.initialize();
+  await repository.initialize();
   await import("node:fs/promises").then(({ writeFile }) =>
     writeFile(
       path.join(config.recipesDir, "default.md"),
@@ -39,14 +43,14 @@ async function fixture() {
     extraction: { status: "pending" },
     enrichment: { status: "pending", recipe: "default" },
   };
-  const item = await service.repository.save(frontmatter, "", "");
-  service.database.upsert(item);
-  return { root, config, service, item };
+  const item = await repository.save(frontmatter, "", "");
+  database.upsert(item);
+  return { root, config, service, database, item };
 }
 
 describe("agent-driven workflow", () => {
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {
-    const { config, service, item } = await fixture();
+    const { config, service, database, item } = await fixture();
     const sourceUrl = "https://x.com/a/status/1";
     const sourced = await service.submitSourceContent({
       itemId: item.id,
@@ -71,7 +75,7 @@ describe("agent-driven workflow", () => {
     expect(ready.insightMarkdown).toBe("### Why it matters\n\nIt proves the workflow.");
     const read = await service.updateReading(item.id, "read", 0.4, ready.revision);
     expect(read.reading.progress).toBe(1);
-    service.database.clearIndex();
+    database.clearIndex();
     expect(service.listItems()).toHaveLength(0);
     expect(await service.rebuildIndex()).toBe(1);
     expect(service.listItems()[0]).toMatchObject({
@@ -119,7 +123,7 @@ describe("agent-driven workflow", () => {
   });
 
   it("shares portable index paths across different roots", async () => {
-    const { root, config, service, item } = await fixture();
+    const { root, config, service, database, item } = await fixture();
     const aliasRoot = `${root}-alias`;
     roots.push(aliasRoot);
     await symlink(root, aliasRoot, "dir");
@@ -133,31 +137,31 @@ describe("agent-driven workflow", () => {
     const throughOriginal = await service.getItem(item.id);
     expect(throughOriginal.reading).toMatchObject({ status: "reading", progress: 0.5 });
 
-    const row = service.database.db
-      .prepare("SELECT file_path FROM items WHERE id = ?")
-      .get(item.id) as { file_path: string };
+    const row = database.db.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
+      file_path: string;
+    };
     expect(row.file_path).toBe(
       path.relative(config.itemsDir, item.filePath).split(path.sep).join("/"),
     );
   });
 
   it("recovers from and repairs a foreign absolute index path", async () => {
-    const { service, item } = await fixture();
-    service.database.db
+    const { service, database, item } = await fixture();
+    database.db
       .prepare("UPDATE items SET file_path = ? WHERE id = ?")
       .run(`/different-runtime/library/items/2026/${path.basename(item.filePath)}`, item.id);
 
     const recovered = await service.getItem(item.id);
     expect(recovered.id).toBe(item.id);
-    const row = service.database.db
-      .prepare("SELECT file_path FROM items WHERE id = ?")
-      .get(item.id) as { file_path: string };
+    const row = database.db.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
+      file_path: string;
+    };
     expect(row.file_path).toBe(`2026/${path.basename(item.filePath)}`);
   });
 
   it("ignores unsafe indexed paths and falls back to canonical Markdown", async () => {
-    const { service, item } = await fixture();
-    service.database.db
+    const { service, database, item } = await fixture();
+    database.db
       .prepare("UPDATE items SET file_path = ? WHERE id = ?")
       .run("../../outside.md", item.id);
 

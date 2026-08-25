@@ -9,16 +9,29 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - SQLite stores item locations relative to `library/items` so host-side agents and the Docker server can safely share the same index across different mount paths.
 - Previous enriched revisions are archived under `library/history/`; recipe Markdown under `recipes/` is hash-versioned.
 - `MarkdownRepository` validates and atomically writes item documents. `ShelfDatabase` indexes summaries and searchable text.
-- `extractUrl` uses Readability for articles and a limited public extraction path for X. X threads can fall back to agent-supplied Markdown through `ShelfService`.
+- Source ingestion uses Readability for articles and a limited public extraction path for X. X threads can fall back to agent-supplied Markdown through `ShelfService`.
 - Common Mermaid HTML forms are normalized to fenced `mermaid` Markdown so diagram source remains portable and canonical.
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
 - `USHELF_ROOT` controls the data root and defaults to `process.cwd()`.
 - The package uses Node's built-in SQLite API and therefore follows the repository's Node.js 24+ requirement.
 
-## Public modules
+## Source layout
 
-`src/index.ts` exports configuration, types and schemas, URL handling, extraction, Markdown serialization, repository and database classes, and `ShelfService`.
+Core is organized by responsibility:
+
+```text
+src/
+  application/    ShelfService workflows
+  configuration/  Data-root and path configuration
+  domain/         Validated library models and state rules
+  ingestion/      URL handling, safe fetching, and source extractors
+  persistence/    Markdown storage and the rebuildable SQLite index
+```
+
+## Public API
+
+Import from `@ushelf/core`, not internal file paths. The package root exports `ShelfService`, configuration, adapter-facing schemas, and public domain/result types. Extraction helpers, Markdown codecs, repositories, and SQLite implementation classes are internal details.
 
 ## Commands
 

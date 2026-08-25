@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canonicalizeUrl, detectSourceType } from "./url.js";
-import { isPrivateAddress } from "./extraction.js";
+import { isPrivateAddress } from "./safe-html-fetcher.js";
+import { canonicalizeUrl, detectSourceType } from "./source-url.js";
 
 describe("canonicalizeUrl", () => {
   it("removes fragments, trackers, duplicate trailing slashes, and sorts query parameters", () => {

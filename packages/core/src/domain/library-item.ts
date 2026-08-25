@@ -64,23 +64,6 @@ export interface ShelfItem extends ItemFrontmatter {
   revision: string;
 }
 
-export interface Recipe {
-  name: string;
-  description: string;
-  instructions: string;
-  hash: string;
-  filePath: string;
-}
-
-export interface ExtractedSource {
-  sourceType: SourceType;
-  title: string;
-  author?: string;
-  publishedAt?: string;
-  markdown: string;
-  method: "readability" | "public_extract";
-}
-
 export interface LibraryListQuery {
   query?: string | undefined;
   status?: ReadingStatus | undefined;

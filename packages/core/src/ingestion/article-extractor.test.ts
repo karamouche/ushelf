@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { extractReadableArticle } from "./extraction.js";
+import { extractReadableArticle } from "./article-extractor.js";
 
 describe("readable article extraction", () => {
   it("preserves code nested in documentation widgets as fenced blocks", () => {
@@ -85,6 +85,25 @@ describe("readable article extraction", () => {
     const result = extractReadableArticle(dom, "https://docs.example.test/guides/overview");
 
     expect(result.markdown).toContain("![Guide](https://docs.example.test/generated/cover.png)");
+  });
+
+  it("resolves relative links and images against the final response URL", () => {
+    const dom = articleDom(`
+      <h1>Redirected guide</h1>
+      <p>A useful introduction with enough text for Readability to identify this as an article.</p>
+      <p><a href="next">Continue reading</a></p>
+      <img src="images/diagram.png" alt="Redirected diagram">
+      <p>This closing explanation contains enough additional prose to keep extraction deterministic.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://cdn.example.test/articles/final/");
+
+    expect(result.markdown).toContain(
+      "[Continue reading](https://cdn.example.test/articles/final/next)",
+    );
+    expect(result.markdown).toContain(
+      "![Redirected diagram](https://cdn.example.test/articles/final/images/diagram.png)",
+    );
   });
 
   it("converts article tables to GitHub-Flavored Markdown", () => {

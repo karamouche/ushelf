@@ -1,7 +1,13 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { IngestionState, ItemSummary, LibraryListQuery, ShelfItem } from "./types.js";
+import { ingestionState } from "../../domain/ingestion-state.js";
+import type {
+  IngestionState,
+  ItemSummary,
+  LibraryListQuery,
+  ShelfItem,
+} from "../../domain/library-item.js";
 
 export class ShelfDatabase {
   readonly db: DatabaseSync;
@@ -110,10 +116,6 @@ export class ShelfDatabase {
     const row = this.db.prepare("SELECT id FROM items WHERE canonical_url = ?").get(url) as
       { id: string } | undefined;
     return row?.id;
-  }
-
-  filePath(id: string): string | undefined {
-    return this.itemLocation(id)?.filePath;
   }
 
   itemLocation(id: string): { filePath?: string; portable: boolean } | undefined {
@@ -258,13 +260,6 @@ function rowToSummary(row: DatabaseItemRow): ItemSummary {
     ingestionState: row.ingestion_state,
     ...(row.summary ? { summary: row.summary } : {}),
   };
-}
-
-export function ingestionState(item: ShelfItem): IngestionState {
-  if (item.extraction.status === "failed" || item.enrichment.status === "failed") return "failed";
-  if (item.extraction.status === "pending") return "awaiting_source";
-  if (item.enrichment.status === "pending") return "awaiting_enrichment";
-  return "ready";
 }
 
 function toFtsQuery(value: string): string {

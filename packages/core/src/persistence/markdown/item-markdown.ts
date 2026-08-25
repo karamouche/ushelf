@@ -3,9 +3,9 @@ import matter from "gray-matter";
 import {
   itemFrontmatterSchema,
   type ItemFrontmatter,
-  type Recipe,
   type ShelfItem,
-} from "./types.js";
+} from "../../domain/library-item.js";
+import type { Recipe } from "../../domain/recipe.js";
 
 const INSIGHTS_START = "<!-- ushelf:insights:start -->";
 const INSIGHTS_END = "<!-- ushelf:insights:end -->";

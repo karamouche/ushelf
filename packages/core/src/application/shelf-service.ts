@@ -1,31 +1,33 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { UshelfConfig } from "./config.js";
-import { resolveConfig } from "./config.js";
-import { ShelfDatabase, ingestionState } from "./database.js";
-import { AwaitingSourceError, extractUrl } from "./extraction.js";
-import { sha256 } from "./markdown.js";
-import { MarkdownRepository } from "./repository.js";
-import { canonicalizeUrl, detectSourceType } from "./url.js";
+import type { UshelfConfig } from "../configuration/ushelf-config.js";
+import { resolveConfig } from "../configuration/ushelf-config.js";
+import { ingestionState } from "../domain/ingestion-state.js";
 import type {
   Citation,
+  IngestionState,
   ItemFrontmatter,
   LibraryListQuery,
   ReadingStatus,
   ShelfItem,
-} from "./types.js";
+} from "../domain/library-item.js";
+import type { Recipe } from "../domain/recipe.js";
+import { AwaitingSourceError, extractUrl } from "../ingestion/source-extractor.js";
+import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
+import { sha256 } from "../persistence/markdown/item-markdown.js";
+import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
+import { ShelfDatabase } from "../persistence/sqlite/shelf-database.js";
 
 export interface IngestResult {
   item: ShelfItem;
   duplicate: boolean;
-  state: string;
+  state: IngestionState;
 }
 
 export class ShelfService {
-  readonly config: UshelfConfig;
-  readonly repository: MarkdownRepository;
-  readonly database: ShelfDatabase;
+  private readonly config: UshelfConfig;
+  private readonly repository: MarkdownRepository;
+  private readonly database: ShelfDatabase;
 
   constructor(config = resolveConfig()) {
     this.config = config;
@@ -234,6 +236,14 @@ export class ShelfService {
     return this.database.list(query);
   }
 
+  async listRecipes(): Promise<Recipe[]> {
+    return this.repository.recipes();
+  }
+
+  async getRecipe(name: string): Promise<Recipe> {
+    return this.repository.recipe(name);
+  }
+
   async updateReading(
     id: string,
     status: ReadingStatus,
@@ -331,17 +341,11 @@ export class ShelfService {
   }
 
   async importMarkdown(sourcePath: string): Promise<ShelfItem> {
-    const imported = await this.repository.load(path.resolve(sourcePath));
+    const resolvedPath = path.resolve(sourcePath);
+    const imported = await this.repository.load(resolvedPath);
     if (this.database.findByCanonicalUrl(imported.canonicalUrl))
       throw new Error("An item with this canonical URL already exists");
-    const copiedPath = path.join(
-      this.config.itemsDir,
-      imported.capturedAt.slice(0, 4),
-      path.basename(imported.filePath),
-    );
-    await mkdir(path.dirname(copiedPath), { recursive: true });
-    await copyFile(imported.filePath, copiedPath);
-    const item = await this.repository.load(copiedPath);
+    const item = await this.repository.importFile(resolvedPath);
     this.database.upsert(item);
     return item;
   }

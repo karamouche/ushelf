@@ -37,9 +37,7 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     );
     return c.json({ item });
   });
-  app.get(route("/api/recipes"), async (c) =>
-    c.json({ recipes: await service.repository.recipes() }),
-  );
+  app.get(route("/api/recipes"), async (c) => c.json({ recipes: await service.listRecipes() }));
 
   app.onError((error, c) => {
     console.error(error);

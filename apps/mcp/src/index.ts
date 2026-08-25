@@ -241,7 +241,7 @@ server.registerResource(
       {
         uri: uri.href,
         mimeType: "text/markdown",
-        text: (await service.repository.recipe(String(variables.name))).instructions,
+        text: (await service.getRecipe(String(variables.name))).instructions,
       },
     ],
   }),

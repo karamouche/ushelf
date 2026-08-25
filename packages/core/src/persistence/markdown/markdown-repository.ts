@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { UshelfConfig } from "./config.js";
-import { parseItemMarkdown, parseRecipe, renderItemMarkdown, sha256 } from "./markdown.js";
-import type { ItemFrontmatter, Recipe, ShelfItem } from "./types.js";
+import type { UshelfConfig } from "../../configuration/ushelf-config.js";
+import type { ItemFrontmatter, ShelfItem } from "../../domain/library-item.js";
+import type { Recipe } from "../../domain/recipe.js";
+import { parseItemMarkdown, parseRecipe, renderItemMarkdown, sha256 } from "./item-markdown.js";
 
 export class MarkdownRepository {
   constructor(readonly config: UshelfConfig) {}
@@ -35,6 +36,19 @@ export class MarkdownRepository {
       if (item.id === id) return item;
     }
     throw new Error(`Item ${id} was not found`);
+  }
+
+  async importFile(sourcePath: string): Promise<ShelfItem> {
+    const raw = await readFile(sourcePath, "utf8");
+    const imported = parseItemMarkdown(raw, sourcePath);
+    const destination = path.join(
+      this.config.itemsDir,
+      imported.capturedAt.slice(0, 4),
+      path.basename(sourcePath),
+    );
+    await mkdir(path.dirname(destination), { recursive: true });
+    await atomicWrite(destination, raw);
+    return parseItemMarkdown(raw, destination);
   }
 
   async save(
