@@ -1,6 +1,6 @@
 # uShelf Agent Guide
 
-Use this file as the starting context for work anywhere in the repository. Read the root `README.md` and the README in the package you are changing before editing.
+Use this file as the starting context for work anywhere in the repository. Read the root `README.md`, then the package README and nearest package `AGENTS.md` before editing. Package guides add local rules; this root guide still applies when they are silent.
 
 ## Project in one minute
 
@@ -29,6 +29,13 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `.ushelf/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
 
 Each workspace package has a local README with its runtime details and commands.
+
+Package-specific agent guidance lives beside each project:
+
+- `packages/core/AGENTS.md`
+- `apps/server/AGENTS.md`
+- `apps/mcp/AGENTS.md`
+- `apps/web/AGENTS.md`
 
 ## Setup and common commands
 
@@ -82,6 +89,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - When the HTTP response contract changes, update the matching client types in `apps/web/src/api.ts`.
 - Add focused regression tests beside the affected source as `*.test.ts`. Add or update Playwright coverage for user-visible reader workflows.
 - Do not add production dependencies unless the task requires them; prefer existing platform and workspace capabilities.
+- Treat `dist/`, `dist-types/`, `*.tsbuildinfo`, `.ushelf/`, Playwright output, and installed `node_modules/` as generated or local state. Change source files and let the relevant command regenerate outputs; do not include generated artifacts in a patch.
 
 ## Where to make a change
 
