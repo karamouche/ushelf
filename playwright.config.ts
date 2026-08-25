@@ -10,7 +10,16 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", use: { ...devices["iPhone 13"] } },
+    { name: "ingestion", testMatch: "ingestion.spec.ts" },
+    {
+      name: "desktop",
+      testIgnore: "ingestion.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile",
+      testIgnore: "ingestion.spec.ts",
+      use: { ...devices["iPhone 13"] },
+    },
   ],
 });

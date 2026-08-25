@@ -28,3 +28,4 @@ pnpm test:e2e
 ```
 
 The development UI expects `@ushelf/server` to be running. `pnpm dev` at the repository root starts both.
+The root E2E command includes live URL ingestion coverage in addition to browser tests and therefore requires internet access.
