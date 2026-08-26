@@ -1,18 +1,96 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version to release (for example, 1.2.3)
+        required: true
+        type: string
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: read
 
 jobs:
+  version-pr:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Create release pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          branch="release/v${version}"
+          tag="v${version}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            echo "Branch ${branch} already exists." >&2
+            exit 1
+          fi
+
+          node scripts/set-version.mjs "$tag"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json apps/mcp/package.json apps/server/package.json apps/web/package.json packages/core/package.json
+          git commit -m "chore: release ${tag}"
+          git push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore: release ${tag}" \
+            --body "Updates all uShelf project versions to ${version}. Merging this PR publishes ${tag}."
+
+  context:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - id: release
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          tag="${HEAD_BRANCH#release/}"
+          version="${tag#v}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "sha=${MERGE_SHA}" >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -22,12 +100,11 @@ jobs:
         with:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
-      - run: pnpm install --frozen-lockfile
-      - name: Verify tag matches package version
+      - name: Verify merged project versions
         run: |
-          package_version="$(node -p "require('./package.json').version")"
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$GITHUB_REF_NAME" = "v${package_version}"
+          node scripts/set-version.mjs "${{ needs.context.outputs.tag }}"
+          git diff --exit-code
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
@@ -37,7 +114,7 @@ jobs:
       - run: go -C apps/cli vet ./...
 
   cli:
-    needs: verify
+    needs: [context, verify]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -45,6 +122,8 @@ jobs:
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
       - uses: actions/setup-go@v6
         with:
           go-version-file: apps/cli/go.mod
@@ -54,10 +133,10 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
+          RELEASE_VERSION: ${{ needs.context.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
           built="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          go -C apps/cli build -trimpath -ldflags "-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.buildDate=${built}" -o ushelf ./cmd/ushelf
+          go -C apps/cli build -trimpath -ldflags "-s -w -X main.version=${RELEASE_VERSION} -X main.commit=${{ needs.context.outputs.sha }} -X main.buildDate=${built}" -o ushelf ./cmd/ushelf
           go version -m apps/cli/ushelf
           if [ "$GOOS/$GOARCH" = "linux/amd64" ]; then apps/cli/ushelf --version; fi
           tar -C apps/cli -czf "ushelf_${GOOS}_${GOARCH}.tar.gz" ushelf
@@ -68,7 +147,7 @@ jobs:
           if-no-files-found: error
 
   image:
-    needs: verify
+    needs: [context, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,6 +156,8 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -84,8 +165,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@v6
         with:
@@ -93,9 +172,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            USHELF_VERSION=${{ steps.version.outputs.version }}
+            USHELF_VERSION=${{ needs.context.outputs.version }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ needs.context.outputs.version }}
             ghcr.io/${{ github.repository }}:latest
       - uses: actions/attest-build-provenance@v3
         with:
@@ -103,8 +182,10 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       - name: Smoke-test runtime image
+        env:
+          RELEASE_VERSION: ${{ needs.context.outputs.version }}
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY}:${{ steps.version.outputs.version }}"
+          image="ghcr.io/${GITHUB_REPOSITORY}:${RELEASE_VERSION}"
           docker run -d --name ushelf-smoke -p 127.0.0.1:43110:43110 -e USHELF_HOST=0.0.0.0 "$image"
           trap 'docker logs ushelf-smoke; docker rm -f ushelf-smoke' EXIT
           for attempt in $(seq 1 30); do
@@ -113,8 +194,8 @@ jobs:
           done
           exit 1
 
-  release:
-    needs: [verify, cli, image]
+  publish:
+    needs: [context, verify, cli, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -122,6 +203,8 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
       - uses: actions/download-artifact@v5
         with:
           pattern: cli-*
@@ -137,4 +220,6 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --title "uShelf $GITHUB_REF_NAME"
+          RELEASE_TAG: ${{ needs.context.outputs.tag }}
+          RELEASE_SHA: ${{ needs.context.outputs.sha }}
+        run: gh release create "$RELEASE_TAG" release/* --target "$RELEASE_SHA" --generate-notes --title "uShelf $RELEASE_TAG"

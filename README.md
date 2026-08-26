@@ -40,10 +40,10 @@ Most read-later tools own the database and bolt AI onto the side. uShelf takes t
 
 ## Quick start
 
-Install the native CLI on macOS or Linux. Docker Desktop or Docker Engine must already be running.
+Install the native CLI on macOS or Linux. Docker must already be installed and running.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/karamouche/ushelf/main/install.sh | sh
+curl -fsSL https://github.com/karamouche/ushelf/releases/latest/download/install.sh | sh
 ushelf doctor
 ushelf start
 ```
@@ -61,12 +61,7 @@ ushelf update
 
 The CLI downloads a release-matched container image. Node.js, pnpm, a repository clone, and Docker Compose are not required for normal use.
 
-Pin an installer version or change the binary destination with environment variables:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/karamouche/ushelf/main/install.sh | \
-  USHELF_VERSION=v0.1.0 USHELF_INSTALL_DIR="$HOME/.local/bin" sh
-```
+The installer places the executable at `~/.local/bin/ushelf`. uShelf automatically creates its configuration, library, recipes, state, and versioned agent assets under `~/.ushelf` when needed.
 
 The installer supports macOS and Linux on amd64 and arm64; Windows users can run it under WSL.
 
@@ -241,3 +236,7 @@ Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, b
 The E2E command also performs live ingestion checks against the documented X and blog fixtures, so it requires internet access and can fail when either upstream source is unavailable or changes its public metadata.
 
 Contributions should preserve the central boundary: deterministic code captures and stores sources; a connected agent performs explicit, recipe-driven enrichment.
+
+## Releasing
+
+Run the **Release** workflow manually with the desired semantic version. The workflow opens a `release/vMAJOR.MINOR.PATCH` pull request containing the project-version updates. Merging that pull request verifies the merged commit, creates its version tag, publishes the CLI archives and container image, and creates the GitHub Release. Do not create the release tag beforehand.
