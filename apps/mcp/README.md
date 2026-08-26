@@ -14,7 +14,14 @@ The Model Context Protocol adapter for uShelf. It lets a connected agent ingest 
 
 ## Commands
 
-Run from the repository root:
+Installed users should register and launch this adapter through the native CLI:
+
+```sh
+ushelf setup codex
+ushelf mcp
+```
+
+For repository development, run from the repository root:
 
 ```sh
 pnpm --filter @ushelf/mcp dev

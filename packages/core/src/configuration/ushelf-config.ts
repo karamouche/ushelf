@@ -13,7 +13,7 @@ export interface UshelfConfig {
 export function resolveConfig(root = process.env.USHELF_ROOT ?? process.cwd()): UshelfConfig {
   const resolvedRoot = path.resolve(root);
   const libraryDir = path.join(resolvedRoot, "library");
-  const stateDir = path.join(resolvedRoot, ".ushelf");
+  const stateDir = path.resolve(process.env.USHELF_STATE_DIR ?? path.join(resolvedRoot, ".ushelf"));
   return {
     root: resolvedRoot,
     libraryDir,

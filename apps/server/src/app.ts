@@ -2,10 +2,13 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { readingStatusSchema, ShelfService, sourceTypeSchema } from "@ushelf/core";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 export function createApp(service: ShelfService, webRoot?: string, basePath = "/") {
   const app = new Hono();
-  const prefix = basePath === "/" ? "" : basePath.replace(/\/$/, "");
+  const normalizedBasePath = normalizeBasePath(basePath);
+  const prefix = normalizedBasePath === "/" ? "" : normalizedBasePath.replace(/\/$/, "");
   const route = (path: string) => `${prefix}${path}`;
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
@@ -46,7 +49,13 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
   });
 
   if (webRoot) {
+    const indexHtml = injectRuntimeBasePath(
+      readFileSync(path.join(webRoot, "index.html"), "utf8"),
+      normalizedBasePath,
+    );
     const webRoute = route("/*");
+    app.get(route("/"), (c) => c.html(indexHtml));
+    app.get(route("/index.html"), (c) => c.html(indexHtml));
     app.use(
       webRoute,
       serveStatic({
@@ -55,7 +64,27 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
           prefix ? requestPath.slice(prefix.length) || "/" : requestPath,
       }),
     );
-    app.get(webRoute, serveStatic({ path: `${webRoot}/index.html` }));
+    app.get(webRoute, (c) => c.html(indexHtml));
   }
   return app;
+}
+
+function normalizeBasePath(value: string): string {
+  const normalized = value.trim() || "/";
+  if (
+    !normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    !/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/.test(normalized)
+  ) {
+    throw new Error("USHELF_WEB_BASE_PATH must be a safe absolute URL path");
+  }
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+function injectRuntimeBasePath(html: string, basePath: string): string {
+  const scriptValue = JSON.stringify(basePath).replaceAll("<", "\\u003c");
+  return html.replace(
+    "<head>",
+    `<head><base href="${basePath}"><script>globalThis.__USHELF_BASE_PATH__=${scriptValue};</script>`,
+  );
 }

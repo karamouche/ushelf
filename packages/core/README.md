@@ -14,6 +14,7 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
 - `USHELF_ROOT` controls the data root and defaults to `process.cwd()`.
+- `USHELF_STATE_DIR` optionally places disposable SQLite state outside that root; the native CLI uses it for `~/.ushelf/state`.
 - The package uses Node's built-in SQLite API and therefore follows the repository's Node.js 24+ requirement.
 
 ## Source layout

@@ -21,6 +21,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `packages/core`: Domain rules, schemas, extraction, URL safety, Markdown persistence, SQLite indexing, and `ShelfService`. Put shared behavior here.
 - `apps/server`: Thin Hono HTTP and CLI adapter around Core. It also serves the built web app in production.
 - `apps/mcp`: Thin stdio MCP adapter around Core. It exposes tools and resources to connected agents.
+- `apps/cli`: Native Cobra CLI for installation, Docker lifecycle, maintenance, and agent setup.
 - `apps/web`: React/Vite library and reader UI. It only communicates through `/api`.
 - `recipes`: Versioned Markdown instructions used for agent enrichment.
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
@@ -33,13 +34,14 @@ Each workspace package has a local README with its runtime details and commands.
 Package-specific agent guidance lives beside each project:
 
 - `packages/core/AGENTS.md`
+- `apps/cli/AGENTS.md`
 - `apps/server/AGENTS.md`
 - `apps/mcp/AGENTS.md`
 - `apps/web/AGENTS.md`
 
 ## Setup and common commands
 
-Requirements: Node.js 24 or newer and pnpm 10.
+Development requirements: Node.js 24 or newer, pnpm 10, and Go 1.24 or newer.
 
 ```sh
 pnpm install
@@ -69,6 +71,7 @@ pnpm build
 pnpm test:e2e
 pnpm format:check
 pnpm validate:skills
+go -C apps/cli vet ./...
 ```
 
 Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pnpm test`, and `pnpm build` before handing off a cross-package change. Build before `pnpm test:e2e`; Playwright launches the compiled production server.
@@ -96,6 +99,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Ingestion, extraction, storage, search, recipes, concurrency, or validation: `packages/core` first.
 - Browser-facing API contract or maintenance CLI: `apps/server`.
 - Agent tool/resource contract: `apps/mcp`, plus the relevant skill when workflow guidance changes.
+- Installation, Docker orchestration, updates, or agent-client setup: `apps/cli`.
 - Reader behavior or presentation: `apps/web`; keep persistence behind the API.
 - Agent enrichment behavior: `recipes` for output instructions, `skills` for tool-use workflow.
 

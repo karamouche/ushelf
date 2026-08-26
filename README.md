@@ -40,54 +40,65 @@ Most read-later tools own the database and bolt AI onto the side. uShelf takes t
 
 ## Quick start
 
-You need **Node.js 24+** and **pnpm 10**.
+Install the native CLI on macOS or Linux. Docker Desktop or Docker Engine must already be running.
 
 ```sh
-git clone https://github.com/karamouche/ushelf.git
-cd ushelf
-pnpm install
-cp .env.example .env
-pnpm dev
+curl -fsSL https://raw.githubusercontent.com/karamouche/ushelf/main/install.sh | sh
+ushelf doctor
+ushelf start
 ```
 
-Open the reader at [http://127.0.0.1:43111](http://127.0.0.1:43111). The API runs at `http://127.0.0.1:43110`.
+Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
 
-For a production build:
+Useful lifecycle commands:
 
 ```sh
-pnpm build
-NODE_ENV=production pnpm start
+ushelf status
+ushelf logs --follow
+ushelf stop
+ushelf update
 ```
 
-The production server hosts both the API and reader at [http://127.0.0.1:43110](http://127.0.0.1:43110).
+The CLI downloads a release-matched container image. Node.js, pnpm, a repository clone, and Docker Compose are not required for normal use.
+
+Pin an installer version or change the binary destination with environment variables:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/karamouche/ushelf/main/install.sh | \
+  USHELF_VERSION=v0.1.0 USHELF_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+The installer supports macOS and Linux on amd64 and arm64; Windows users can run it under WSL.
+
+### CLI reference
+
+| Command                | Purpose                                                         |
+| ---------------------- | --------------------------------------------------------------- |
+| `ushelf start`         | Initialize local files and start or reconcile the reader/API    |
+| `ushelf stop`          | Remove the managed container without deleting data              |
+| `ushelf status`        | Show health, URL, version, image, and home                      |
+| `ushelf logs`          | Read or follow managed service logs                             |
+| `ushelf open`          | Open the reader in the system browser                           |
+| `ushelf mcp`           | Run the foreground stdio MCP container                          |
+| `ushelf setup CLIENT`  | Configure Codex, Claude Code, or both and link bundled skills   |
+| `ushelf doctor`        | Check Docker, filesystem, port, image, recipe, and client setup |
+| `ushelf update`        | Verify and install the latest CLI and matching image            |
+| `ushelf rebuild-index` | Rebuild disposable SQLite state from Markdown                   |
+| `ushelf import FILE`   | Import a compatible Markdown item                               |
+| `ushelf config show    | path                                                            | ...` | Inspect or update persistent configuration |
+| `ushelf version`       | Show CLI build and runtime image information                    |
 
 ## Connect your agent
 
-Build the project, then register the compiled stdio MCP server with your agent client. Replace both paths with the absolute path to your clone.
-
-```json
-{
-  "mcpServers": {
-    "ushelf": {
-      "command": "node",
-      "args": ["/absolute/path/to/ushelf/apps/mcp/dist/index.js"],
-      "env": {
-        "USHELF_ROOT": "/absolute/path/to/ushelf"
-      }
-    }
-  }
-}
-```
-
-Make the repository-owned workflows available to the agent with symlinks:
+Configure Codex, Claude Code, or both. This registers `ushelf mcp` at user scope and links the bundled workflows into the client's personal skill directory.
 
 ```sh
-mkdir -p ~/.agents/skills
-ln -s /absolute/path/to/ushelf/skills/ushelf-ingest ~/.agents/skills/ushelf-ingest
-ln -s /absolute/path/to/ushelf/skills/ushelf-library ~/.agents/skills/ushelf-library
+ushelf setup codex
+ushelf setup claude
+# or: ushelf setup all
 ```
 
-Restart the agent if the skills do not appear immediately. Then try:
+Use `ushelf setup <client> --print` to inspect the exact registration command without making changes. Then try:
 
 ```text
 Save this URL to uShelf.
@@ -99,6 +110,7 @@ Show me unread pieces tagged architecture.
 
 | Layer            | What it does                                                                                                        |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **CLI**          | Native installation, Docker lifecycle, updates, maintenance, and agent-client setup                                 |
 | **Core**         | URL safety, extraction, schemas, recipes, Markdown persistence, SQLite indexing, and all domain rules               |
 | **MCP**          | Ingestion, enrichment, search, reading state, refresh, re-enrichment, and confirmation-gated deletion tools         |
 | **HTTP server**  | A thin Hono API, production web hosting, index rebuilding, and Markdown import commands                             |
@@ -114,22 +126,22 @@ Extraction includes Readability, sanitization, response and redirect limits, and
 ## Data you can understand
 
 ```text
-library/items/      Canonical current Markdown documents
-library/history/    Archived enrichment revisions
-recipes/            Editable, hash-versioned agent instructions
-.ushelf/ushelf.db   Rebuildable search index and transient workflow state
+~/.ushelf/library/items/    Canonical current Markdown documents
+~/.ushelf/library/history/  Archived enrichment revisions
+~/.ushelf/recipes/          Editable, hash-versioned agent instructions
+~/.ushelf/state/ushelf.db   Rebuildable search index and transient workflow state
 ```
 
 Markdown remains the source of truth. Canonical URLs deduplicate ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
 
 ```sh
-pnpm rebuild-index
+ushelf rebuild-index
 ```
 
-To import an externally edited compatible item, stop the app first, then run:
+To import an externally edited compatible item, run:
 
 ```sh
-pnpm import -- /absolute/path/to/item.md
+ushelf import /absolute/path/to/item.md
 ```
 
 Remote source images are not downloaded. The reader renders sanitized Markdown, loads images lazily, and sends no referrer.
@@ -179,9 +191,12 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. `.
 | Variable               | Default     | Purpose                                                     |
 | ---------------------- | ----------- | ----------------------------------------------------------- |
 | `USHELF_ROOT`          | `.`         | Directory containing `library/`, `.ushelf/`, and `recipes/` |
+| `USHELF_STATE_DIR`     | `.ushelf`   | Optional separate directory for disposable SQLite state     |
 | `USHELF_HOST`          | `127.0.0.1` | Address published by the HTTP server or Compose             |
 | `USHELF_PORT`          | `43110`     | HTTP port                                                   |
 | `USHELF_WEB_BASE_PATH` | `/`         | Root or subpath where the web app and API are served        |
+
+The installed CLI also accepts `USHELF_HOME` (default `~/.ushelf`) and `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
 
 For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and your reverse proxy must preserve the prefix.
 
@@ -189,6 +204,7 @@ For a subpath deployment, use an absolute path such as `/reader/`. uShelf normal
 
 ```text
 packages/core   Shared domain and storage layer
+apps/cli        Native Cobra CLI and Docker lifecycle
 apps/server     HTTP and CLI adapter
 apps/mcp        stdio MCP adapter
 apps/web        React and Vite reader
@@ -201,6 +217,16 @@ Package-specific runtime notes live in the README inside each package.
 
 ## Development
 
+Contributors need Node.js 24+, pnpm 10, Go 1.24+, and Docker.
+
+```sh
+git clone https://github.com/karamouche/ushelf.git
+cd ushelf
+pnpm install
+cp .env.example .env
+pnpm dev
+```
+
 ```sh
 pnpm typecheck
 pnpm test
@@ -208,6 +234,7 @@ pnpm build
 pnpm test:e2e
 pnpm format:check
 pnpm validate:skills
+go -C apps/cli vet ./...
 ```
 
 Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, because Playwright launches the compiled production server.
