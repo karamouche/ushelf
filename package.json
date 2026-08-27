@@ -14,7 +14,7 @@
     "mcp": "pnpm --filter @ushelf/mcp start",
     "rebuild-index": "pnpm --filter @ushelf/server rebuild-index",
     "import": "pnpm --filter @ushelf/server import",
-    "test": "vitest run && pnpm cli:test && pnpm test:installer",
+    "test": "pnpm --filter @ushelf/core build && vitest run && pnpm cli:test && pnpm test:installer",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b --pretty false",
