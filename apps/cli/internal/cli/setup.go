@@ -4,11 +4,13 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -52,9 +54,16 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 
 func (s *commandState) configureClient(ctx context.Context, client, executable string, force bool) error {
 	getArgs := []string{"mcp", "get", "ushelf"}
+	if client == "codex" {
+		getArgs = append(getArgs, "--json")
+	}
 	existing, getErr := s.deps.Runner.Output(ctx, client, getArgs...)
 	if getErr == nil {
-		if strings.Contains(existing, executable) && strings.Contains(existing, "mcp") {
+		matches, matchErr := clientConfigurationMatches(client, existing, executable, s.settings.Home)
+		if matchErr != nil && !force {
+			return fmt.Errorf("inspect existing %s uShelf MCP entry: %w", client, matchErr)
+		}
+		if matchErr == nil && matches {
 			return nil
 		}
 		if !force {
@@ -70,6 +79,48 @@ func (s *commandState) configureClient(ctx context.Context, client, executable s
 	}
 	args = append(args, "ushelf", "--", executable, "--home", s.settings.Home, "mcp")
 	return s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, client, args...)
+}
+
+func clientConfigurationMatches(client, output, executable, home string) (bool, error) {
+	expectedArgs := []string{"--home", home, "mcp"}
+	if client == "codex" {
+		var config struct {
+			Transport struct {
+				Type    string   `json:"type"`
+				Command string   `json:"command"`
+				Args    []string `json:"args"`
+			} `json:"transport"`
+		}
+		if err := json.Unmarshal([]byte(output), &config); err != nil {
+			return false, fmt.Errorf("parse Codex MCP configuration: %w", err)
+		}
+		return config.Transport.Type == "stdio" &&
+			config.Transport.Command == executable &&
+			slices.Equal(config.Transport.Args, expectedArgs), nil
+	}
+
+	command, args, err := parseClaudeMCPConfiguration(output)
+	if err != nil {
+		return false, err
+	}
+	return command == executable && args == strings.Join(expectedArgs, " "), nil
+}
+
+func parseClaudeMCPConfiguration(output string) (string, string, error) {
+	var command, args string
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "Command:"):
+			command = strings.TrimSpace(strings.TrimPrefix(line, "Command:"))
+		case strings.HasPrefix(line, "Args:"):
+			args = strings.TrimSpace(strings.TrimPrefix(line, "Args:"))
+		}
+	}
+	if command == "" || args == "" {
+		return "", "", fmt.Errorf("parse Claude MCP configuration: missing Command or Args")
+	}
+	return command, args, nil
 }
 
 func setupCommandLine(client, executable, home string) string {

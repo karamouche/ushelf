@@ -49,7 +49,7 @@ func testDocker(t *testing.T, runner Runner, stdout, stderr io.Writer) Docker {
 }
 
 func TestStartUsesHardenedPortableMounts(t *testing.T) {
-	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {err: errors.New("missing")}, {err: errors.New("missing")}, {output: "healthy"}}}
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
 	if err := docker.Start(context.Background()); err != nil {
@@ -70,7 +70,7 @@ func TestStartUsesHardenedPortableMounts(t *testing.T) {
 }
 
 func TestStopRefusesUnmanagedContainer(t *testing.T) {
-	runner := &fakeRunner{outputs: []fakeResult{{output: ""}}}
+	runner := &fakeRunner{outputs: []fakeResult{{output: "ushelf"}, {output: "false"}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
 	err := docker.Stop(context.Background())
@@ -107,7 +107,7 @@ func TestMCPKeepsDiagnosticsOffStdout(t *testing.T) {
 }
 
 func TestStatusIncludesVersionAndHome(t *testing.T) {
-	runner := &fakeRunner{outputs: []fakeResult{{err: errors.New("missing")}}}
+	runner := &fakeRunner{outputs: []fakeResult{{output: ""}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
 	if err := docker.Status(context.Background()); err != nil {
@@ -117,5 +117,40 @@ func TestStatusIncludesVersionAndHome(t *testing.T) {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Fatalf("status missing %q: %s", expected, stdout.String())
 		}
+	}
+}
+
+func TestStatusPropagatesDockerListFailure(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{err: errors.New("daemon unavailable")}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	err := docker.Status(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "daemon unavailable") {
+		t.Fatalf("expected Docker daemon error, got %v", err)
+	}
+}
+
+func TestIsRunningPropagatesStateInspectionFailure(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{
+		{output: "ushelf"},
+		{output: "true"},
+		{err: errors.New("inspect failed")},
+	}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	running, err := docker.IsRunning(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "inspect failed") {
+		t.Fatalf("expected inspection error, got running=%t err=%v", running, err)
+	}
+}
+
+func TestCheckManagedHealthPropagatesInspectionFailure(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{
+		{output: "ushelf"},
+		{output: "true"},
+		{err: errors.New("health inspect failed")},
+	}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	err := docker.CheckManagedHealth(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "health inspect failed") {
+		t.Fatalf("expected health inspection error, got %v", err)
 	}
 }

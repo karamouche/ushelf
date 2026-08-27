@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -94,17 +95,31 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
-	wasRunning := s.docker().IsRunning(ctx)
+	wasRunning, err := s.docker().IsRunning(ctx)
+	if err != nil {
+		return err
+	}
 	if err := atomicWrite(executable, binary, 0o755); err != nil {
 		return fmt.Errorf("replace %s: %w", executable, err)
 	}
 	if wasRunning {
-		if err := s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, executable, "--home", s.settings.Home, "start"); err != nil {
+		if err := s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, executable, restartArgs(updatedSettings)...); err != nil {
 			return fmt.Errorf("CLI updated, but restarting uShelf failed: %w", err)
 		}
 	}
 	fmt.Fprintf(s.deps.Stdout, "Updated uShelf to %s.\n", targetVersion)
 	return nil
+}
+
+func restartArgs(settings Settings) []string {
+	return []string{
+		"--home", settings.Home,
+		"--host", settings.Host,
+		"--port", strconv.Itoa(settings.Port),
+		"--base-path", settings.BasePath,
+		"--image", settings.Image,
+		"start",
+	}
 }
 
 func fetchRelease(ctx context.Context) (release, error) {

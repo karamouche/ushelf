@@ -71,21 +71,28 @@ func (d Docker) Start(ctx context.Context) error {
 	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
-	if _, err := d.managedContainerExists(ctx); err != nil {
+	exists, err := d.managedContainerExists(ctx)
+	if err != nil {
 		return err
 	}
 	hash := d.configHash()
-	existingHash, inspectErr := d.inspect(ctx, `{{index .Config.Labels "io.ushelf.config"}}`)
-	if inspectErr == nil && strings.TrimSpace(existingHash) == hash {
-		running, _ := d.inspect(ctx, "{{.State.Running}}")
-		if strings.TrimSpace(running) != "true" {
-			if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "start", containerName); err != nil {
-				return err
-			}
+	if exists {
+		existingHash, inspectErr := d.inspect(ctx, `{{index .Config.Labels "io.ushelf.config"}}`)
+		if inspectErr != nil {
+			return inspectErr
 		}
-		return d.waitForHealth(ctx)
-	}
-	if inspectErr == nil {
+		if strings.TrimSpace(existingHash) == hash {
+			running, runningErr := d.inspect(ctx, "{{.State.Running}}")
+			if runningErr != nil {
+				return runningErr
+			}
+			if strings.TrimSpace(running) != "true" {
+				if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "start", containerName); err != nil {
+					return err
+				}
+			}
+			return d.waitForHealth(ctx)
+		}
 		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "rm", "-f", containerName); err != nil {
 			return err
 		}
@@ -118,13 +125,16 @@ func (d Docker) Stop(ctx context.Context) error {
 	return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "rm", "-f", containerName)
 }
 
-func (d Docker) IsRunning(ctx context.Context) bool {
+func (d Docker) IsRunning(ctx context.Context) (bool, error) {
 	exists, err := d.managedContainerExists(ctx)
 	if err != nil || !exists {
-		return false
+		return false, err
 	}
 	value, err := d.inspect(ctx, "{{.State.Running}}")
-	return err == nil && strings.TrimSpace(value) == "true"
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(value) == "true", nil
 }
 
 func (d Docker) Status(ctx context.Context) error {
@@ -197,7 +207,10 @@ func (d Docker) Maintenance(ctx context.Context, args ...string) error {
 	if _, err := d.managedContainerExists(ctx); err != nil {
 		return err
 	}
-	wasRunning := d.IsRunning(ctx)
+	wasRunning, err := d.IsRunning(ctx)
+	if err != nil {
+		return err
+	}
 	if wasRunning {
 		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "stop", containerName); err != nil {
 			return err
@@ -232,7 +245,10 @@ func (d Docker) Import(ctx context.Context, source string) error {
 	if _, err := d.managedContainerExists(ctx); err != nil {
 		return err
 	}
-	wasRunning := d.IsRunning(ctx)
+	wasRunning, err := d.IsRunning(ctx)
+	if err != nil {
+		return err
+	}
 	if wasRunning {
 		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "stop", containerName); err != nil {
 			return err
@@ -278,9 +294,23 @@ func (d Docker) inspect(ctx context.Context, format string) (string, error) {
 }
 
 func (d Docker) managedContainerExists(ctx context.Context) (bool, error) {
+	names, err := d.Runner.Output(ctx, "docker", "container", "ls", "--all", "--filter", "name="+containerName, "--format", "{{.Names}}")
+	if err != nil {
+		return false, fmt.Errorf("list Docker containers: %w", err)
+	}
+	exists := false
+	for _, name := range strings.Fields(names) {
+		if name == containerName {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return false, nil
+	}
 	managed, err := d.inspect(ctx, `{{index .Config.Labels "io.ushelf.managed"}}`)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	if strings.TrimSpace(managed) != "true" {
 		return true, fmt.Errorf("Docker container %q exists but is not managed by the uShelf CLI", containerName)
@@ -295,7 +325,11 @@ func (d Docker) configHash() string {
 }
 
 func (d Docker) CheckPort() error {
-	if d.IsRunning(context.Background()) {
+	running, err := d.IsRunning(context.Background())
+	if err != nil {
+		return err
+	}
+	if running {
 		return nil
 	}
 	listener, err := net.Listen("tcp", net.JoinHostPort(d.Settings.Host, strconv.Itoa(d.Settings.Port)))
@@ -343,7 +377,7 @@ func (d Docker) CheckManagedHealth(ctx context.Context) error {
 	}
 	status, err := d.inspect(ctx, "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}")
 	if err != nil {
-		return nil
+		return err
 	}
 	value := strings.TrimSpace(status)
 	if value != "healthy" && value != "running" {
