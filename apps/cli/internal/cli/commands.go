@@ -182,22 +182,71 @@ func supportedPlatform() error {
 }
 
 func (s *commandState) configCommand() *cobra.Command {
-	command := &cobra.Command{Use: "config", Short: "Manage persistent CLI configuration"}
-	command.AddCommand(
-		&cobra.Command{Use: "show", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
-			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "basePath": s.settings.BasePath, "image": s.settings.Image}
+	const keys = `Configurable keys:
+  host       Address published by Docker
+  port       HTTP port
+  base-path  Web app and API URL prefix
+  image      Runtime Docker image`
+
+	command := &cobra.Command{
+		Use:   "config",
+		Short: "Manage persistent CLI configuration",
+		Long:  "Manage persistent CLI configuration.\n\n" + keys,
+		Example: `  ushelf config show
+  ushelf config set base-path /reader/
+  ushelf config unset base-path`,
+	}
+	show := &cobra.Command{
+		Use:   "show",
+		Short: "Show effective configuration",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image}
 			encoded, _ := json.MarshalIndent(value, "", "  ")
 			fmt.Fprintln(s.deps.Stdout, string(encoded))
 			return nil
-		}},
-		&cobra.Command{Use: "path", Args: cobra.NoArgs, Run: func(_ *cobra.Command, _ []string) { fmt.Fprintln(s.deps.Stdout, s.settings.ConfigPath) }},
-		&cobra.Command{Use: "set KEY VALUE", Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, args []string) error {
+		},
+	}
+	path := &cobra.Command{
+		Use:   "path",
+		Short: "Print the configuration file path",
+		Args:  cobra.NoArgs,
+		Run:   func(_ *cobra.Command, _ []string) { fmt.Fprintln(s.deps.Stdout, s.settings.ConfigPath) },
+	}
+	set := &cobra.Command{
+		Use:   "set KEY VALUE",
+		Short: "Set a persistent configuration value",
+		Long:  "Set a persistent configuration value.\n\n" + keys,
+		Args: func(command *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return nil
+			}
+			return cobra.ExactArgs(2)(command, args)
+		},
+		ValidArgs: []string{"host", "port", "base-path", "image"},
+		Example: `  ushelf config set host 0.0.0.0
+  ushelf config set port 43120
+  ushelf config set base-path /reader/
+  ushelf config set image ghcr.io/karamouche/ushelf:latest`,
+		RunE: func(command *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return command.Help()
+			}
 			return setConfigValue(s.settings.ConfigPath, args[0], args[1], false)
-		}},
-		&cobra.Command{Use: "unset KEY", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, args []string) error {
+		},
+	}
+	unset := &cobra.Command{
+		Use:       "unset KEY",
+		Short:     "Restore a configuration value to its default",
+		Long:      "Restore a configuration value to its default.\n\n" + keys,
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"host", "port", "base-path", "image"},
+		Example:   "  ushelf config unset base-path",
+		RunE: func(_ *cobra.Command, args []string) error {
 			return setConfigValue(s.settings.ConfigPath, args[0], "", true)
-		}},
-	)
+		},
+	}
+	command.AddCommand(show, path, set, unset)
 	return command
 }
 
