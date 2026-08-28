@@ -44,11 +44,24 @@ Install the native CLI on macOS or Linux. Docker must already be installed and r
 
 ```sh
 curl -fsSL https://github.com/karamouche/ushelf/releases/latest/download/install.sh | sh
+```
+
+Then check your installation and start uShelf:
+
+```sh
 ushelf doctor
 ushelf start
 ```
 
-Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
+Next, connect the agent client you use:
+
+```sh
+ushelf setup codex
+# or: ushelf setup claude
+# or: ushelf setup all
+```
+
+Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. You can now ask the connected agent to save a URL. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
 
 Useful lifecycle commands:
 
@@ -61,7 +74,7 @@ ushelf update
 
 The CLI downloads a release-matched container image. Node.js, pnpm, a repository clone, and Docker Compose are not required for normal use.
 
-The installer places the executable at `~/.local/bin/ushelf`. uShelf automatically creates its configuration, library, recipes, state, and versioned agent assets under `~/.ushelf` when needed.
+uShelf automatically creates its configuration, library, recipes, state, and versioned agent assets under `~/.ushelf` when needed.
 
 The installer supports macOS and Linux on amd64 and arm64; Windows users can run it under WSL.
 
@@ -80,7 +93,7 @@ The installer supports macOS and Linux on amd64 and arm64; Windows users can run
 | `ushelf update`        | Verify and install the latest CLI and matching image            |
 | `ushelf rebuild-index` | Rebuild disposable SQLite state from Markdown                   |
 | `ushelf import FILE`   | Import a compatible Markdown item                               |
-| `ushelf config show    | path                                                            | ...` | Inspect or update persistent configuration |
+| `ushelf config`        | Inspect or update persistent configuration                      |
 | `ushelf version`       | Show CLI build and runtime image information                    |
 
 ## Connect your agent
@@ -93,7 +106,11 @@ ushelf setup claude
 # or: ushelf setup all
 ```
 
-Use `ushelf setup <client> --print` to inspect the exact registration command without making changes. Then try:
+Use `ushelf setup <client> --print` to inspect the exact registration command without making changes.
+
+If an existing `ushelf` MCP entry or skill path points somewhere else, setup stops without overwriting it. Inspect the conflict first, then rerun with `--force` only when you intend to replace it.
+
+Then try:
 
 ```text
 Save this URL to uShelf.
@@ -114,18 +131,14 @@ Show me unread pieces tagged architecture.
 
 Extraction includes Readability, sanitization, response and redirect limits, and private-network protections. X threads use a limited public extraction path with an explicitly agent-supplied fallback.
 
-<p align="center">
-  <img src="docs/assets/ushelf-principles.svg" alt="The uShelf promise: own the source, bring the agent, and return to the ideas" width="100%" />
-</p>
+## Markdown at the core
 
-## Data you can understand
-
-```text
-~/.ushelf/library/items/    Canonical current Markdown documents
-~/.ushelf/library/history/  Archived enrichment revisions
-~/.ushelf/recipes/          Editable, hash-versioned agent instructions
-~/.ushelf/state/ushelf.db   Rebuildable search index and transient workflow state
-```
+| Path                         | Purpose                                               |
+| ---------------------------- | ----------------------------------------------------- |
+| `~/.ushelf/library/items/`   | Canonical current Markdown documents                  |
+| `~/.ushelf/library/history/` | Archived enrichment revisions                         |
+| `~/.ushelf/recipes/`         | Editable, hash-versioned agent instructions           |
+| `~/.ushelf/state/ushelf.db`  | Rebuildable search index and transient workflow state |
 
 Markdown remains the source of truth. Canonical URLs deduplicate ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
 
