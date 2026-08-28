@@ -6,14 +6,14 @@ import { resolveWebBasePath } from "./base-path.js";
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, workspaceRoot, "");
   const base = resolveWebBasePath(process.env.USHELF_WEB_BASE_PATH ?? env.USHELF_WEB_BASE_PATH);
   const apiPrefix = `${base.slice(0, -1)}/api`;
 
   return {
     root: webRoot,
-    base,
+    base: command === "build" ? "./" : base,
     plugins: [react()],
     server: {
       proxy: {
