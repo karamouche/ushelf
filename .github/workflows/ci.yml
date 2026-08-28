@@ -47,3 +47,5 @@ jobs:
           cache-dependency-path: apps/cli/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - name: Build runtime image
+        run: docker build --build-arg USHELF_VERSION=ci --tag ushelf:ci .
