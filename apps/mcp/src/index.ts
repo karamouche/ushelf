@@ -6,7 +6,10 @@ import { z } from "zod";
 const service = new ShelfService();
 await service.initialize();
 
-const server = new McpServer({ name: "ushelf", version: "0.1.0" });
+const server = new McpServer({
+  name: "ushelf",
+  version: process.env.USHELF_VERSION ?? "0.1.0",
+});
 const json = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   structuredContent: value as Record<string, unknown>,

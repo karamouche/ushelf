@@ -10,6 +10,7 @@ test-results/
 coverage/
 .pnpm-store/
 .DS_Store
+apps/cli/ushelf
 library/items/
 library/history/
 !library/items/.gitkeep

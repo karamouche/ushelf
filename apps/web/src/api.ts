@@ -1,3 +1,5 @@
+import { resolveRuntimeBasePath } from "./runtime-base-path.js";
+
 export type ReadingStatus = "inbox" | "reading" | "read" | "archived";
 export type SourceType = "blog" | "x_thread";
 export type IngestionState =
@@ -44,7 +46,7 @@ export interface ShelfItem {
   revision: string;
 }
 
-const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+const BASE_PATH = resolveRuntimeBasePath().replace(/\/$/, "");
 
 function apiUrl(path: string): string {
   return `${BASE_PATH}${path}`;

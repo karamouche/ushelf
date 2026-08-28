@@ -27,7 +27,10 @@ describe("createApp base path", () => {
   it("serves assets and SPA routes only below the configured base path", async () => {
     const webRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ushelf-web-"));
     try {
-      await fs.writeFile(path.join(webRoot, "index.html"), "<main>reader</main>");
+      await fs.writeFile(
+        path.join(webRoot, "index.html"),
+        "<html><head></head><body><main>reader</main></body></html>",
+      );
       await fs.writeFile(path.join(webRoot, "app.js"), "console.log('reader')");
       const app = createApp({} as ShelfService, webRoot, "/reader/");
 
@@ -37,11 +40,20 @@ describe("createApp base path", () => {
 
       const spaRoute = await app.request("/reader/items/example");
       expect(spaRoute.status).toBe(200);
-      expect(await spaRoute.text()).toBe("<main>reader</main>");
+      const html = await spaRoute.text();
+      expect(html).toContain("<main>reader</main>");
+      expect(html).toContain('<base href="/reader/">');
+      expect(html).toContain('globalThis.__USHELF_BASE_PATH__="/reader/"');
 
       expect((await app.request("/app.js")).status).toBe(404);
     } finally {
       await fs.rm(webRoot, { recursive: true, force: true });
     }
+  });
+
+  it("rejects unsafe base paths", () => {
+    expect(() => createApp({} as ShelfService, undefined, '/reader/\"><script>')).toThrow(
+      "USHELF_WEB_BASE_PATH",
+    );
   });
 });

@@ -5,6 +5,7 @@ services:
       args:
         USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
         USHELF_PORT: ${USHELF_PORT:-43110}
+        USHELF_VERSION: ${USHELF_VERSION:-dev}
     image: ushelf:local
     init: true
     restart: unless-stopped
