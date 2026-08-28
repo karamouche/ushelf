@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { UshelfConfig } from "../configuration/ushelf-config.js";
 import { resolveConfig } from "../configuration/ushelf-config.js";
@@ -13,6 +13,7 @@ import type {
 } from "../domain/library-item.js";
 import type { Recipe } from "../domain/recipe.js";
 import { AwaitingSourceError, extractUrl } from "../ingestion/source-extractor.js";
+import { decodePdfPayload, extractPdf } from "../ingestion/pdf-extractor.js";
 import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
 import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
@@ -82,7 +83,7 @@ export class ShelfService {
         contentHash: sha256(sourceMarkdown),
       };
     } catch (error) {
-      if (error instanceof AwaitingSourceError || detectSourceType(canonicalUrl) === "x_thread")
+      if (error instanceof AwaitingSourceError || detectSourceType(canonicalUrl) === "x")
         extraction = {
           status: "pending",
           error: error instanceof Error ? error.message : String(error),
@@ -113,6 +114,60 @@ export class ShelfService {
     return { item, duplicate: false, state: ingestionState(item) };
   }
 
+  async ingestFile(input: {
+    filename: string;
+    contentBase64: string;
+    recipe?: string | undefined;
+  }): Promise<IngestResult> {
+    const bytes = decodePdfPayload(input.filename, input.contentBase64);
+    const sourceHash = createHash("sha256").update(bytes).digest("hex");
+    const existingId = this.database.findBySourceHash(sourceHash);
+    if (existingId) {
+      const item = await this.getItem(existingId);
+      return { item, duplicate: true, state: ingestionState(item) };
+    }
+    const recipeName = input.recipe ?? "default";
+    await this.repository.recipe(recipeName);
+    const source = await extractPdf(bytes, input.filename);
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    const frontmatter: ItemFrontmatter = {
+      schemaVersion: 1,
+      id,
+      sourceType: "document",
+      file: {
+        name: input.filename,
+        mediaType: "application/pdf",
+        sizeBytes: bytes.length,
+        sha256: sourceHash,
+        pageCount: source.pageCount,
+      },
+      title: source.title,
+      ...(source.author ? { author: source.author } : {}),
+      capturedAt: now,
+      updatedAt: now,
+      reading: { status: "inbox", progress: 0 },
+      tags: [],
+      extraction: {
+        status: "complete",
+        method: "pdf_text",
+        retrievedAt: now,
+        contentHash: sha256(source.markdown),
+      },
+      enrichment: { status: "pending", recipe: recipeName },
+    };
+    await this.repository.saveOriginalFile(id, bytes);
+    let item: ShelfItem;
+    try {
+      item = await this.repository.save(frontmatter, "", source.markdown);
+    } catch (error) {
+      await this.repository.removeOriginalFile(id);
+      throw error;
+    }
+    this.database.upsert(item);
+    return { item, duplicate: false, state: ingestionState(item) };
+  }
+
   async submitSourceContent(input: {
     itemId: string;
     title: string;
@@ -123,8 +178,8 @@ export class ShelfService {
   }): Promise<ShelfItem> {
     const item = await this.getItem(input.itemId);
     assertRevision(item, input.revision);
-    if (item.sourceType !== "x_thread")
-      throw new Error("Agent-supplied source fallback is only enabled for X threads");
+    if (item.sourceType !== "x")
+      throw new Error("Agent-supplied source fallback is only enabled for X sources");
     if (input.markdown.trim().length < 40) throw new Error("Submitted source content is too short");
     const sourceChanged = item.extraction.contentHash !== sha256(input.markdown);
     if (sourceChanged && item.enrichment.status === "complete") await this.repository.archive(item);
@@ -171,7 +226,10 @@ export class ShelfService {
         summary: "string (1-1200 characters)",
         keyPoints: "string[] (1-12)",
         tags: "lowercase string[] (0-12)",
-        citations: "{url,label}[] using URLs present in the source or the original URL",
+        citations:
+          item.sourceType === "document"
+            ? "{page,label}[] using page numbers present in the document"
+            : "{url,label}[] using URLs present in the source or the original URL",
         bodyMarkdown: "recipe-specific Markdown",
       },
     };
@@ -232,6 +290,27 @@ export class ShelfService {
     return item;
   }
 
+  async getOriginalFile(id: string): Promise<{
+    bytes: Buffer;
+    name: string;
+    mediaType: "application/pdf";
+  }> {
+    const item = await this.getItem(id);
+    if (item.sourceType !== "document") throw new Error("Item does not have an original file");
+    try {
+      return {
+        bytes: await this.repository.originalFile(id),
+        name: item.file.name,
+        mediaType: item.file.mediaType,
+      };
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        throw new Error("Original file was not found");
+      }
+      throw error;
+    }
+  }
+
   listItems(query: LibraryListQuery = {}) {
     return this.database.list(query);
   }
@@ -288,6 +367,9 @@ export class ShelfService {
   async refreshSource(id: string, revision?: string): Promise<ShelfItem> {
     const item = await this.getItem(id);
     assertRevision(item, revision);
+    if (item.sourceType === "document") {
+      throw new Error("Document sources cannot be refreshed; ingest the PDF again instead");
+    }
     const source = await extractUrl(item.canonicalUrl);
     const contentHash = sha256(source.markdown);
     const changed = item.extraction.contentHash !== contentHash;
@@ -343,8 +425,11 @@ export class ShelfService {
   async importMarkdown(sourcePath: string): Promise<ShelfItem> {
     const resolvedPath = path.resolve(sourcePath);
     const imported = await this.repository.load(resolvedPath);
-    if (this.database.findByCanonicalUrl(imported.canonicalUrl))
-      throw new Error("An item with this canonical URL already exists");
+    const duplicate =
+      imported.sourceType === "document"
+        ? this.database.findBySourceHash(imported.file.sha256)
+        : this.database.findByCanonicalUrl(imported.canonicalUrl);
+    if (duplicate) throw new Error("An item with this canonical URL already exists");
     const item = await this.repository.importFile(resolvedPath);
     this.database.upsert(item);
     return item;
@@ -368,10 +453,20 @@ function assertRevision(item: ShelfItem, revision?: string): void {
 }
 
 function validateCitations(item: ShelfItem, citations: Citation[]): void {
+  if (item.sourceType === "document") {
+    for (const citation of citations) {
+      if (!("page" in citation)) throw new Error("Document citations must use page numbers");
+      if (citation.page > item.file.pageCount) {
+        throw new Error(`Citation page is outside the document: ${citation.page}`);
+      }
+    }
+    return;
+  }
   const available = new Set<string>([item.originalUrl, item.canonicalUrl]);
   for (const match of item.sourceMarkdown.matchAll(/https?:\/\/[^\s)\]>]+/g))
     available.add(match[0].replace(/[.,;:]$/, ""));
   for (const citation of citations) {
+    if (!("url" in citation)) throw new Error("URL sources must use URL citations");
     if (!available.has(citation.url))
       throw new Error(`Citation URL is not present in the source: ${citation.url}`);
   }

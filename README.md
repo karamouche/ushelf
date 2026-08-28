@@ -33,7 +33,7 @@ Most read-later tools own the database and bolt AI onto the side. uShelf takes t
   <img src="docs/assets/ushelf-workflow.svg" alt="uShelf architecture: agents and browsers use thin adapters around ShelfService, with Markdown as the canonical record and SQLite as a rebuildable index" width="100%" />
 </p>
 
-1. Ask your connected agent to save something from the web.
+1. Ask your connected agent to save something from the web or attach a PDF.
 2. uShelf captures and normalizes the source with deterministic code.
 3. The agent follows a versioned recipe to add cited summaries, insights, and tags.
 4. You search and read everything in the web app, while the canonical record stays in Markdown.
@@ -61,7 +61,7 @@ ushelf setup codex
 # or: ushelf setup all
 ```
 
-Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. You can now ask the connected agent to save a URL. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
+Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. You can now ask the connected agent to save a URL or an attached PDF. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
 
 Useful lifecycle commands:
 
@@ -92,7 +92,7 @@ The installer supports macOS and Linux on amd64 and arm64; Windows users can run
 | `ushelf doctor`        | Check Docker, filesystem, port, image, recipe, and client setup |
 | `ushelf update`        | Verify and install the latest CLI and matching image            |
 | `ushelf rebuild-index` | Rebuild disposable SQLite state from Markdown                   |
-| `ushelf import FILE`   | Import a compatible Markdown item                               |
+| `ushelf import FILE`   | Import a validated Markdown item                                |
 | `ushelf config`        | Inspect or update persistent configuration                      |
 | `ushelf version`       | Show CLI build and runtime image information                    |
 
@@ -129,7 +129,7 @@ Show me unread pieces tagged architecture.
 | **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering |
 | **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                           |
 
-Extraction includes Readability, sanitization, response and redirect limits, and private-network protections. X threads use a limited public extraction path with an explicitly agent-supplied fallback.
+Extraction includes Readability for articles, PDF.js text extraction for attached PDFs, sanitization, response and redirect limits, and private-network protections. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, DOCX, and PPTX are not yet supported.
 
 ## Markdown at the core
 
@@ -137,22 +137,24 @@ Extraction includes Readability, sanitization, response and redirect limits, and
 | ---------------------------- | ----------------------------------------------------- |
 | `~/.ushelf/library/items/`   | Canonical current Markdown documents                  |
 | `~/.ushelf/library/history/` | Archived enrichment revisions                         |
+| `~/.ushelf/library/files/`   | Retained original PDFs for document items             |
 | `~/.ushelf/recipes/`         | Editable, hash-versioned agent instructions           |
 | `~/.ushelf/state/ushelf.db`  | Rebuildable search index and transient workflow state |
 
-Markdown remains the source of truth. Canonical URLs deduplicate ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
+Markdown remains the source of truth. Canonical URLs deduplicate web ingestion, original-file hashes deduplicate PDF ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
 
 ```sh
 ushelf rebuild-index
 ```
 
-To import an externally edited compatible item, run:
+To import an externally edited validated Markdown item, run:
 
 ```sh
 ushelf import /absolute/path/to/item.md
 ```
 
 Remote source images are not downloaded. The reader renders sanitized Markdown, loads images lazily, and sends no referrer.
+Retained PDFs can be opened from their document reader. Their extracted Markdown remains the canonical searchable record.
 
 ## Run continuously with Docker Compose
 
@@ -246,7 +248,7 @@ go -C apps/cli vet ./...
 ```
 
 Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, because Playwright launches the compiled production server.
-The E2E command also performs live ingestion checks against the documented X and blog fixtures, so it requires internet access and can fail when either upstream source is unavailable or changes its public metadata.
+The E2E command also performs live ingestion checks against the documented X and article fixtures, so it requires internet access and can fail when either upstream source is unavailable or changes its public metadata.
 
 Contributions should preserve the central boundary: deterministic code captures and stores sources; a connected agent performs explicit, recipe-driven enrichment.
 

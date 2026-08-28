@@ -11,4 +11,4 @@ Return the required typed fields and use the free-form Markdown body for:
 2. **Notable references** — people, projects, papers, or links worth following.
 3. **Open questions** — unresolved claims or ideas to test.
 
-Keep claims grounded in the source. Every non-obvious claim in the brief must point to a supplied source URL in `citations`. Do not invent missing context. If the source is incomplete or uncertain, say so directly.
+Keep claims grounded in the source. Every non-obvious claim in the brief must point to a supplied source URL, or to a page number when the source is a PDF document, in `citations`. Do not invent missing context. If the source is incomplete or uncertain, say so directly.

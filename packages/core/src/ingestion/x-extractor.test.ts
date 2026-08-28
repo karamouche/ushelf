@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { extractPublicX } from "./x-thread-extractor.js";
+import { extractPublicX } from "./x-extractor.js";
 
 const sourceUrl = "https://x.com/XOpenSource/status/2087951962004230428";
 
@@ -16,7 +16,7 @@ describe("public X extraction", () => {
     );
 
     expect(result).toEqual({
-      sourceType: "x_thread",
+      sourceType: "x",
       title: "X Open Source (@XOpenSource) on X",
       markdown: `![X Open Source (@XOpenSource) on X](https://pbs.twimg.com/media/HPplsydXMAETRLO.jpg)
 
@@ -52,7 +52,7 @@ Open-sourcing the For You timeline
       sourceUrl,
     );
 
-    expect(result?.markdown).toContain("![X thread](https://pbs.twimg.com/media/safe.jpg)");
+    expect(result?.markdown).toContain("![X](https://pbs.twimg.com/media/safe.jpg)");
   });
 
   it("keeps the agent fallback when public source text is absent", () => {

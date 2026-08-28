@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ async function fixture() {
     id: "e7cf9d0d-bba8-4b93-9503-ab8f15de9d2f",
     originalUrl: "https://x.com/a/status/1",
     canonicalUrl: "https://x.com/a/status/1",
-    sourceType: "x_thread",
+    sourceType: "x",
     title: "Pending thread",
     capturedAt: now,
     updatedAt: now,
@@ -49,6 +49,95 @@ async function fixture() {
 }
 
 describe("agent-driven workflow", () => {
+  it("does not retain a file or item when PDF extraction fails", async () => {
+    const { config, service } = await fixture();
+    const before = service.listItems().length;
+    await expect(
+      service.ingestFile({
+        filename: "broken.pdf",
+        contentBase64: Buffer.from("%PDF-1.4\nbroken").toString("base64"),
+      }),
+    ).rejects.toThrow();
+    expect(service.listItems()).toHaveLength(before);
+    expect(await readdir(config.filesDir)).toEqual([]);
+  });
+
+  it("ingests, deduplicates, cites, serves, and deletes a PDF document", async () => {
+    const { config, service } = await fixture();
+    const first = await service.ingestFile({
+      filename: "useful-paper.pdf",
+      contentBase64: SIMPLE_PDF_BASE64,
+    });
+
+    expect(first).toMatchObject({ duplicate: false, state: "awaiting_enrichment" });
+    expect(first.item).toMatchObject({
+      schemaVersion: 1,
+      sourceType: "document",
+      title: "useful-paper",
+      file: { name: "useful-paper.pdf", mediaType: "application/pdf", pageCount: 1 },
+      extraction: { status: "complete", method: "pdf_text" },
+    });
+    expect(first.item.sourceMarkdown).toContain("## Page 1");
+    expect(first.item.sourceMarkdown).toContain("deterministic extraction");
+    expect(await readFile(path.join(config.filesDir, first.item.id, "original.pdf"))).toEqual(
+      Buffer.from(SIMPLE_PDF_BASE64, "base64"),
+    );
+
+    const duplicate = await service.ingestFile({
+      filename: "renamed.pdf",
+      contentBase64: SIMPLE_PDF_BASE64,
+    });
+    expect(duplicate).toMatchObject({ duplicate: true, item: { id: first.item.id } });
+
+    const context = await service.ingestionContext(first.item.id);
+    expect(context.outputContract).toMatchObject({
+      citations: "{page,label}[] using page numbers present in the document",
+    });
+    const enriched = await service.saveInsights({
+      itemId: first.item.id,
+      recipeHash: context.recipe.hash,
+      revision: first.item.revision,
+      summary: "A PDF summary.",
+      keyPoints: ["A page-grounded point"],
+      tags: ["Documents"],
+      citations: [{ page: 1, label: "The extracted page" }],
+      bodyMarkdown: "",
+    });
+    expect(await readFile(enriched.filePath, "utf8")).toContain("- Page 1 — The extracted page");
+    await expect(
+      service.saveInsights({
+        itemId: first.item.id,
+        recipeHash: context.recipe.hash,
+        revision: enriched.revision,
+        summary: "Invalid citation.",
+        keyPoints: ["Point"],
+        tags: [],
+        citations: [{ url: "https://example.com", label: "Wrong citation kind" }],
+        bodyMarkdown: "",
+      }),
+    ).rejects.toThrow(/must use page numbers/);
+    await expect(
+      service.saveInsights({
+        itemId: first.item.id,
+        recipeHash: context.recipe.hash,
+        revision: enriched.revision,
+        summary: "Invalid citation.",
+        keyPoints: ["Point"],
+        tags: [],
+        citations: [{ page: 2, label: "Outside" }],
+        bodyMarkdown: "",
+      }),
+    ).rejects.toThrow(/outside the document/);
+    await expect(service.refreshSource(first.item.id)).rejects.toThrow(/cannot be refreshed/);
+
+    const original = await service.getOriginalFile(first.item.id);
+    expect(original.name).toBe("useful-paper.pdf");
+    expect(original.bytes).toEqual(Buffer.from(SIMPLE_PDF_BASE64, "base64"));
+    const deletion = service.requestDelete(first.item.id);
+    await service.confirmDelete(first.item.id, deletion.token);
+    await expect(service.getOriginalFile(first.item.id)).rejects.toThrow(/not found/i);
+  });
+
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {
     const { config, service, database, item } = await fixture();
     const sourceUrl = "https://x.com/a/status/1";
@@ -168,3 +257,6 @@ describe("agent-driven workflow", () => {
     await expect(service.getItem(item.id)).resolves.toMatchObject({ id: item.id });
   });
 });
+
+const SIMPLE_PDF_BASE64 =
+  "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggMTIwID4+CnN0cmVhbQpCVAovRjEgMTIgVGYKNzIgNzIwIFRkCihBIHVzZWZ1bCBQREYgZG9jdW1lbnQgd2l0aCBlbm91Z2ggZW1iZWRkZWQgdGV4dCBmb3IgZGV0ZXJtaW5pc3RpYyBleHRyYWN0aW9uIGFuZCB0ZXN0aW5nLikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ4MgolJUVPRgo=";

@@ -26,6 +26,23 @@ server.registerTool(
 );
 
 server.registerTool(
+  "ingest_file",
+  {
+    title: "Ingest PDF",
+    description: "Create or return a document by deterministically extracting an attached PDF.",
+    inputSchema: {
+      filename: z.string().min(1).max(255),
+      contentBase64: z
+        .string()
+        .min(4)
+        .max(Math.ceil((10 * 1024 * 1024) / 3) * 4),
+      recipe: z.string().default("default"),
+    },
+  },
+  async (input) => json(await service.ingestFile(input)),
+);
+
+server.registerTool(
   "get_ingestion",
   {
     title: "Get ingestion",
@@ -39,7 +56,7 @@ server.registerTool(
   "submit_source_content",
   {
     title: "Submit X source",
-    description: "Supply ordered X thread Markdown when public extraction is blocked.",
+    description: "Supply X source Markdown when public extraction is blocked.",
     inputSchema: {
       itemId: z.uuid(),
       title: z.string().min(1),

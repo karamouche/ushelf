@@ -18,15 +18,16 @@ export class ShelfDatabase {
     this.itemsDir = itemsDir ? path.resolve(itemsDir) : undefined;
     this.db = new DatabaseSync(databasePath);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-    this.migrate();
+    this.initializeSchema();
   }
 
-  private migrate(): void {
+  private initializeSchema(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        canonical_url TEXT NOT NULL UNIQUE,
+        canonical_url TEXT UNIQUE,
+        source_hash TEXT,
         source_type TEXT NOT NULL,
         author TEXT,
         captured_at TEXT NOT NULL,
@@ -39,6 +40,7 @@ export class ShelfDatabase {
         file_path TEXT NOT NULL,
         revision TEXT NOT NULL
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS items_source_hash ON items(source_hash) WHERE source_hash IS NOT NULL;
       CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
         id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
       );
@@ -56,10 +58,10 @@ export class ShelfDatabase {
       this.db
         .prepare(
           `
-        INSERT INTO items (id,title,canonical_url,source_type,author,captured_at,updated_at,status,progress,tags_json,ingestion_state,summary,file_path,revision)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO items (id,title,canonical_url,source_hash,source_type,author,captured_at,updated_at,status,progress,tags_json,ingestion_state,summary,file_path,revision)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
-          title=excluded.title, canonical_url=excluded.canonical_url, source_type=excluded.source_type,
+          title=excluded.title, canonical_url=excluded.canonical_url, source_hash=excluded.source_hash, source_type=excluded.source_type,
           author=excluded.author, captured_at=excluded.captured_at, updated_at=excluded.updated_at,
           status=excluded.status, progress=excluded.progress, tags_json=excluded.tags_json,
           ingestion_state=excluded.ingestion_state, summary=excluded.summary,
@@ -69,7 +71,8 @@ export class ShelfDatabase {
         .run(
           item.id,
           item.title,
-          item.canonicalUrl,
+          item.sourceType === "document" ? null : item.canonicalUrl,
+          item.sourceType === "document" ? item.file.sha256 : null,
           item.sourceType,
           item.author ?? null,
           item.capturedAt,
@@ -114,6 +117,12 @@ export class ShelfDatabase {
 
   findByCanonicalUrl(url: string): string | undefined {
     const row = this.db.prepare("SELECT id FROM items WHERE canonical_url = ?").get(url) as
+      { id: string } | undefined;
+    return row?.id;
+  }
+
+  findBySourceHash(hash: string): string | undefined {
+    const row = this.db.prepare("SELECT id FROM items WHERE source_hash = ?").get(hash) as
       { id: string } | undefined;
     return row?.id;
   }
@@ -233,8 +242,9 @@ function isWithin(root: string, candidate: string): boolean {
 interface DatabaseItemRow {
   id: string;
   title: string;
-  canonical_url: string;
-  source_type: "blog" | "x_thread";
+  canonical_url: string | null;
+  source_hash: string | null;
+  source_type: "article" | "document" | "x";
   author: string | null;
   captured_at: string;
   updated_at: string;
@@ -249,8 +259,8 @@ function rowToSummary(row: DatabaseItemRow): ItemSummary {
   return {
     id: row.id,
     title: row.title,
-    canonicalUrl: row.canonical_url,
     sourceType: row.source_type,
+    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
     ...(row.author ? { author: row.author } : {}),
     capturedAt: row.captured_at,
     updatedAt: row.updated_at,

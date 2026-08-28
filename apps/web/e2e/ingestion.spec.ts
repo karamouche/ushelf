@@ -14,7 +14,7 @@ const blogUrl =
 const blogCanonicalUrl =
   "https://rhonabwy.com/2026/08/15/software-engineering-fundamentals-matter-more-than-ever";
 
-test("ingests a public X article into canonical Markdown", async () => {
+test("ingests public X content into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
     const result = await service.ingestUrl(xUrl);
 
@@ -23,7 +23,7 @@ test("ingests a public X article into canonical Markdown", async () => {
     expect(result.item).toMatchObject({
       originalUrl: xUrl,
       canonicalUrl: xUrl,
-      sourceType: "x_thread",
+      sourceType: "x",
       title: expect.stringContaining("X Open Source"),
       extraction: { status: "complete", method: "public_extract" },
       enrichment: { status: "pending", recipe: "default" },
@@ -43,7 +43,7 @@ test("ingests a public X article into canonical Markdown", async () => {
   });
 });
 
-test("ingests a readable blog article into canonical Markdown", async () => {
+test("ingests a readable article into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
     const result = await service.ingestUrl(blogUrl);
 
@@ -52,7 +52,7 @@ test("ingests a readable blog article into canonical Markdown", async () => {
     expect(result.item).toMatchObject({
       originalUrl: blogUrl,
       canonicalUrl: blogCanonicalUrl,
-      sourceType: "blog",
+      sourceType: "article",
       title: "Software Engineering fundamentals matter more than ever",
       extraction: { status: "complete", method: "readability" },
       enrichment: { status: "pending", recipe: "default" },

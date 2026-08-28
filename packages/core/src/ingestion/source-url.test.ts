@@ -15,8 +15,8 @@ describe("canonicalizeUrl", () => {
   });
 
   it("recognizes both X hostnames", () => {
-    expect(detectSourceType("https://x.com/example/status/1")).toBe("x_thread");
-    expect(detectSourceType("https://twitter.com/example/status/1")).toBe("x_thread");
+    expect(detectSourceType("https://x.com/example/status/1")).toBe("x");
+    expect(detectSourceType("https://twitter.com/example/status/1")).toBe("x");
   });
 });
 

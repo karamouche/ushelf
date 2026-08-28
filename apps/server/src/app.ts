@@ -30,6 +30,14 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
   app.get(route("/api/items/:id"), async (c) =>
     c.json({ item: await service.getItem(c.req.param("id")!) }),
   );
+  app.get(route("/api/items/:id/original"), async (c) => {
+    const file = await service.getOriginalFile(c.req.param("id")!);
+    return c.body(new Uint8Array(file.bytes), 200, {
+      "content-type": file.mediaType,
+      "content-disposition": `inline; filename="original.pdf"; filename*=UTF-8''${encodeHeaderFilename(file.name)}`,
+      "x-content-type-options": "nosniff",
+    });
+  });
   app.patch(route("/api/items/:id/reading"), async (c) => {
     const body = await c.req.json<{ status: string; progress: number; revision?: string }>();
     const item = await service.updateReading(
@@ -67,6 +75,13 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     app.get(webRoute, (c) => c.html(indexHtml));
   }
   return app;
+}
+
+function encodeHeaderFilename(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 function normalizeBasePath(value: string): string {

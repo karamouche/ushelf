@@ -15,9 +15,11 @@ import remarkGfm from "remark-gfm";
 import {
   getItem,
   listItems,
+  originalFileUrl,
   updateReading,
   updateReadingOnExit,
   type ItemSummary,
+  type Citation,
   type ReadingStatus,
   type ShelfItem,
 } from "./api.js";
@@ -130,8 +132,9 @@ function Library() {
             onChange={(event) => setFilter("sourceType", event.target.value)}
           >
             <option value="">All sources</option>
-            <option value="blog">Articles</option>
-            <option value="x_thread">X threads</option>
+            <option value="article">Articles</option>
+            <option value="document">Documents</option>
+            <option value="x">X</option>
           </select>
         </div>
         {error ? (
@@ -165,7 +168,7 @@ function ItemCard({ item }: { item: ItemSummary }) {
     <article className="item-card">
       <Link to={`/items/${item.id}`}>
         <div className="item-meta">
-          <span>{item.sourceType === "x_thread" ? "X thread" : "Article"}</span>
+          <span>{sourceTypeLabel(item.sourceType)}</span>
           <span>{formatDate(item.capturedAt)}</span>
           <span className={`state state-${item.ingestionState}`}>
             {stateLabel(item.ingestionState)}
@@ -283,7 +286,7 @@ function Reader() {
               : "",
             item.insightMarkdown,
             item.enrichment.citations?.length
-              ? `### Citations\n\n${item.enrichment.citations.map((citation) => `- [${citation.label}](${citation.url})`).join("\n")}`
+              ? `### Citations\n\n${item.enrichment.citations.map((citation) => readerCitation(item.id, citation)).join("\n")}`
               : "",
           ]
             .filter(Boolean)
@@ -324,15 +327,20 @@ function Reader() {
       <div className="reading-progress" style={{ width: `${item.reading.progress * 100}%` }} />
       <main className="article">
         <p className="eyebrow">
-          {item.sourceType === "x_thread" ? "X thread" : "Article"} · saved{" "}
-          {formatDate(item.capturedAt)}
+          {sourceTypeLabel(item.sourceType)} · saved {formatDate(item.capturedAt)}
         </p>
         <h1>{item.title}</h1>
         <div className="byline">
           {item.author && <span>By {item.author}</span>}
-          <a href={item.originalUrl} target="_blank" rel="noreferrer">
-            Open original ↗
-          </a>
+          {item.sourceType === "document" ? (
+            <a href={originalFileUrl(item.id)} target="_blank" rel="noreferrer">
+              Open PDF ↗
+            </a>
+          ) : (
+            <a href={item.originalUrl} target="_blank" rel="noreferrer">
+              Open original ↗
+            </a>
+          )}
         </div>
         {item.extraction.status !== "complete" || item.enrichment.status !== "complete" ? (
           <aside className="notice">
@@ -483,6 +491,23 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function sourceTypeLabel(value: ItemSummary["sourceType"]): string {
+  switch (value) {
+    case "article":
+      return "Article";
+    case "document":
+      return "Document";
+    case "x":
+      return "X";
+  }
+}
+
+function readerCitation(itemId: string, citation: Citation): string {
+  return "url" in citation
+    ? `- [${citation.label}](${citation.url})`
+    : `- [Page ${citation.page} — ${citation.label}](${originalFileUrl(itemId, citation.page)})`;
 }
 function stateLabel(value: string) {
   return (

@@ -6,7 +6,7 @@ The Model Context Protocol adapter for uShelf. It lets a connected agent ingest 
 
 - The server communicates over stdio; stdout is reserved for MCP traffic.
 - `src/index.ts` registers all tools and resources, then delegates their work to `ShelfService` from `@ushelf/core`.
-- Tools cover ingestion, X-thread source fallback, enrichment, listing/search, reading state, source refresh, re-enrichment, and confirmation-gated deletion.
+- Tools cover URL and attached-PDF ingestion, X-thread source fallback, enrichment, listing/search, reading state, source refresh, re-enrichment, and confirmation-gated deletion.
 - Resources expose normalized source Markdown, complete item data, and recipe instructions through `ushelf://` URIs.
 - Inputs are validated with Zod. Mutating operations use item revisions where appropriate to prevent stale writes.
 - `USHELF_ROOT` must point at the uShelf data root when the process is launched from elsewhere. Otherwise it defaults to the current working directory.

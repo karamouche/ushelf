@@ -7,6 +7,7 @@ export {
   ingestionStateSchema,
   itemFrontmatterSchema,
   readingStatusSchema,
+  sourceFileSchema,
   sourceTypeSchema,
 } from "./domain/library-item.js";
 export type {
@@ -17,6 +18,7 @@ export type {
   LibraryListQuery,
   ReadingStatus,
   ShelfItem,
+  SourceFile,
   SourceType,
 } from "./domain/library-item.js";
 export type { Recipe } from "./domain/recipe.js";

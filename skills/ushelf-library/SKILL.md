@@ -17,7 +17,7 @@ Use MCP tools rather than reading or editing library files directly.
 ## Mutate safely
 
 - Use `update_reading_state` with the current revision when changing status or progress.
-- Use `refresh_source` only when the user asks to fetch the source again. For X content that remains inaccessible, follow `$ushelf-ingest` and submit newly obtained thread content instead.
+- Use `refresh_source` only when the user asks to fetch a URL source again. PDF documents cannot be refreshed; ingest the new PDF as a file instead. For X content that remains inaccessible, follow `$ushelf-ingest` and submit newly obtained thread content instead.
 - Use `list_stale_items` to find recipe-version drift. Re-enrich only after the user explicitly asks: call `request_reenrichment`, then follow `$ushelf-ingest` from `get_ingestion_context` onward.
 - Treat `archived` as the normal removal action.
 - Permanently delete only after explicit user confirmation. First call `request_delete`, show the exact title and explain that current and historical files will be removed, then call `confirm_delete` with the short-lived token only after confirmation.
