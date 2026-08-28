@@ -4,7 +4,7 @@ Use this file as the starting context for work anywhere in the repository. Read 
 
 ## Project in one minute
 
-uShelf is a local, agent-native read-later library for articles and X threads. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index.
+uShelf is a local, agent-native read-later library for articles, PDF documents, and X sources. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index.
 
 The main flow is:
 
@@ -27,6 +27,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
 - `library/items`: Canonical saved documents, ignored by Git except for `.gitkeep`.
 - `library/history`: Archived enrichment revisions, also ignored by Git.
+- `library/files`: Retained original files for document items, also ignored by Git.
 - `.ushelf/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
 
 Each workspace package has a local README with its runtime details and commands.

@@ -5,11 +5,11 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 ## What to know
 
 - `ShelfService` is the main entry point. Apps should call it instead of coordinating repositories and the database themselves.
-- Markdown under `library/items/` is canonical. `.ushelf/ushelf.db` is a disposable SQLite/FTS5 index reconciled from those files during initialization.
+- Markdown under `library/items/` is canonical. Original PDFs live under `library/files/`; `.ushelf/ushelf.db` is a disposable SQLite/FTS5 index reconciled from Markdown during initialization.
 - SQLite stores item locations relative to `library/items` so host-side agents and the Docker server can safely share the same index across different mount paths.
 - Previous enriched revisions are archived under `library/history/`; recipe Markdown under `recipes/` is hash-versioned.
 - `MarkdownRepository` validates and atomically writes item documents. `ShelfDatabase` indexes summaries and searchable text.
-- Source ingestion uses Readability for articles and a limited public extraction path for X. X threads can fall back to agent-supplied Markdown through `ShelfService`.
+- Source ingestion uses Readability for articles, PDF.js for attached PDF documents, and a limited public extraction path for X. X sources can fall back to agent-supplied Markdown through `ShelfService`.
 - Common Mermaid HTML forms are normalized to fenced `mermaid` Markdown so diagram source remains portable and canonical.
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.

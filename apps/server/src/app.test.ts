@@ -6,6 +6,33 @@ import type { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
 
 describe("createApp base path", () => {
+  it("serves retained PDFs inline without exposing their storage path", async () => {
+    const service = {
+      getOriginalFile: async () => ({
+        bytes: Buffer.from("%PDF-test"),
+        name: "Useful paper.pdf",
+        mediaType: "application/pdf" as const,
+      }),
+    } as unknown as ShelfService;
+    const response = await createApp(service).request("/api/items/item-id/original");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(response.headers.get("content-disposition")).toContain("Useful%20paper.pdf");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await response.arrayBuffer()).toString()).toBe("%PDF-test");
+  });
+
+  it("returns not found when a retained PDF is missing", async () => {
+    const service = {
+      getOriginalFile: async () => {
+        throw new Error("Original file was not found");
+      },
+    } as unknown as ShelfService;
+
+    expect((await createApp(service).request("/api/items/item-id/original")).status).toBe(404);
+  });
+
   it("mounts the API below the configured base path", async () => {
     const app = createApp({} as ShelfService, undefined, "/reader/");
 

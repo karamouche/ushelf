@@ -19,7 +19,7 @@ export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): Extrac
     markdown = `![${escapeImageAlt(title)}](${metadataImage})\n\n${markdown}`;
   }
   return {
-    sourceType: "blog",
+    sourceType: "article",
     title,
     ...(article.byline ? { author: clean(article.byline) } : {}),
     markdown,

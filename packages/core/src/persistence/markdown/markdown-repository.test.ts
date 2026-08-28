@@ -21,25 +21,7 @@ describe("MarkdownRepository imports", () => {
     const repository = new MarkdownRepository(config);
     await repository.initialize();
 
-    const frontmatter: ItemFrontmatter = {
-      schemaVersion: 1,
-      id: "6aa8a9fb-a12b-4590-b626-e31d1b5fc4ef",
-      originalUrl: "https://example.com/imported",
-      canonicalUrl: "https://example.com/imported",
-      sourceType: "blog",
-      title: "Imported article",
-      capturedAt: "2026-08-25T12:00:00.000Z",
-      updatedAt: "2026-08-25T12:00:00.000Z",
-      reading: { status: "inbox", progress: 0 },
-      tags: [],
-      extraction: {
-        status: "complete",
-        method: "readability",
-        retrievedAt: "2026-08-25T12:00:00.000Z",
-        contentHash: "source-hash",
-      },
-      enrichment: { status: "pending", recipe: "default" },
-    };
+    const frontmatter = articleFrontmatter();
     const raw = renderItemMarkdown(frontmatter, "", "Imported source text.");
     const sourcePath = path.join(root, "incoming.md");
     await writeFile(sourcePath, raw, "utf8");
@@ -53,3 +35,25 @@ describe("MarkdownRepository imports", () => {
     ).toEqual([]);
   });
 });
+
+function articleFrontmatter(): ItemFrontmatter {
+  return {
+    schemaVersion: 1,
+    id: "6aa8a9fb-a12b-4590-b626-e31d1b5fc4ef",
+    originalUrl: "https://example.com/imported",
+    canonicalUrl: "https://example.com/imported",
+    sourceType: "article",
+    title: "Imported article",
+    capturedAt: "2026-08-25T12:00:00.000Z",
+    updatedAt: "2026-08-25T12:00:00.000Z",
+    reading: { status: "inbox", progress: 0 },
+    tags: [],
+    extraction: {
+      status: "complete",
+      method: "readability",
+      retrievedAt: "2026-08-25T12:00:00.000Z",
+      contentHash: "source-hash",
+    },
+    enrichment: { status: "pending", recipe: "default" },
+  };
+}

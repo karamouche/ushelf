@@ -3,7 +3,7 @@ import type { SourceType } from "../domain/library-item.js";
 import { extractReadableArticle } from "./article-extractor.js";
 import { fetchPublicHtml } from "./safe-html-fetcher.js";
 import { canonicalizeUrl, detectSourceType } from "./source-url.js";
-import { extractPublicX } from "./x-thread-extractor.js";
+import { extractPublicX } from "./x-extractor.js";
 
 export interface ExtractedSource {
   sourceType: SourceType;
@@ -20,11 +20,11 @@ export async function extractUrl(input: string): Promise<ExtractedSource> {
   const { html, finalUrl } = await fetchPublicHtml(canonicalUrl);
   const dom = new JSDOM(html, { url: finalUrl });
 
-  if (sourceType === "x_thread") {
+  if (sourceType === "x") {
     const extracted = extractPublicX(dom, canonicalUrl);
     if (!extracted)
       throw new AwaitingSourceError(
-        "X did not expose enough public thread content; submit it through the agent fallback",
+        "X did not expose enough public content; submit it through the agent fallback",
       );
     return extracted;
   }
