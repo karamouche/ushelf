@@ -27,7 +27,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
 - `library/items`: Canonical saved documents, ignored by Git except for `.gitkeep`.
 - `library/history`: Archived enrichment revisions, also ignored by Git.
-- `library/files`: Retained original files for document items, also ignored by Git.
+- `library/files`: Retained original PDFs and content-addressed item media, also ignored by Git.
 - `.ushelf/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
 
 Each workspace package has a local README with its runtime details and commands.
@@ -84,7 +84,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Preserve Markdown as the source of truth. Any index change must remain rebuildable with `pnpm rebuild-index`.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
 - Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
-- Preserve URL protections when changing extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
+- Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
 - Keep deterministic extraction separate from LLM enrichment. Avoid introducing token-consuming work into capture, search, or reading-state updates.
 - Treat X fallback content as agent-supplied, not independently verified.
 - Use strict TypeScript and keep `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` clean.
@@ -111,6 +111,7 @@ When changing shared behavior, inspect both adapters and the web client for cont
 - Item Markdown contains validated frontmatter plus separate insight and source sections.
 - Canonical URLs provide ingestion deduplication.
 - Content hashes detect source changes; recipe hashes detect stale enrichment.
+- Rendered Markdown images use validated relative references to content-addressed files beneath the owning item's `library/files` directory; the reader must never fetch external image references.
 - A changed enriched source is archived before its insights are cleared.
 - SQLite startup reconciliation must restore index state from Markdown.
 - Permanent deletion remains a two-step, short-lived confirmation-token flow.

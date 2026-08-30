@@ -8,7 +8,7 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 - `src/App.tsx` contains the library and reader routes; `src/api.ts` is the API client.
 - The app does not read library files directly. All data and updates go through the API path below
   the configured `USHELF_WEB_BASE_PATH`.
-- Rendered Markdown is sanitized. Remote images are lazy-loaded with a no-referrer policy.
+- Rendered Markdown is sanitized. Only content-addressed item media is rendered; external or malformed image references are shown as omission text and never requested.
 - Fenced `mermaid` blocks render locally in strict mode. Invalid diagrams fall back to their original source code.
 - In development, Vite runs on `127.0.0.1:43111` and proxies the configured base path's `/api`
   endpoint to the server on port `43110`.

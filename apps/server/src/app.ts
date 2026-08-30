@@ -30,6 +30,15 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
   app.get(route("/api/items/:id"), async (c) =>
     c.json({ item: await service.getItem(c.req.param("id")!) }),
   );
+  app.get(route("/api/items/:id/media/:filename"), async (c) => {
+    const file = await service.getMediaFile(c.req.param("id")!, c.req.param("filename")!);
+    return c.body(new Uint8Array(file.bytes), 200, {
+      "content-type": file.mediaType,
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-security-policy": "default-src 'none'; sandbox",
+      "x-content-type-options": "nosniff",
+    });
+  });
   app.get(route("/api/items/:id/original"), async (c) => {
     const file = await service.getOriginalFile(c.req.param("id")!);
     return c.body(new Uint8Array(file.bytes), 200, {

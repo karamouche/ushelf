@@ -42,6 +42,7 @@ test("document reader opens the retained PDF and links page citations", async ({
       contentType: "application/json",
       body: JSON.stringify({
         item: {
+          schemaVersion: 2,
           id: "pdf-document",
           title: "Useful report",
           sourceType: "document",
@@ -63,6 +64,10 @@ test("document reader opens the retained PDF and links page citations", async ({
             summary: "A saved report.",
             citations: [{ page: 2, label: "Supporting evidence" }],
           },
+          media: {
+            source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+            insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+          },
           sourceMarkdown: "## Page 1\n\nReport text.",
           insightMarkdown: "",
           revision: "0123456789abcdef",
@@ -83,8 +88,50 @@ test("document reader opens the retained PDF and links page citations", async ({
   );
 });
 
+test("reader loads only content-addressed local Markdown images", async ({ page }) => {
+  const itemId = "local-media";
+  const filename = `${"a".repeat(64)}.png`;
+  const remoteRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://remote.example.test/"))
+      remoteRequests.push(request.url());
+  });
+  await page.context().route(`**/api/items/${itemId}`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        item: {
+          ...mermaidItem(
+            itemId,
+            `![Saved locally](../../files/${itemId}/media/${filename})\n\n![Remote](https://remote.example.test/image.png)`,
+          ),
+          media: {
+            source: { discovered: 2, localized: 1, omitted: 1, filtered: 0 },
+            insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+          },
+        },
+      }),
+    });
+  });
+  await page.context().route(`**/api/items/${itemId}/media/${filename}`, async (route) => {
+    await route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n3sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  });
+
+  await page.goto(`/items/${itemId}`);
+  await expect(page.getByRole("img", { name: "Saved locally" })).toBeVisible();
+  await expect(page.getByText("Image omitted: Remote.")).toBeVisible();
+  expect(remoteRequests).toEqual([]);
+});
+
 function mermaidItem(id: string, sourceMarkdown: string) {
   return {
+    schemaVersion: 2,
     id,
     title: "Mermaid guide",
     originalUrl: "https://docs.example.test/mermaid",
@@ -96,6 +143,10 @@ function mermaidItem(id: string, sourceMarkdown: string) {
     tags: [],
     extraction: { status: "complete", method: "readability" },
     enrichment: { status: "complete", recipe: "default", summary: "A diagram example." },
+    media: {
+      source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+    },
     sourceMarkdown,
     insightMarkdown: "",
     revision: "0123456789abcdef",

@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import {
   getItem,
   listItems,
+  localMediaUrl,
   originalFileUrl,
   updateReading,
   updateReadingOnExit,
@@ -357,7 +358,7 @@ function Reader() {
         <section className="document insights">
           <h2>Insights</h2>
           {insightDocument ? (
-            <Markdown value={insightDocument} />
+            <Markdown value={insightDocument} itemId={item.id} />
           ) : (
             <p className="muted">Waiting for an agent to add insights.</p>
           )}
@@ -365,7 +366,7 @@ function Reader() {
         <section className="document source">
           <h2>Source</h2>
           {item.sourceMarkdown ? (
-            <Markdown value={item.sourceMarkdown} />
+            <Markdown value={item.sourceMarkdown} itemId={item.id} />
           ) : (
             <p className="muted">Source content has not been supplied.</p>
           )}
@@ -389,7 +390,7 @@ function Reader() {
   );
 }
 
-function Markdown({ value }: { value: string }) {
+function Markdown({ value, itemId }: { value: string; itemId: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -400,7 +401,14 @@ function Markdown({ value }: { value: string }) {
             {children}
           </a>
         ),
-        img: (props) => <img {...props} loading="lazy" referrerPolicy="no-referrer" />,
+        img: ({ src, alt, ...props }) => {
+          const localSource = localMediaUrl(itemId, src);
+          return localSource ? (
+            <img {...props} src={localSource} alt={alt ?? ""} loading="lazy" />
+          ) : (
+            <span className="media-omitted">Image omitted: {alt || "image"}.</span>
+          );
+        },
         pre: MermaidPre,
         table: ({ children, ...props }) => (
           <div className="table-scroll" tabIndex={0}>

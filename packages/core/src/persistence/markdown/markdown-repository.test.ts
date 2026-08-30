@@ -34,11 +34,26 @@ describe("MarkdownRepository imports", () => {
       (await readdir(path.dirname(imported.filePath))).filter((name) => name.endsWith(".tmp")),
     ).toEqual([]);
   });
+
+  it("rejects schema-version-1 Markdown without compatibility handling", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-repository-test-"));
+    roots.push(root);
+    const repository = new MarkdownRepository(resolveConfig(root));
+    await repository.initialize();
+    const sourcePath = path.join(root, "legacy.md");
+    const legacy = renderItemMarkdown(articleFrontmatter(), "", "Legacy source text.").replace(
+      "schemaVersion: 2",
+      "schemaVersion: 1",
+    );
+    await writeFile(sourcePath, legacy, "utf8");
+
+    await expect(repository.importFile(sourcePath)).rejects.toThrow();
+  });
 });
 
 function articleFrontmatter(): ItemFrontmatter {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "6aa8a9fb-a12b-4590-b626-e31d1b5fc4ef",
     originalUrl: "https://example.com/imported",
     canonicalUrl: "https://example.com/imported",
@@ -55,5 +70,9 @@ function articleFrontmatter(): ItemFrontmatter {
       contentHash: "source-hash",
     },
     enrichment: { status: "pending", recipe: "default" },
+    media: {
+      source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+    },
   };
 }
