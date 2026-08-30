@@ -129,7 +129,7 @@ Show me unread pieces tagged architecture.
 | **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering |
 | **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                           |
 
-Extraction includes Readability for articles, PDF.js text extraction for attached PDFs, sanitization, response and redirect limits, and private-network protections. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, DOCX, and PPTX are not yet supported.
+Extraction includes Readability for articles, PDF.js text and embedded-figure extraction for attached PDFs, local image capture, sanitization, response and redirect limits, and private-network protections. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, vector-diagram reconstruction, DOCX, and PPTX are not yet supported.
 
 ## Markdown at the core
 
@@ -137,7 +137,7 @@ Extraction includes Readability for articles, PDF.js text extraction for attache
 | ---------------------------- | ----------------------------------------------------- |
 | `~/.ushelf/library/items/`   | Canonical current Markdown documents                  |
 | `~/.ushelf/library/history/` | Archived enrichment revisions                         |
-| `~/.ushelf/library/files/`   | Retained original PDFs for document items             |
+| `~/.ushelf/library/files/`   | Original PDFs and content-addressed item media        |
 | `~/.ushelf/recipes/`         | Editable, hash-versioned agent instructions           |
 | `~/.ushelf/state/ushelf.db`  | Rebuildable search index and transient workflow state |
 
@@ -153,8 +153,7 @@ To import an externally edited validated Markdown item, run:
 ushelf import /absolute/path/to/item.md
 ```
 
-Remote source images are not downloaded. The reader renders sanitized Markdown, loads images lazily, and sends no referrer.
-Retained PDFs can be opened from their document reader. Their extracted Markdown remains the canonical searchable record.
+Rendered images are downloaded into `library/files/<item-id>/media/` and referenced from canonical Markdown with portable relative paths. The reader serves only those validated local assets and never loads remote Markdown images. Retained PDFs can be opened from their document reader; embedded raster figures are extracted into the page-ordered Markdown, which remains the canonical searchable record.
 
 ## Run continuously with Docker Compose
 

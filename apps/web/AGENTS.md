@@ -26,7 +26,7 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 
 ## Untrusted content
 
-- Saved Markdown is untrusted. Continue using `rehype-sanitize`; external links open with `noreferrer`, and remote images remain lazy-loaded with `referrerPolicy="no-referrer"`.
+- Saved Markdown is untrusted. Continue using `rehype-sanitize`; external links open with `noreferrer`, and images render only when they match the current item's content-addressed local media path. Never request remote Markdown images.
 - Mermaid must remain lazy-loaded, configured with `securityLevel: "strict"`, and rendered without trusting source HTML. Invalid diagrams must visibly fall back to the original fenced source.
 - Do not introduce raw HTML rendering or relax the sanitization schema without explicit security review and regression coverage.
 

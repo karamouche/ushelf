@@ -49,9 +49,20 @@ export interface ShelfItem {
     citations?: Citation[];
     error?: string;
   };
+  media: {
+    source: MediaCaptureStats;
+    insights: MediaCaptureStats;
+  };
   sourceMarkdown: string;
   insightMarkdown: string;
   revision: string;
+}
+
+interface MediaCaptureStats {
+  discovered: number;
+  localized: number;
+  omitted: number;
+  filtered: number;
 }
 
 const BASE_PATH = resolveRuntimeBasePath().replace(/\/$/, "");
@@ -62,6 +73,14 @@ function apiUrl(path: string): string {
 
 export function originalFileUrl(id: string, page?: number): string {
   return `${apiUrl(`/api/items/${id}/original`)}${page ? `#page=${page}` : ""}`;
+}
+
+export function localMediaUrl(id: string, source?: string): string | undefined {
+  const prefix = `../../files/${id}/media/`;
+  if (!source?.startsWith(prefix)) return undefined;
+  const filename = source.slice(prefix.length);
+  if (!/^[a-f0-9]{64}\.(?:png|jpg|gif|webp|avif|svg)$/.test(filename)) return undefined;
+  return apiUrl(`/api/items/${encodeURIComponent(id)}/media/${filename}`);
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

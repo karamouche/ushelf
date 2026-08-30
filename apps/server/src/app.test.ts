@@ -33,6 +33,24 @@ describe("createApp base path", () => {
     expect((await createApp(service).request("/api/items/item-id/original")).status).toBe(404);
   });
 
+  it("serves content-addressed local media with restrictive headers", async () => {
+    const filename = `${"a".repeat(64)}.png`;
+    const service = {
+      getMediaFile: async (id: string, requested: string) => {
+        expect(id).toBe("item-id");
+        expect(requested).toBe(filename);
+        return { bytes: Buffer.from([137, 80, 78, 71]), mediaType: "image/png" };
+      },
+    } as unknown as ShelfService;
+
+    const response = await createApp(service).request(`/api/items/item-id/media/${filename}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("cache-control")).toContain("immutable");
+    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   it("mounts the API below the configured base path", async () => {
     const app = createApp({} as ShelfService, undefined, "/reader/");
 

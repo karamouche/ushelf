@@ -30,7 +30,7 @@ async function fixture() {
   );
   const now = "2026-08-19T12:00:00.000Z";
   const frontmatter: ItemFrontmatter = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "e7cf9d0d-bba8-4b93-9503-ab8f15de9d2f",
     originalUrl: "https://x.com/a/status/1",
     canonicalUrl: "https://x.com/a/status/1",
@@ -42,6 +42,10 @@ async function fixture() {
     tags: [],
     extraction: { status: "pending" },
     enrichment: { status: "pending", recipe: "default" },
+    media: {
+      source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
+    },
   };
   const item = await repository.save(frontmatter, "", "");
   database.upsert(item);
@@ -71,7 +75,7 @@ describe("agent-driven workflow", () => {
 
     expect(first).toMatchObject({ duplicate: false, state: "awaiting_enrichment" });
     expect(first.item).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       sourceType: "document",
       title: "useful-paper",
       file: { name: "useful-paper.pdf", mediaType: "application/pdf", pageCount: 1 },
@@ -144,7 +148,7 @@ describe("agent-driven workflow", () => {
     const sourced = await service.submitSourceContent({
       itemId: item.id,
       title: "A useful thread",
-      markdown: `First post with enough detail to be useful.\n\n[Original](${sourceUrl})`,
+      markdown: `First post with enough detail to be useful.\n\n![Chart](${PNG_DATA_URL})\n\n[Original](${sourceUrl})`,
       author: "A",
       revision: item.revision,
     });
@@ -157,11 +161,15 @@ describe("agent-driven workflow", () => {
       keyPoints: ["One grounded point"],
       tags: ["Testing"],
       citations: [{ url: sourceUrl, label: "Original post" }],
-      bodyMarkdown: "### Why it matters\n\nIt proves the workflow.",
+      bodyMarkdown: `### Why it matters\n\nIt proves the workflow.\n\n![Chart again](${PNG_DATA_URL})`,
     });
     expect(ready.enrichment.status).toBe("complete");
     expect(ready.tags).toEqual(["testing"]);
-    expect(ready.insightMarkdown).toBe("### Why it matters\n\nIt proves the workflow.");
+    expect(ready.sourceMarkdown).not.toContain("data:image");
+    expect(ready.insightMarkdown).not.toContain("data:image");
+    expect(ready.media.source).toMatchObject({ discovered: 1, localized: 1, omitted: 0 });
+    expect(ready.media.insights).toMatchObject({ discovered: 1, localized: 1, omitted: 0 });
+    expect(await readdir(path.join(config.filesDir, item.id, "media"))).toHaveLength(1);
     const read = await service.updateReading(item.id, "read", 0.4, ready.revision);
     expect(read.reading.progress).toBe(1);
     database.clearIndex();
@@ -260,3 +268,6 @@ describe("agent-driven workflow", () => {
 
 const SIMPLE_PDF_BASE64 =
   "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggMTIwID4+CnN0cmVhbQpCVAovRjEgMTIgVGYKNzIgNzIwIFRkCihBIHVzZWZ1bCBQREYgZG9jdW1lbnQgd2l0aCBlbm91Z2ggZW1iZWRkZWQgdGV4dCBmb3IgZGV0ZXJtaW5pc3RpYyBleHRyYWN0aW9uIGFuZCB0ZXN0aW5nLikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ4MgolJUVPRgo=";
+
+const PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n3sAAAAASUVORK5CYII=";

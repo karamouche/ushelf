@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 import type { UshelfConfig } from "../../configuration/ushelf-config.js";
 import type { ItemFrontmatter, ShelfItem } from "../../domain/library-item.js";
+import { isMediaFilename, type MediaAsset } from "../../ingestion/media-localizer.js";
 import type { Recipe } from "../../domain/recipe.js";
 import { parseItemMarkdown, parseRecipe, renderItemMarkdown, sha256 } from "./item-markdown.js";
 
@@ -92,22 +93,49 @@ export class MarkdownRepository {
     await atomicWrite(filePath, contents);
   }
 
+  async saveMediaAssets(id: string, assets: readonly MediaAsset[]): Promise<void> {
+    if (!assets.length) return;
+    const directory = this.mediaDirectory(id);
+    await mkdir(directory, { recursive: true });
+    await Promise.all(
+      assets.map(async (asset) => {
+        if (!isMediaFilename(asset.filename)) throw new Error("Invalid media filename");
+        const filePath = path.join(directory, asset.filename);
+        try {
+          await readFile(filePath);
+        } catch (error) {
+          if (!isMissingFileError(error)) throw error;
+          await atomicWrite(filePath, asset.bytes);
+        }
+      }),
+    );
+  }
+
+  async mediaFile(id: string, filename: string): Promise<Buffer> {
+    if (!isMediaFilename(filename)) throw new Error("Invalid media filename");
+    return readFile(path.join(this.mediaDirectory(id), filename));
+  }
+
   async originalFile(id: string): Promise<Buffer> {
     return readFile(this.originalFilePath(id));
   }
 
-  async removeOriginalFile(id: string): Promise<void> {
+  async removeItemFiles(id: string): Promise<void> {
     await rm(path.dirname(this.originalFilePath(id)), { recursive: true, force: true });
   }
 
   async remove(item: ShelfItem): Promise<void> {
     await rm(item.filePath);
     await rm(path.join(this.config.historyDir, item.id), { recursive: true, force: true });
-    await this.removeOriginalFile(item.id);
+    await this.removeItemFiles(item.id);
   }
 
   private originalFilePath(id: string): string {
     return path.join(this.config.filesDir, id, "original.pdf");
+  }
+
+  private mediaDirectory(id: string): string {
+    return path.join(this.config.filesDir, id, "media");
   }
 
   async itemFiles(): Promise<string[]> {

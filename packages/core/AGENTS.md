@@ -35,7 +35,7 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 - Preserve DNS/private-address blocking, the 15-second timeout, 5 MB response limit, content-type validation, and five-redirect limit unless the product requirements explicitly change.
 - Keep deterministic capture separate from agent enrichment. Core must not call a model or require an AI API key.
 - Treat attached PDFs as untrusted input. Preserve file-size and page-count limits, reject encrypted or textless PDFs, and keep retained originals beneath `library/files` without exposing filesystem paths.
-- Continue sanitizing extracted HTML before Markdown conversion. Preserve absolute source links/images and portable fenced code, including Mermaid normalization.
+- Continue sanitizing extracted HTML before Markdown conversion. Preserve absolute source links, localize rendered images into content-addressed item files, and preserve portable fenced code including Mermaid normalization.
 
 ## Change guidance
 

@@ -61,8 +61,25 @@ const enrichmentSchema = z.object({
   error: z.string().optional(),
 });
 
+export const mediaCaptureStatsSchema = z
+  .object({
+    discovered: z.number().int().nonnegative(),
+    localized: z.number().int().nonnegative(),
+    omitted: z.number().int().nonnegative(),
+    filtered: z.number().int().nonnegative(),
+  })
+  .refine(
+    (stats) => stats.localized + stats.omitted + stats.filtered === stats.discovered,
+    "Media capture counts must account for every discovered image",
+  );
+
+export const mediaCaptureSchema = z.object({
+  source: mediaCaptureStatsSchema,
+  insights: mediaCaptureStatsSchema,
+});
+
 const commonFields = {
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   id: z.uuid(),
   title: z.string().min(1),
   author: z.string().optional(),
@@ -73,6 +90,7 @@ const commonFields = {
   tags: z.array(z.string()),
   extraction: extractionSchema,
   enrichment: enrichmentSchema,
+  media: mediaCaptureSchema,
 };
 
 const urlFrontmatterSchema = z.object({
@@ -96,6 +114,8 @@ export type SourceFile = z.infer<typeof sourceFileSchema>;
 export type ReadingStatus = z.infer<typeof readingStatusSchema>;
 export type IngestionState = z.infer<typeof ingestionStateSchema>;
 export type Citation = z.infer<typeof citationSchema>;
+export type MediaCaptureStats = z.infer<typeof mediaCaptureStatsSchema>;
+export type MediaCapture = z.infer<typeof mediaCaptureSchema>;
 
 export type ShelfItem = ItemFrontmatter & {
   filePath: string;
