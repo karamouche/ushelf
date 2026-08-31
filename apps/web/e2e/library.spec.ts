@@ -42,7 +42,6 @@ test("document reader opens the retained PDF and links page citations", async ({
       contentType: "application/json",
       body: JSON.stringify({
         item: {
-          schemaVersion: 2,
           id: "pdf-document",
           title: "Useful report",
           sourceType: "document",
@@ -131,7 +130,6 @@ test("reader loads only content-addressed local Markdown images", async ({ page 
 
 function mermaidItem(id: string, sourceMarkdown: string) {
   return {
-    schemaVersion: 2,
     id,
     title: "Mermaid guide",
     originalUrl: "https://docs.example.test/mermaid",

@@ -79,7 +79,6 @@ export const mediaCaptureSchema = z.object({
 });
 
 const commonFields = {
-  schemaVersion: z.literal(2),
   id: z.uuid(),
   title: z.string().min(1),
   author: z.string().optional(),

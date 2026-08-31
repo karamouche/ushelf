@@ -30,7 +30,6 @@ async function fixture() {
   );
   const now = "2026-08-19T12:00:00.000Z";
   const frontmatter: ItemFrontmatter = {
-    schemaVersion: 2,
     id: "e7cf9d0d-bba8-4b93-9503-ab8f15de9d2f",
     originalUrl: "https://x.com/a/status/1",
     canonicalUrl: "https://x.com/a/status/1",
@@ -75,7 +74,6 @@ describe("agent-driven workflow", () => {
 
     expect(first).toMatchObject({ duplicate: false, state: "awaiting_enrichment" });
     expect(first.item).toMatchObject({
-      schemaVersion: 2,
       sourceType: "document",
       title: "useful-paper",
       file: { name: "useful-paper.pdf", mediaType: "application/pdf", pageCount: 1 },
