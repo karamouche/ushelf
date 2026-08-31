@@ -111,7 +111,6 @@ export class ShelfService {
         };
     }
     const frontmatter: ItemFrontmatter = {
-      schemaVersion: 2,
       id,
       originalUrl: url,
       canonicalUrl,
@@ -156,7 +155,6 @@ export class ShelfService {
     const id = randomUUID();
     const source = await extractPdf(bytes, input.filename, id);
     const frontmatter: ItemFrontmatter = {
-      schemaVersion: 2,
       id,
       sourceType: "document",
       file: {
