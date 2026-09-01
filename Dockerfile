@@ -8,6 +8,10 @@ ENV PATH=$PNPM_HOME:$PATH
 
 RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends g++ make python3 \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 FROM base AS build
@@ -69,6 +73,7 @@ COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
 COPY --from=build /app/packages/core/package.json packages/core/package.json
 COPY --from=build /app/packages/core/dist packages/core/dist
+COPY --from=build /app/packages/core/drizzle packages/core/drizzle
 COPY --from=build --chown=node:node /app/recipes /opt/ushelf/recipes
 COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
 COPY --from=build --chown=node:node /app/recipes /data/recipes

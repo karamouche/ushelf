@@ -69,6 +69,7 @@ Use these repository-level checks:
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm db:check
 pnpm test:e2e
 pnpm format:check
 pnpm validate:skills
@@ -82,6 +83,8 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Keep adapters thin. Do not duplicate business rules between HTTP, MCP, and Web.
 - Use `ShelfService` as the application boundary. Apps should not coordinate `MarkdownRepository` and `ShelfDatabase` directly.
 - Preserve Markdown as the source of truth. Any index change must remain rebuildable with `pnpm rebuild-index`.
+- Treat `packages/core/src/persistence/sqlite/schema.ts` as the relational SQLite schema source and `packages/core/drizzle/` as the checked-in migration history. Do not restore inline startup DDL or `PRAGMA user_version` schema management.
+- Use Drizzle's typed query API for ordinary SQLite operations. Keep raw SQL narrowly limited to SQLite features Drizzle cannot model, currently FTS5 virtual-table creation and `MATCH` expressions.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
 - Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
 - Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
@@ -97,7 +100,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 
 ## Where to make a change
 
-- Ingestion, extraction, storage, search, recipes, concurrency, or validation: `packages/core` first.
+- Ingestion, extraction, storage, search, SQLite schema/migrations, recipes, concurrency, or validation: `packages/core` first.
 - Browser-facing API contract or maintenance CLI: `apps/server`.
 - Agent tool/resource contract: `apps/mcp`, plus the relevant skill when workflow guidance changes.
 - Installation, Docker orchestration, updates, or agent-client setup: `apps/cli`.
@@ -113,7 +116,8 @@ When changing shared behavior, inspect both adapters and the web client for cont
 - Content hashes detect source changes; recipe hashes detect stale enrichment.
 - Rendered Markdown images use validated relative references to content-addressed files beneath the owning item's `library/files` directory; the reader must never fetch external image references.
 - A changed enriched source is archived before its insights are cleared.
-- SQLite startup reconciliation must restore index state from Markdown.
+- Core must apply pending Drizzle migrations before SQLite startup reconciliation restores index state from Markdown.
+- FTS5 schema changes belong in explicit custom migrations; keep query-only virtual-table mappings outside the schema scanned by Drizzle Kit.
 - Permanent deletion remains a two-step, short-lived confirmation-token flow.
 - Reading updates may include the current item revision and must reject stale writes.
 

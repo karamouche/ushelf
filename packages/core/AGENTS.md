@@ -14,13 +14,19 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 - `src/domain`: Zod-backed item schemas, public types, and ingestion-state derivation.
 - `src/ingestion`: URL canonicalization, SSRF-safe fetching, article extraction, and limited X extraction.
 - `src/persistence/markdown`: canonical document/recipe parsing, rendering, atomic writes, history, and imports.
-- `src/persistence/sqlite`: disposable metadata and FTS5 index plus transient delete tokens.
+- `src/persistence/sqlite/schema.ts`: Drizzle source for relational tables, columns, and indexes.
+- `src/persistence/sqlite/item-search.ts`: query-only mapping for the migration-created FTS5 virtual table; it must stay outside the schema scanned by Drizzle Kit.
+- `src/persistence/sqlite/shelf-database.ts`: Drizzle/`better-sqlite3` access, migration startup, disposable metadata and FTS5 indexing, and transient delete tokens.
+- `drizzle/`: checked-in forward-only migration history, including custom SQL for FTS5.
+- `drizzle.config.ts`: Drizzle Kit configuration; keep its schema path restricted to the relational schema file.
 - `src/configuration`: resolves the `USHELF_ROOT` data layout.
 - `src/index.ts`: the supported package API.
 
 ## Non-negotiable invariants
 
 - Markdown is canonical. SQLite must remain fully rebuildable by initializing or rebuilding through `ShelfService`.
+- Apply pending Drizzle migrations whenever `ShelfDatabase` opens and before `ShelfService` reconciles Markdown. Do not add inline schema DDL, `SCHEMA_VERSION`, or `PRAGMA user_version` management.
+- The Drizzle baseline is the only supported database schema. Do not detect, adopt, migrate, or preserve pre-Drizzle development databases; they must be deleted and rebuilt from Markdown.
 - After a successful item mutation, atomically save Markdown and then upsert the returned item into SQLite. Do not create an independent database-only representation of durable state.
 - Preserve the marked Insights and Source sections and validated frontmatter when changing the Markdown codec. A parsed item's `revision` is the SHA-256 of its complete Markdown document.
 - Archive a completed enrichment before clearing or replacing it because of a changed source, requested re-enrichment, or new insights.
@@ -41,6 +47,10 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 
 - Define external data with Zod at the domain or parsing boundary and derive TypeScript types where practical.
 - Keep ESM imports ending in `.js`.
+- For relational schema changes, edit `src/persistence/sqlite/schema.ts`, run `pnpm db:generate --name=descriptive_name`, and review the generated SQL and snapshot before committing them.
+- For FTS5 or other SQLite DDL Drizzle Kit cannot model, generate a named custom migration. Keep raw runtime SQL limited to unavoidable dialect operations such as `MATCH`; ordinary CRUD and transactions stay typed through Drizzle.
+- Do not rewrite an existing migration incidentally. Baseline consolidation requires an explicit coordinated change and resetting all affected development/test databases.
+- `better-sqlite3` is a native production dependency. Keep its pnpm build allowlist and Docker build toolchain intact, and ensure the runtime image includes `packages/core/drizzle/` without including compiler tooling.
 - Add new adapter-facing exports to `src/index.ts`; avoid exposing a class solely to make an adapter bypass `ShelfService`.
 - When a `ShelfService` method or public schema changes, inspect both adapters, `apps/web/src/api.ts`, recipes, and skills for contract impact.
 - Use temporary test roots via `resolveConfig`; tests must not write into the real `library/` or `.ushelf/` directories.
@@ -51,8 +61,11 @@ Run focused Vitest files while iterating, then the package checks:
 
 ```sh
 pnpm test -- packages/core/src/path/to/file.test.ts
+pnpm db:check
 pnpm --filter @ushelf/core typecheck
 pnpm --filter @ushelf/core build
 ```
+
+For database changes, test fresh migration application, repeated startup idempotence, typed query behavior, FTS5 search, and Markdown reconciliation. Do not add legacy-schema fixtures or compatibility tests.
 
 For changes to shared behavior or public contracts, also run root `pnpm test`, `pnpm typecheck`, and `pnpm build`.
