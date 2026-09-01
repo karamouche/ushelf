@@ -334,7 +334,6 @@ footer {
   max-width: 100%;
   height: auto;
   margin: 32px auto;
-  filter: grayscale(100%);
 }
 
 .media-omitted {

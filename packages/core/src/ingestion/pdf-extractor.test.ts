@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { decodePdfPayload, extractPdf, MAX_PDF_BYTES } from "./pdf-extractor.js";
 
@@ -40,6 +41,41 @@ describe("PDF ingestion", () => {
     expect(result.markdown.indexOf("Text above the figure")).toBeLessThan(
       result.markdown.indexOf("![PDF figure"),
     );
+  });
+
+  it("recovers layout-aware Markdown, placeholder metadata, and deferred images", async () => {
+    const result = await extractPdf(makeLayoutAwarePdf(), "test_document.pdf", ITEM_ID);
+
+    expect(result.title).toBe("Test Document");
+    expect(result.author).toBeUndefined();
+    expect(result.markdown).toContain("### 1. Introduction");
+    expect(result.markdown).toContain("#### 1.1 Purpose");
+    expect(result.markdown).toContain(
+      "A sample PDF generated for testing purposes includes text, headings, a table, and an image.",
+    );
+    expect(result.markdown).not.toContain("##### A sample PDF");
+    expect(result.markdown).toContain(
+      "This document was generated automatically to test wrapped paragraphs and layout-aware extraction.",
+    );
+    expect(result.markdown).toContain(
+      [
+        "| Product | Category | Units Sold | Unit Price | Revenue |",
+        "| --- | --- | --- | --- | --- |",
+        "| Aurora Widget | Hardware | 1,240 | $19.99 | $24,787.60 |",
+      ].join("\n"),
+    );
+    expect(result.markdown).toContain(
+      [
+        "- Supports multi-page documents",
+        "- Includes headings at multiple levels",
+        "- Preserves simple tables and images",
+      ].join("\n"),
+    );
+    expect(result.markdown).toContain(`## Page 2\n\n![PDF figure — page 2](`);
+    expect(result.markdown).not.toContain("Image omitted");
+    expect(result.assets).toHaveLength(1);
+    expect(result.assets[0]).toMatchObject({ mediaType: "image/png" });
+    expect(result.media).toEqual({ discovered: 1, localized: 1, omitted: 0, filtered: 0 });
   });
 });
 
@@ -117,4 +153,134 @@ function makePdfWithImage(): Buffer {
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf);
+}
+
+function makeLayoutAwarePdf(): Buffer {
+  const pageOne = Buffer.from(
+    [
+      textAt("F2", 18, 241, 714, "Test Document"),
+      textAt(
+        "F1",
+        12,
+        60,
+        692,
+        "A sample PDF generated for testing purposes includes text, headings, a table, and an",
+      ),
+      textAt("F1", 12, 60, 680, "image."),
+      textAt("F2", 18, 60, 634, "1. Introduction"),
+      textAt(
+        "F1",
+        10,
+        60,
+        614,
+        "This document was generated automatically to test wrapped paragraphs and",
+      ),
+      textAt("F1", 10, 60, 602, "layout-aware extraction."),
+      textAt("F2", 14, 60, 550, "1.1 Purpose"),
+      textAt(
+        "F1",
+        10,
+        60,
+        530,
+        "The content is illustrative and provides enough embedded text for extraction.",
+      ),
+      textAt("F2", 18, 60, 482, "2. Sample Data Table"),
+      textAt("F1", 10, 60, 462, "The table below contains fictional product metrics."),
+      tableRow("F2", 437, ["Product", "Category", "Units Sold", "Unit Price", "Revenue"]),
+      tableRow("F1", 413, ["Aurora Widget", "Hardware", "1,240", "$19.99", "$24,787.60"]),
+      tableRow("F1", 389, ["Nimbus Cable", "Accessory", "3,050", "$4.50", "$13,725.00"]),
+      tableRow("F1", 365, ["Zephyr Case", "Accessory", "980", "$12.25", "$12,005.00"]),
+    ].join("\n"),
+  );
+  const pageTwo = Buffer.from("q\n400 0 0 200 72 500 cm\n/Im1 Do\nQ");
+  const pageThree = Buffer.from(
+    [
+      textAt("F2", 18, 60, 714, "3. Additional Notes"),
+      textAt("F1", 10, 60, 694, "This page verifies list handling after an image-only page."),
+      textAt("F1", 10, 60, 662, "- Supports multi-page documents"),
+      textAt("F1", 10, 60, 646, "- Includes headings at multiple levels"),
+      textAt("F1", 10, 60, 630, "- Preserves simple tables and images"),
+    ].join("\n"),
+  );
+  const width = 600;
+  const height = 300;
+  const image = Buffer.alloc(width * height * 3);
+  for (let offset = 0; offset < image.length; offset += 3) {
+    image[offset] = Math.floor(((offset / 3) % width) / 3);
+    image[offset + 1] = 120;
+    image[offset + 2] = 200;
+  }
+  const compressedImage = deflateSync(image);
+  return buildPdf(
+    [
+      Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+      Buffer.from("<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>"),
+      Buffer.from(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R /F2 7 0 R >> >> /Contents 8 0 R >>",
+      ),
+      Buffer.from(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im1 11 0 R >> >> /Contents 9 0 R >>",
+      ),
+      Buffer.from(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R /F2 7 0 R >> >> /Contents 10 0 R >>",
+      ),
+      Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+      Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"),
+      pdfStream(pageOne),
+      pdfStream(pageTwo),
+      pdfStream(pageThree),
+      Buffer.concat([
+        Buffer.from(
+          `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${compressedImage.length} >>\nstream\n`,
+        ),
+        compressedImage,
+        Buffer.from("\nendstream"),
+      ]),
+      Buffer.from("<< /Title (\\(anonymous\\)) /Author (\\(unspecified\\)) >>"),
+    ],
+    12,
+  );
+}
+
+function textAt(font: string, size: number, x: number, y: number, value: string): string {
+  return `BT\n/${font} ${size} Tf\n1 0 0 1 ${x} ${y} Tm\n(${escapePdfText(value)}) Tj\nET`;
+}
+
+function tableRow(font: string, y: number, values: string[]): string {
+  const positions = [103, 211, 313, 388, 464];
+  return values.map((value, index) => textAt(font, 9, positions[index]!, y, value)).join("\n");
+}
+
+function pdfStream(content: Buffer): Buffer {
+  return Buffer.concat([
+    Buffer.from(`<< /Length ${content.length} >>\nstream\n`),
+    content,
+    Buffer.from("\nendstream"),
+  ]);
+}
+
+function buildPdf(objects: Buffer[], infoId?: number): Buffer {
+  const parts = [Buffer.from("%PDF-1.4\n")];
+  const offsets: number[] = [];
+  let length = parts[0]!.length;
+  for (const [index, object] of objects.entries()) {
+    offsets.push(length);
+    const wrapped = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      object,
+      Buffer.from("\nendobj\n"),
+    ]);
+    parts.push(wrapped);
+    length += wrapped.length;
+  }
+  const xref = length;
+  const entries = offsets
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("");
+  parts.push(
+    Buffer.from(
+      `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${entries}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R${infoId ? ` /Info ${infoId} 0 R` : ""} >>\nstartxref\n${xref}\n%%EOF\n`,
+    ),
+  );
+  return Buffer.concat(parts);
 }
