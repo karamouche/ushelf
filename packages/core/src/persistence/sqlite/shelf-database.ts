@@ -1,251 +1,208 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
+import BetterSqlite3 from "better-sqlite3";
+import { and, count, desc, eq, getTableColumns, lt, sql, type SQL } from "drizzle-orm";
+import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { ingestionState } from "../../domain/ingestion-state.js";
-import type {
-  IngestionState,
-  ItemSummary,
-  LibraryListQuery,
-  ShelfItem,
-} from "../../domain/library-item.js";
+import type { ItemSummary, LibraryListQuery, ShelfItem } from "../../domain/library-item.js";
+import { itemSearch } from "./item-search.js";
+import { deleteTokens, items } from "./schema.js";
+import * as schema from "./schema.js";
 
-const SCHEMA_VERSION = 1;
+const migrationsFolder = fileURLToPath(new URL("../../../drizzle", import.meta.url));
 
 export class ShelfDatabase {
-  readonly db: DatabaseSync;
-  readonly itemsDir: string | undefined;
+  private readonly sqlite: BetterSqlite3.Database;
+  private readonly database: BetterSQLite3Database<typeof schema>;
+  private readonly itemsDir: string | undefined;
 
   constructor(databasePath: string, itemsDir?: string) {
     mkdirSync(path.dirname(databasePath), { recursive: true });
     this.itemsDir = itemsDir ? path.resolve(itemsDir) : undefined;
-    this.db = new DatabaseSync(databasePath);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-    this.initializeSchema();
+    this.sqlite = new BetterSqlite3(databasePath);
+    this.sqlite.pragma("journal_mode = WAL");
+    this.sqlite.pragma("foreign_keys = ON");
+    this.database = drizzle(this.sqlite, { schema });
+    migrate(this.database, { migrationsFolder });
   }
 
-  private initializeSchema(): void {
-    const version = this.schemaVersion();
-    if (version > SCHEMA_VERSION) {
-      throw new Error(
-        `The uShelf index schema is newer than this version supports (${version} > ${SCHEMA_VERSION})`,
-      );
-    }
-
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      if (version < SCHEMA_VERSION && this.hasManagedSchema()) this.dropSchema();
-      this.createSchema();
-      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
-  }
-
-  private schemaVersion(): number {
-    const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
-    return row.user_version;
-  }
-
-  private hasManagedSchema(): boolean {
-    return Boolean(
-      this.db
-        .prepare(
-          "SELECT 1 FROM sqlite_master WHERE name IN ('items', 'item_search', 'delete_tokens') LIMIT 1",
-        )
-        .get(),
-    );
-  }
-
-  private dropSchema(): void {
-    this.db.exec(`
-      DROP TABLE IF EXISTS item_search;
-      DROP TABLE IF EXISTS items;
-      DROP TABLE IF EXISTS delete_tokens;
-    `);
-  }
-
-  private createSchema(): void {
-    this.db.exec(`
-        CREATE TABLE IF NOT EXISTS items (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL,
-          canonical_url TEXT UNIQUE,
-          source_hash TEXT,
-          source_type TEXT NOT NULL,
-          author TEXT,
-          captured_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          status TEXT NOT NULL,
-          progress REAL NOT NULL,
-          tags_json TEXT NOT NULL,
-          ingestion_state TEXT NOT NULL,
-          summary TEXT,
-          file_path TEXT NOT NULL,
-          revision TEXT NOT NULL
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS items_source_hash ON items(source_hash) WHERE source_hash IS NOT NULL;
-        CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
-          id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
-        );
-        CREATE TABLE IF NOT EXISTS delete_tokens (
-          token TEXT PRIMARY KEY,
-          item_id TEXT NOT NULL,
-          expires_at INTEGER NOT NULL
-        );
-      `);
+  close(): void {
+    this.sqlite.close();
   }
 
   upsert(item: ShelfItem): void {
-    const state = ingestionState(item);
-    this.transaction(() => {
-      this.db
-        .prepare(
-          `
-        INSERT INTO items (id,title,canonical_url,source_hash,source_type,author,captured_at,updated_at,status,progress,tags_json,ingestion_state,summary,file_path,revision)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET
-          title=excluded.title, canonical_url=excluded.canonical_url, source_hash=excluded.source_hash, source_type=excluded.source_type,
-          author=excluded.author, captured_at=excluded.captured_at, updated_at=excluded.updated_at,
-          status=excluded.status, progress=excluded.progress, tags_json=excluded.tags_json,
-          ingestion_state=excluded.ingestion_state, summary=excluded.summary,
-          file_path=excluded.file_path, revision=excluded.revision
-      `,
-        )
-        .run(
-          item.id,
-          item.title,
-          item.sourceType === "document" ? null : item.canonicalUrl,
-          item.sourceType === "document" ? item.file.sha256 : null,
-          item.sourceType,
-          item.author ?? null,
-          item.capturedAt,
-          item.updatedAt,
-          item.reading.status,
-          item.reading.progress,
-          JSON.stringify(item.tags),
-          state,
-          item.enrichment.summary ?? null,
-          this.encodeFilePath(item.filePath),
-          item.revision,
-        );
-      this.db.prepare("DELETE FROM item_search WHERE id = ?").run(item.id);
-      this.db
-        .prepare("INSERT INTO item_search (id,title,source,insights,tags) VALUES (?,?,?,?,?)")
-        .run(item.id, item.title, item.sourceMarkdown, item.insightMarkdown, item.tags.join(" "));
+    const values = {
+      id: item.id,
+      title: item.title,
+      canonicalUrl: item.sourceType === "document" ? null : item.canonicalUrl,
+      sourceHash: item.sourceType === "document" ? item.file.sha256 : null,
+      sourceType: item.sourceType,
+      author: item.author ?? null,
+      capturedAt: item.capturedAt,
+      updatedAt: item.updatedAt,
+      status: item.reading.status,
+      progress: item.reading.progress,
+      tags: item.tags,
+      ingestionState: ingestionState(item),
+      summary: item.enrichment.summary ?? null,
+      filePath: this.encodeFilePath(item.filePath),
+      revision: item.revision,
+    };
+
+    this.database.transaction((transaction) => {
+      transaction
+        .insert(items)
+        .values(values)
+        .onConflictDoUpdate({
+          target: items.id,
+          set: {
+            title: values.title,
+            canonicalUrl: values.canonicalUrl,
+            sourceHash: values.sourceHash,
+            sourceType: values.sourceType,
+            author: values.author,
+            capturedAt: values.capturedAt,
+            updatedAt: values.updatedAt,
+            status: values.status,
+            progress: values.progress,
+            tags: values.tags,
+            ingestionState: values.ingestionState,
+            summary: values.summary,
+            filePath: values.filePath,
+            revision: values.revision,
+          },
+        })
+        .run();
+      transaction.delete(itemSearch).where(eq(itemSearch.id, item.id)).run();
+      transaction
+        .insert(itemSearch)
+        .values({
+          id: item.id,
+          title: item.title,
+          source: item.sourceMarkdown,
+          insights: item.insightMarkdown,
+          tags: item.tags.join(" "),
+        })
+        .run();
     });
   }
 
   clearIndex(): void {
-    this.db.exec("DELETE FROM item_search; DELETE FROM items;");
+    this.database.transaction((transaction) => {
+      transaction.delete(itemSearch).run();
+      transaction.delete(items).run();
+    });
   }
 
   indexedCount(): number {
-    const row = this.db.prepare("SELECT COUNT(*) AS count FROM items").get() as { count: number };
-    return row.count;
+    return this.database.select({ value: count() }).from(items).get()?.value ?? 0;
   }
 
   indexedIds(): string[] {
-    return (this.db.prepare("SELECT id FROM items").all() as Array<{ id: string }>).map(
-      (row) => row.id,
-    );
+    return this.database
+      .select({ id: items.id })
+      .from(items)
+      .all()
+      .map((row) => row.id);
   }
 
   delete(id: string): void {
-    this.transaction(() => {
-      this.db.prepare("DELETE FROM item_search WHERE id = ?").run(id);
-      this.db.prepare("DELETE FROM items WHERE id = ?").run(id);
-      this.db.prepare("DELETE FROM delete_tokens WHERE item_id = ?").run(id);
+    this.database.transaction((transaction) => {
+      transaction.delete(itemSearch).where(eq(itemSearch.id, id)).run();
+      transaction.delete(items).where(eq(items.id, id)).run();
+      transaction.delete(deleteTokens).where(eq(deleteTokens.itemId, id)).run();
     });
   }
 
   findByCanonicalUrl(url: string): string | undefined {
-    const row = this.db.prepare("SELECT id FROM items WHERE canonical_url = ?").get(url) as
-      { id: string } | undefined;
-    return row?.id;
+    return this.database
+      .select({ id: items.id })
+      .from(items)
+      .where(eq(items.canonicalUrl, url))
+      .get()?.id;
   }
 
   findBySourceHash(hash: string): string | undefined {
-    const row = this.db.prepare("SELECT id FROM items WHERE source_hash = ?").get(hash) as
-      { id: string } | undefined;
-    return row?.id;
+    return this.database
+      .select({ id: items.id })
+      .from(items)
+      .where(eq(items.sourceHash, hash))
+      .get()?.id;
   }
 
   itemLocation(id: string): { filePath?: string; portable: boolean } | undefined {
-    const row = this.db.prepare("SELECT file_path FROM items WHERE id = ?").get(id) as
-      { file_path: string } | undefined;
+    const row = this.database
+      .select({ filePath: items.filePath })
+      .from(items)
+      .where(eq(items.id, id))
+      .get();
     if (!row) return undefined;
-    const filePath = this.decodeFilePath(row.file_path);
+    const filePath = this.decodeFilePath(row.filePath);
     return {
       ...(filePath ? { filePath } : {}),
       portable:
-        this.itemsDir === undefined || (!path.isAbsolute(row.file_path) && filePath !== undefined),
+        this.itemsDir === undefined || (!path.isAbsolute(row.filePath) && filePath !== undefined),
     };
   }
 
   hasItem(id: string): boolean {
-    return Boolean(this.db.prepare("SELECT 1 FROM items WHERE id = ?").get(id));
+    return Boolean(
+      this.database.select({ id: items.id }).from(items).where(eq(items.id, id)).get(),
+    );
   }
 
   list(query: LibraryListQuery = {}): ItemSummary[] {
-    const clauses: string[] = [];
-    const params: Array<string | number> = [];
-    let join = "";
-    if (query.query?.trim()) {
-      join = "JOIN item_search s ON s.id = i.id";
-      clauses.push("item_search MATCH ?");
-      params.push(toFtsQuery(query.query));
-    }
-    if (query.status) {
-      clauses.push("i.status = ?");
-      params.push(query.status);
-    }
-    if (query.sourceType) {
-      clauses.push("i.source_type = ?");
-      params.push(query.sourceType);
-    }
+    const conditions: SQL[] = [];
+    if (query.status) conditions.push(eq(items.status, query.status));
+    if (query.sourceType) conditions.push(eq(items.sourceType, query.sourceType));
     if (query.tag) {
-      clauses.push("i.tags_json LIKE ?");
-      params.push(`%\"${query.tag.replaceAll("%", "")}\"%`);
+      conditions.push(sql`${items.tags} LIKE ${`%\"${query.tag.replaceAll("%", "")}\"%`}`);
     }
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    params.push(Math.min(query.limit ?? 50, 200), query.offset ?? 0);
-    const rows = this.db
-      .prepare(
-        `
-      SELECT i.* FROM items i ${join} ${where}
-      ORDER BY i.captured_at DESC LIMIT ? OFFSET ?
-    `,
-      )
-      .all(...params) as unknown as DatabaseItemRow[];
+
+    const limit = Math.min(query.limit ?? 50, 200);
+    const offset = query.offset ?? 0;
+    const columns = getTableColumns(items);
+    const search = query.query?.trim();
+    const rows = search
+      ? this.database
+          .select(columns)
+          .from(items)
+          .innerJoin(itemSearch, eq(itemSearch.id, items.id))
+          .where(and(sql`${itemSearch} MATCH ${toFtsQuery(search)}`, ...conditions))
+          .orderBy(desc(items.capturedAt))
+          .limit(limit)
+          .offset(offset)
+          .all()
+      : this.database
+          .select(columns)
+          .from(items)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(items.capturedAt))
+          .limit(limit)
+          .offset(offset)
+          .all();
     return rows.map(rowToSummary);
   }
 
   createDeleteToken(token: string, itemId: string, expiresAt: number): void {
-    this.db.prepare("DELETE FROM delete_tokens WHERE expires_at < ?").run(Date.now());
-    this.db
-      .prepare("INSERT INTO delete_tokens (token,item_id,expires_at) VALUES (?,?,?)")
-      .run(token, itemId, expiresAt);
+    this.database.transaction((transaction) => {
+      transaction.delete(deleteTokens).where(lt(deleteTokens.expiresAt, Date.now())).run();
+      transaction.insert(deleteTokens).values({ token, itemId, expiresAt }).run();
+    });
   }
 
   consumeDeleteToken(token: string, itemId: string): boolean {
-    const row = this.db
-      .prepare("SELECT item_id, expires_at FROM delete_tokens WHERE token = ?")
-      .get(token) as { item_id: string; expires_at: number } | undefined;
-    this.db.prepare("DELETE FROM delete_tokens WHERE token = ?").run(token);
-    return row?.item_id === itemId && row.expires_at >= Date.now();
-  }
-
-  private transaction(operation: () => void): void {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      operation();
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+    return this.database.transaction((transaction) => {
+      const row = transaction
+        .select({ itemId: deleteTokens.itemId, expiresAt: deleteTokens.expiresAt })
+        .from(deleteTokens)
+        .where(eq(deleteTokens.token, token))
+        .get();
+      transaction.delete(deleteTokens).where(eq(deleteTokens.token, token)).run();
+      return row?.itemId === itemId && row.expiresAt >= Date.now();
+    });
   }
 
   private encodeFilePath(filePath: string): string {
@@ -284,35 +241,19 @@ function isWithin(root: string, candidate: string): boolean {
   );
 }
 
-interface DatabaseItemRow {
-  id: string;
-  title: string;
-  canonical_url: string | null;
-  source_hash: string | null;
-  source_type: "article" | "document" | "x";
-  author: string | null;
-  captured_at: string;
-  updated_at: string;
-  status: "inbox" | "reading" | "read" | "archived";
-  progress: number;
-  tags_json: string;
-  ingestion_state: IngestionState;
-  summary: string | null;
-}
-
-function rowToSummary(row: DatabaseItemRow): ItemSummary {
+function rowToSummary(row: typeof items.$inferSelect): ItemSummary {
   return {
     id: row.id,
     title: row.title,
-    sourceType: row.source_type,
-    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
+    sourceType: row.sourceType,
+    ...(row.canonicalUrl ? { canonicalUrl: row.canonicalUrl } : {}),
     ...(row.author ? { author: row.author } : {}),
-    capturedAt: row.captured_at,
-    updatedAt: row.updated_at,
+    capturedAt: row.capturedAt,
+    updatedAt: row.updatedAt,
     status: row.status,
     progress: row.progress,
-    tags: JSON.parse(row.tags_json) as string[],
-    ingestionState: row.ingestion_state,
+    tags: row.tags,
+    ingestionState: row.ingestionState,
     ...(row.summary ? { summary: row.summary } : {}),
   };
 }

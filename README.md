@@ -243,8 +243,12 @@ pnpm build
 pnpm test:e2e
 pnpm format:check
 pnpm validate:skills
+pnpm db:check
 go -C apps/cli vet ./...
 ```
+
+When changing the SQLite schema, edit the Drizzle schema in Core, run
+`pnpm db:generate --name=describe_the_change`, and review the checked-in SQL migration.
 
 Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, because Playwright launches the compiled production server.
 The E2E command also performs live ingestion checks against the documented X and article fixtures, so it requires internet access and can fail when either upstream source is unavailable or changes its public metadata.

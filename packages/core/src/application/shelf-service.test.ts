@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveConfig } from "../configuration/ushelf-config.js";
 import type { ItemFrontmatter } from "../domain/library-item.js";
@@ -48,7 +49,8 @@ async function fixture() {
   };
   const item = await repository.save(frontmatter, "", "");
   database.upsert(item);
-  return { root, config, service, database, item };
+  database.close();
+  return { root, config, service, item };
 }
 
 describe("agent-driven workflow", () => {
@@ -141,7 +143,7 @@ describe("agent-driven workflow", () => {
   });
 
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {
-    const { config, service, database, item } = await fixture();
+    const { config, service, item } = await fixture();
     const sourceUrl = "https://x.com/a/status/1";
     const sourced = await service.submitSourceContent({
       itemId: item.id,
@@ -170,7 +172,9 @@ describe("agent-driven workflow", () => {
     expect(await readdir(path.join(config.filesDir, item.id, "media"))).toHaveLength(1);
     const read = await service.updateReading(item.id, "read", 0.4, ready.revision);
     expect(read.reading.progress).toBe(1);
-    database.clearIndex();
+    const sqlite = new BetterSqlite3(config.databasePath);
+    sqlite.exec("DELETE FROM item_search; DELETE FROM items;");
+    sqlite.close();
     expect(service.listItems()).toHaveLength(0);
     expect(await service.rebuildIndex()).toBe(1);
     expect(service.listItems()[0]).toMatchObject({
@@ -218,7 +222,7 @@ describe("agent-driven workflow", () => {
   });
 
   it("shares portable index paths across different roots", async () => {
-    const { root, config, service, database, item } = await fixture();
+    const { root, config, service, item } = await fixture();
     const aliasRoot = `${root}-alias`;
     roots.push(aliasRoot);
     await symlink(root, aliasRoot, "dir");
@@ -232,33 +236,37 @@ describe("agent-driven workflow", () => {
     const throughOriginal = await service.getItem(item.id);
     expect(throughOriginal.reading).toMatchObject({ status: "reading", progress: 0.5 });
 
-    const row = database.db.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
+    const sqlite = new BetterSqlite3(config.databasePath);
+    const row = sqlite.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
       file_path: string;
     };
+    sqlite.close();
     expect(row.file_path).toBe(
       path.relative(config.itemsDir, item.filePath).split(path.sep).join("/"),
     );
   });
 
   it("recovers from and repairs a foreign absolute index path", async () => {
-    const { service, database, item } = await fixture();
-    database.db
+    const { config, service, item } = await fixture();
+    const sqlite = new BetterSqlite3(config.databasePath);
+    sqlite
       .prepare("UPDATE items SET file_path = ? WHERE id = ?")
       .run(`/different-runtime/library/items/2026/${path.basename(item.filePath)}`, item.id);
 
     const recovered = await service.getItem(item.id);
     expect(recovered.id).toBe(item.id);
-    const row = database.db.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
+    const row = sqlite.prepare("SELECT file_path FROM items WHERE id = ?").get(item.id) as {
       file_path: string;
     };
+    sqlite.close();
     expect(row.file_path).toBe(`2026/${path.basename(item.filePath)}`);
   });
 
   it("ignores unsafe indexed paths and falls back to canonical Markdown", async () => {
-    const { service, database, item } = await fixture();
-    database.db
-      .prepare("UPDATE items SET file_path = ? WHERE id = ?")
-      .run("../../outside.md", item.id);
+    const { config, service, item } = await fixture();
+    const sqlite = new BetterSqlite3(config.databasePath);
+    sqlite.prepare("UPDATE items SET file_path = ? WHERE id = ?").run("../../outside.md", item.id);
+    sqlite.close();
 
     await expect(service.getItem(item.id)).resolves.toMatchObject({ id: item.id });
   });
