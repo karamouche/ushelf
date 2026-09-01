@@ -19,7 +19,7 @@ export function canonicalizeUrl(input: string): string {
   return url.toString();
 }
 
-export function detectSourceType(input: string): "blog" | "x_thread" {
+export function detectSourceType(input: string): "article" | "x" {
   const host = new URL(input).hostname.toLowerCase().replace(/^www\./, "");
-  return host === "x.com" || host === "twitter.com" ? "x_thread" : "blog";
+  return host === "x.com" || host === "twitter.com" ? "x" : "article";
 }

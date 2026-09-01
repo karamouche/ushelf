@@ -12,10 +12,10 @@ export function extractPublicX(dom: JSDOM, url: string): ExtractedSource | undef
     ?.getAttribute("content")
     ?.trim();
   if (!description) return undefined;
-  const title = metadataTitle || "X thread";
+  const title = metadataTitle || "X";
   const image = metadataImageUrl(document);
   return {
-    sourceType: "x_thread",
+    sourceType: "x",
     title,
     markdown: `${image ? `![${escapeImageAlt(title)}](${image})\n\n` : ""}${description}\n\n[View post on X](${url})`,
     method: "public_extract",

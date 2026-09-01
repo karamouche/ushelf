@@ -19,6 +19,9 @@ export function sha256(value: string): string {
 }
 
 function sourceLine(frontmatter: ItemFrontmatter): string {
+  if (frontmatter.sourceType === "document") {
+    return `Original file: ${frontmatter.file.name}`;
+  }
   const author = frontmatter.author ? ` · ${frontmatter.author}` : "";
   return `[Open original](${frontmatter.originalUrl})${author}`;
 }
@@ -39,9 +42,7 @@ export function renderItemMarkdown(
             ? `### Key points\n\n${keyPoints.map((point) => `- ${point}`).join("\n")}`
             : "",
           `${CUSTOM_INSIGHTS_START}\n${insightMarkdown.trim()}\n${CUSTOM_INSIGHTS_END}`,
-          citations.length
-            ? `### Citations\n\n${citations.map((citation) => `- [${citation.label}](${citation.url})`).join("\n")}`
-            : "",
+          citations.length ? `### Citations\n\n${citations.map(renderCitation).join("\n")}` : "",
         ]
           .filter(Boolean)
           .join("\n\n")
@@ -67,6 +68,14 @@ export function renderItemMarkdown(
   ].join("\n");
 
   return matter.stringify(body, frontmatter);
+}
+
+function renderCitation(
+  citation: NonNullable<ItemFrontmatter["enrichment"]["citations"]>[number],
+): string {
+  return "url" in citation
+    ? `- [${citation.label}](${citation.url})`
+    : `- Page ${citation.page} — ${citation.label}`;
 }
 
 function section(body: string, start: string, end: string): string {

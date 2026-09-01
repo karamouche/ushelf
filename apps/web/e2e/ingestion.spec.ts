@@ -14,7 +14,7 @@ const blogUrl =
 const blogCanonicalUrl =
   "https://rhonabwy.com/2026/08/15/software-engineering-fundamentals-matter-more-than-ever";
 
-test("ingests a public X article into canonical Markdown", async () => {
+test("ingests public X content into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
     const result = await service.ingestUrl(xUrl);
 
@@ -23,15 +23,13 @@ test("ingests a public X article into canonical Markdown", async () => {
     expect(result.item).toMatchObject({
       originalUrl: xUrl,
       canonicalUrl: xUrl,
-      sourceType: "x_thread",
+      sourceType: "x",
       title: expect.stringContaining("X Open Source"),
       extraction: { status: "complete", method: "public_extract" },
       enrichment: { status: "pending", recipe: "default" },
     });
     expect(result.item.sourceMarkdown).toContain("Open-sourcing the For You timeline");
-    expect(result.item.sourceMarkdown).toMatch(
-      /!\[[^\]]*X Open Source[^\]]*]\(https:\/\/pbs\.twimg\.com\/[^)]+\)/,
-    );
+    await expectLocalizedImage(result, /X Open Source/);
     expect(result.item.sourceMarkdown).toContain(`[View post on X](${xUrl})`);
 
     await expectCanonicalDocument(result, {
@@ -43,7 +41,7 @@ test("ingests a public X article into canonical Markdown", async () => {
   });
 });
 
-test("ingests a readable blog article into canonical Markdown", async () => {
+test("ingests a readable article into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
     const result = await service.ingestUrl(blogUrl);
 
@@ -52,14 +50,14 @@ test("ingests a readable blog article into canonical Markdown", async () => {
     expect(result.item).toMatchObject({
       originalUrl: blogUrl,
       canonicalUrl: blogCanonicalUrl,
-      sourceType: "blog",
+      sourceType: "article",
       title: "Software Engineering fundamentals matter more than ever",
       extraction: { status: "complete", method: "readability" },
       enrichment: { status: "pending", recipe: "default" },
     });
     expect(result.item.author).toContain("heckj");
     expect(result.item.sourceMarkdown.length).toBeGreaterThan(3_000);
-    expect(result.item.sourceMarkdown).toMatch(/!\[[^\]]*]\(https?:\/\/[^)]+\)/);
+    await expectLocalizedImage(result);
     expect(result.item.sourceMarkdown).toContain(
       "The manifestation of my imposter syndrome, for me and today",
     );
@@ -89,6 +87,17 @@ async function withTemporaryShelf(run: (service: ShelfService) => Promise<void>)
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+async function expectLocalizedImage(result: IngestResult, alt?: RegExp): Promise<void> {
+  const image = result.item.sourceMarkdown.match(/!\[([^\]]*)]\((\.\.\/\.\.\/files\/[^)]+)\)/);
+  expect(image?.[1]).toMatch(alt ?? /.+/);
+  expect(result.item.sourceMarkdown).not.toMatch(/!\[[^\]]*]\(https?:\/\//);
+  expect(result.item.media.source.localized).toBeGreaterThan(0);
+  const relativePath = image?.[2];
+  expect(relativePath).toBeTruthy();
+  const bytes = await readFile(path.resolve(path.dirname(result.item.filePath), relativePath!));
+  expect(bytes.byteLength).toBeGreaterThan(0);
 }
 
 async function expectCanonicalDocument(
