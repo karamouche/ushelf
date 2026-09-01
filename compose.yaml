@@ -17,8 +17,10 @@ services:
       # Host-side values still come from .env below for bind mounts and ports.
       USHELF_HOST: 0.0.0.0
       USHELF_ROOT: /data
+      USHELF_STATE_DIR: /data/state
       USHELF_PORT: ${USHELF_PORT:-43110}
       USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
+      USHELF_SECRETS_DIR: /data/secrets
     ports:
       - "${USHELF_HOST:-127.0.0.1}:${USHELF_PORT:-43110}:${USHELF_PORT:-43110}"
     volumes:
@@ -26,11 +28,15 @@ services:
         source: ${USHELF_ROOT:-.}/library
         target: /data/library
       - type: bind
-        source: ${USHELF_ROOT:-.}/.ushelf
-        target: /data/.ushelf
+        source: ${USHELF_ROOT:-.}/.ushelf/state
+        target: /data/state
       - type: bind
         source: ${USHELF_ROOT:-.}/recipes
         target: /data/recipes
+        read_only: true
+      - type: bind
+        source: ${USHELF_ROOT:-.}/.ushelf/secrets
+        target: /data/secrets
         read_only: true
     read_only: true
     tmpfs:
@@ -54,3 +60,29 @@ services:
       start_period: 10s
       retries: 3
     stop_grace_period: 10s
+
+  maintenance:
+    profiles: [tools]
+    image: ushelf:local
+    init: true
+    environment:
+      NODE_ENV: production
+      USHELF_ROOT: /data
+      USHELF_STATE_DIR: /data/state
+    volumes:
+      - type: bind
+        source: ${USHELF_ROOT:-.}/library
+        target: /data/library
+      - type: bind
+        source: ${USHELF_ROOT:-.}/.ushelf/state
+        target: /data/state
+      - type: bind
+        source: ${USHELF_ROOT:-.}/recipes
+        target: /data/recipes
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    entrypoint: ["node", "apps/server/dist/cli.js"]

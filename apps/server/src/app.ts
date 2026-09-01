@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { readingStatusSchema, ShelfService, sourceTypeSchema } from "@ushelf/core";
+import {
+  KindleError,
+  kindleTargetSchema,
+  readingStatusSchema,
+  ShelfService,
+  sourceTypeSchema,
+} from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -13,6 +19,12 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
   app.get(route("/api/health"), (c) => c.json({ ok: true }));
+  app.get(route("/api/kindle/status"), async (c) =>
+    c.json(await service.kindleStatus(c.req.raw.signal)),
+  );
+  app.get(route("/api/kindle/devices"), async (c) =>
+    c.json({ devices: await service.kindleDevices(c.req.raw.signal) }),
+  );
   app.get(route("/api/items"), (c) => {
     const statusValue = c.req.query("status");
     const sourceValue = c.req.query("sourceType");
@@ -57,10 +69,37 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     );
     return c.json({ item });
   });
+  app.post(route("/api/items/:id/kindle-deliveries"), async (c) => {
+    const body = kindleTargetSchema.parse(await c.req.json());
+    return c.json(
+      await service.sendToKindle(c.req.param("id")!, body.targetSerial, c.req.raw.signal),
+    );
+  });
   app.get(route("/api/recipes"), async (c) => c.json({ recipes: await service.listRecipes() }));
 
   app.onError((error, c) => {
     console.error(error);
+    if (error instanceof KindleError) {
+      const body = { error: error.message, code: error.code };
+      switch (error.code) {
+        case "not_configured":
+        case "credential_invalid":
+        case "delivery_in_progress":
+          return c.json(body, 409);
+        case "device_not_found":
+          return c.json(body, 404);
+        case "timeout":
+          return c.json(body, 504);
+        case "export_too_large":
+          return c.json(body, 413);
+        case "amazon_unavailable":
+        case "bridge_unavailable":
+        case "upload_rejected":
+          return c.json(body, 503);
+        default:
+          return c.json(body, 400);
+      }
+    }
     const notFound = /not found/i.test(error.message);
     return c.json({ error: error.message }, notFound ? 404 : 400);
   });

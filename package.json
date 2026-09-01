@@ -10,8 +10,8 @@
   "scripts": {
     "db:check": "pnpm --filter @ushelf/core db:check",
     "db:generate": "pnpm --filter @ushelf/core db:generate",
-    "dev": "pnpm --filter @ushelf/core build && concurrently -n api,web -c blue,white \"pnpm --filter @ushelf/server dev\" \"pnpm --filter @ushelf/web dev\"",
-    "build": "pnpm build:runtime && pnpm cli:build",
+    "dev": "pnpm --filter @ushelf/core build && pnpm kindle:build && concurrently -n api,web -c blue,white \"pnpm --filter @ushelf/server dev\" \"pnpm --filter @ushelf/web dev\"",
+    "build": "pnpm build:runtime && pnpm cli:build && pnpm kindle:build",
     "build:runtime": "pnpm --filter @ushelf/core build && pnpm --filter @ushelf/web build && pnpm --filter @ushelf/server build && pnpm --filter @ushelf/mcp build",
     "start": "pnpm --filter @ushelf/server start",
     "mcp": "pnpm --filter @ushelf/mcp start",
@@ -24,6 +24,7 @@
     "format": "prettier --write . && gofmt -w apps/cli",
     "format:check": "prettier --check . && test -z \"$(gofmt -l apps/cli)\"",
     "cli:build": "go -C apps/cli build -o dist/ushelf ./cmd/ushelf",
+    "kindle:build": "go -C apps/cli build -o dist/ushelf-kindle-bridge ./cmd/ushelf-kindle-bridge",
     "cli:test": "go -C apps/cli test ./...",
     "test:installer": "sh scripts/test-install.sh",
     "validate:skills": "node scripts/validate-skills.mjs"

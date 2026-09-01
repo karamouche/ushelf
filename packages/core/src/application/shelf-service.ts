@@ -24,6 +24,14 @@ import {
   type MediaAsset,
   validateImage,
 } from "../ingestion/media-localizer.js";
+import {
+  KindleError,
+  type KindleDeliveryResult,
+  type KindleDevice,
+  type KindleStatus,
+} from "../domain/kindle.js";
+import { exportKindleEpub } from "../kindle/epub-exporter.js";
+import { KindleBridgeGateway, type KindleGateway } from "../kindle/kindle-bridge.js";
 import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
 import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
@@ -35,15 +43,22 @@ export interface IngestResult {
   state: IngestionState;
 }
 
+export interface ShelfServiceDependencies {
+  kindleGateway?: KindleGateway;
+}
+
 export class ShelfService {
   private readonly config: UshelfConfig;
   private readonly repository: MarkdownRepository;
   private readonly database: ShelfDatabase;
+  private readonly kindleGateway: KindleGateway;
+  private readonly kindleDeliveries = new Set<string>();
 
-  constructor(config = resolveConfig()) {
+  constructor(config = resolveConfig(), dependencies: ShelfServiceDependencies = {}) {
     this.config = config;
     this.repository = new MarkdownRepository(config);
     this.database = new ShelfDatabase(config.databasePath, config.itemsDir);
+    this.kindleGateway = dependencies.kindleGateway ?? new KindleBridgeGateway(config);
   }
 
   async initialize(): Promise<void> {
@@ -373,6 +388,95 @@ export class ShelfService {
         throw new Error("Media file was not found");
       }
       throw error;
+    }
+  }
+
+  async kindleStatus(signal?: AbortSignal): Promise<KindleStatus> {
+    try {
+      const status = await this.kindleGateway.status(signal);
+      return {
+        configured: true,
+        ...(status.accountName ? { accountName: status.accountName } : {}),
+        ...(status.homeRegion ? { homeRegion: status.homeRegion } : {}),
+      };
+    } catch (error) {
+      if (error instanceof KindleError && error.code === "not_configured") {
+        return { configured: false };
+      }
+      if (error instanceof KindleError) {
+        return {
+          configured: true,
+          error: { code: error.code, message: error.message },
+        };
+      }
+      throw error;
+    }
+  }
+
+  async kindleDevices(signal?: AbortSignal): Promise<KindleDevice[]> {
+    return this.kindleGateway.devices(signal);
+  }
+
+  async sendToKindle(
+    id: string,
+    targetSerial: string,
+    signal?: AbortSignal,
+  ): Promise<KindleDeliveryResult> {
+    const item = await this.getItem(id);
+    if (item.extraction.status !== "complete" || !item.sourceMarkdown.trim()) {
+      throw new KindleError(
+        "source_unavailable",
+        "This item does not have completed source content to send.",
+      );
+    }
+    const deliveryKey = `${item.id}\0${targetSerial}`;
+    if (this.kindleDeliveries.has(deliveryKey)) {
+      throw new KindleError(
+        "delivery_in_progress",
+        "A Kindle delivery for this item and device is already in progress.",
+      );
+    }
+    this.kindleDeliveries.add(deliveryKey);
+    try {
+      const devices = await this.kindleGateway.devices(signal);
+      if (!devices.some((device) => device.serial === targetSerial)) {
+        throw new KindleError("device_not_found", "The selected Kindle device was not found.");
+      }
+      let bytes: Uint8Array;
+      try {
+        const filenames = [...new Set(assertLocalMarkdownImages(item.sourceMarkdown, item.id))];
+        const media = await Promise.all(
+          filenames.map(async (filename) => ({
+            filename,
+            mediaType: mediaTypeForFilename(filename),
+            bytes: await this.repository.mediaFile(item.id, filename),
+          })),
+        );
+        bytes = await exportKindleEpub(item, media);
+      } catch (error) {
+        if (error instanceof Error && /60 MiB export limit/.test(error.message)) {
+          throw new KindleError(
+            "export_too_large",
+            "This item is larger than the 60 MiB Kindle export limit.",
+          );
+        }
+        throw new KindleError(
+          "export_failed",
+          "The Kindle EPUB could not be prepared because its source or saved images are unavailable.",
+        );
+      }
+      const sku = await this.kindleGateway.send(
+        {
+          bytes,
+          title: item.title,
+          ...(item.author ? { author: item.author } : {}),
+          targetSerial,
+        },
+        signal,
+      );
+      return { sku, itemId: item.id, revision: item.revision, targetSerial };
+    } finally {
+      this.kindleDeliveries.delete(deliveryKey);
     }
   }
 

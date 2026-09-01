@@ -15,9 +15,21 @@ Development builds use `ghcr.io/karamouche/ushelf:latest` unless `--image` or `U
 The CLI owns `~/.ushelf` by default:
 
 ```text
-config.json  library/  recipes/  state/  assets/
+config.json  library/  recipes/  state/  assets/  secrets/
 ```
 
 Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_HOME` changes the data root.
+
+## Kindle setup
+
+The optional Kindle integration uses Amazon's unofficial Send to Kindle protocol. Connect it interactively, inspect the registered devices, or remove the credential with:
+
+```sh
+ushelf kindle setup
+ushelf kindle status
+ushelf kindle disconnect
+```
+
+The credential is stored owner-readable at `~/.ushelf/secrets/kindle.json`. It is mounted read-only into the reader container and is never mounted into MCP or maintenance containers. If Amazon has already invalidated a credential, `ushelf kindle disconnect --local-only --yes` removes only the local copy.
 
 Never direct tests at a real uShelf home. Use `--home` with a temporary directory and inject a fake `Runner` for unit tests.
