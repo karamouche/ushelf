@@ -62,19 +62,32 @@ export async function extractPdf(
       throw new Error("PDF contains more than 500 pages");
     }
     const metadata = await document.getMetadata().catch(() => undefined);
+    const info = metadata?.info as { Title?: unknown; Author?: unknown } | undefined;
+    const metadataTitle = cleanMetadata(info?.Title);
+    const author = cleanMetadata(info?.Author);
     const pages: string[] = [];
     const assets = new Map<string, MediaAsset>();
     const media: MediaCaptureStats = { discovered: 0, localized: 0, omitted: 0, filtered: 0 };
     let mediaBytes = 0;
     let visibleCharacters = 0;
+    let inferredTitle: string | undefined;
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const [content, operatorList] = await Promise.all([
         page.getTextContent(),
         page.getOperatorList(),
       ]);
-      const textBlocks = pageTextBlocks(content.items);
-      const figureResult = pageFigures(page, operatorList.fnArray, operatorList.argsArray);
+      const layout = pageTextLayout(content.items);
+      const titleLine = pageNumber === 1 ? inferTitleLine(layout) : undefined;
+      if (!metadataTitle && titleLine) inferredTitle = titleLine.text;
+      const chosenTitle = metadataTitle ?? inferredTitle;
+      const textBlocks = renderTextBlocks(
+        layout,
+        titleLine && chosenTitle && normalizedText(titleLine.text) === normalizedText(chosenTitle)
+          ? titleLine
+          : undefined,
+      );
+      const figureResult = await pageFigures(page, operatorList.fnArray, operatorList.argsArray);
       const figures = figureResult.figures;
       const blocks: PositionedBlock[] = [...textBlocks];
       media.discovered += figures.length + figureResult.filtered + figureResult.omitted.length;
@@ -122,10 +135,7 @@ export async function extractPdf(
         .map((block) => block.markdown)
         .join("\n\n")
         .trim();
-      visibleCharacters += textBlocks
-        .map((block) => block.markdown)
-        .join("")
-        .replace(/\s/g, "").length;
+      visibleCharacters += layout.visibleCharacters;
       pages.push(`## Page ${pageNumber}\n\n${text || "_No extractable text on this page._"}`);
     }
     if (visibleCharacters < MIN_VISIBLE_CHARACTERS) {
@@ -135,10 +145,8 @@ export async function extractPdf(
     if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES) {
       throw new Error("Extracted PDF text is larger than 5 MiB");
     }
-    const info = metadata?.info as { Title?: unknown; Author?: unknown } | undefined;
     const title =
-      cleanMetadata(info?.Title) ?? (filename.replace(/\.pdf$/i, "").trim() || "Document");
-    const author = cleanMetadata(info?.Author);
+      metadataTitle ?? inferredTitle ?? (filename.replace(/\.pdf$/i, "").trim() || "Document");
     return {
       title,
       ...(author ? { author } : {}),
@@ -160,6 +168,37 @@ interface PositionedBlock {
   markdown: string;
 }
 
+interface TextRun {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontName: string;
+}
+
+interface TextSegment {
+  text: string;
+  x: number;
+  right: number;
+}
+
+interface TextLine {
+  text: string;
+  x: number;
+  y: number;
+  right: number;
+  height: number;
+  fontName: string;
+  segments: TextSegment[];
+}
+
+interface PageTextLayout {
+  lines: TextLine[];
+  bodyHeight: number;
+  visibleCharacters: number;
+}
+
 interface PdfFigure {
   width: number;
   height: number;
@@ -170,44 +209,343 @@ interface PdfFigure {
   data: Uint8Array;
 }
 
-function pageTextBlocks(items: readonly unknown[]): PositionedBlock[] {
-  const lines: PositionedBlock[] = [];
-  let line = "";
-  let lineY = 0;
+function pageTextLayout(items: readonly unknown[]): PageTextLayout {
+  const runs: TextRun[] = [];
   for (const item of items) {
     if (!item || typeof item !== "object" || !("str" in item)) continue;
-    const value = String(item.str).replace(/\s+/g, " ").trim();
-    if (value) {
-      const itemY =
-        "transform" in item && Array.isArray(item.transform)
-          ? Number(item.transform[5] ?? lineY)
-          : lineY;
-      if (line && Math.abs(itemY - lineY) > 2) {
-        lines.push({ y: lineY, markdown: line });
-        line = "";
-      }
-      if (!line) lineY = itemY;
-      line = line ? `${line} ${value}` : value;
-    }
-    if ("hasEOL" in item && item.hasEOL) {
-      if (line) lines.push({ y: lineY, markdown: line });
-      line = "";
-    }
+    const text = String(item.str).replace(/\s+/g, " ").trim();
+    const transform =
+      "transform" in item && Array.isArray(item.transform) ? item.transform : undefined;
+    if (!text || !transform) continue;
+    const x = Number(transform[4]);
+    const y = Number(transform[5]);
+    const width = "width" in item ? Number(item.width) : 0;
+    const reportedHeight = "height" in item ? Number(item.height) : 0;
+    const transformHeight = Math.hypot(Number(transform[2] ?? 0), Number(transform[3] ?? 0));
+    const height = reportedHeight > 0 ? reportedHeight : transformHeight;
+    if (![x, y, width, height].every(Number.isFinite) || height <= 0) continue;
+    runs.push({
+      text,
+      x,
+      y,
+      width: Math.max(0, width),
+      height,
+      fontName: "fontName" in item ? String(item.fontName) : "",
+    });
   }
-  if (line) lines.push({ y: lineY, markdown: line });
-  return lines;
+
+  runs.sort((left, right) => right.y - left.y || left.x - right.x);
+  const grouped: TextRun[][] = [];
+  for (const run of runs) {
+    const line = grouped.find((candidate) => {
+      const baseline = candidate[0]?.y ?? run.y;
+      const candidateHeight = Math.max(...candidate.map((entry) => entry.height));
+      return (
+        Math.abs(baseline - run.y) <= Math.max(1.5, Math.min(candidateHeight, run.height) * 0.25)
+      );
+    });
+    if (line) line.push(run);
+    else grouped.push([run]);
+  }
+
+  const lines = grouped.map(textLine).sort((left, right) => right.y - left.y || left.x - right.x);
+  return {
+    lines,
+    bodyHeight: dominantBodyHeight(runs),
+    visibleCharacters: runs.reduce((count, run) => count + run.text.replace(/\s/g, "").length, 0),
+  };
 }
 
-function pageFigures(
-  page: { objs: { get(id: string): unknown }; commonObjs: { get(id: string): unknown } },
+function textLine(unsortedRuns: TextRun[]): TextLine {
+  const runs = [...unsortedRuns].sort((left, right) => left.x - right.x);
+  const height = Math.max(...runs.map((run) => run.height));
+  const segments: TextSegment[] = [];
+  let segmentRuns: TextRun[] = [];
+  for (const run of runs) {
+    const previous = segmentRuns.at(-1);
+    const gap = previous ? run.x - (previous.x + previous.width) : 0;
+    if (previous && gap > Math.max(12, height * 1.5)) {
+      segments.push(textSegment(segmentRuns));
+      segmentRuns = [];
+    }
+    segmentRuns.push(run);
+  }
+  if (segmentRuns.length) segments.push(textSegment(segmentRuns));
+  const fontWeights = new Map<string, number>();
+  for (const run of runs) {
+    fontWeights.set(run.fontName, (fontWeights.get(run.fontName) ?? 0) + run.text.length);
+  }
+  const fontName =
+    [...fontWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+  return {
+    text: segments.map((segment) => segment.text).join(" "),
+    x: Math.min(...runs.map((run) => run.x)),
+    y: runs.reduce((sum, run) => sum + run.y, 0) / runs.length,
+    right: Math.max(...runs.map((run) => run.x + run.width)),
+    height,
+    fontName,
+    segments,
+  };
+}
+
+function textSegment(runs: TextRun[]): TextSegment {
+  return {
+    text: joinInlineRuns(runs),
+    x: Math.min(...runs.map((run) => run.x)),
+    right: Math.max(...runs.map((run) => run.x + run.width)),
+  };
+}
+
+function joinInlineRuns(runs: TextRun[]): string {
+  let text = "";
+  for (const run of runs) {
+    if (!text) {
+      text = run.text;
+      continue;
+    }
+    const noLeadingSpace = /^[,.;:!?%)\]}]/.test(run.text);
+    const noTrailingSpace = /[(\[{/]$/.test(text);
+    text += noLeadingSpace || noTrailingSpace ? run.text : ` ${run.text}`;
+  }
+  return text;
+}
+
+function dominantBodyHeight(runs: TextRun[]): number {
+  if (!runs.length) return 10;
+  const buckets = new Map<number, number>();
+  for (const run of runs) {
+    const bucket = Math.round(run.height * 2) / 2;
+    buckets.set(bucket, (buckets.get(bucket) ?? 0) + Math.max(1, run.text.length));
+  }
+  return [...buckets.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? 10;
+}
+
+function inferTitleLine(layout: PageTextLayout): TextLine | undefined {
+  const candidates = layout.lines
+    .slice(0, 6)
+    .filter(
+      (line) =>
+        line.segments.length === 1 &&
+        line.text.length <= 200 &&
+        line.height >= layout.bodyHeight * 1.2 &&
+        !endsLikeSentence(line.text) &&
+        !bulletText(line.text),
+    );
+  return candidates.sort((left, right) => right.height - left.height || right.y - left.y)[0];
+}
+
+function renderTextBlocks(layout: PageTextLayout, skippedLine?: TextLine): PositionedBlock[] {
+  const lines = layout.lines.filter((line) => line !== skippedLine);
+  const headingHeights = [
+    ...new Set(
+      lines
+        .map((line, index) => (isHeadingAt(lines, index, layout.bodyHeight) ? line : undefined))
+        .filter((line): line is TextLine => line !== undefined)
+        .map((line) => Math.round(line.height * 2) / 2),
+    ),
+  ].sort((left, right) => right - left);
+  const blocks: PositionedBlock[] = [];
+  for (let index = 0; index < lines.length;) {
+    const table = tableAt(lines, index, layout.bodyHeight);
+    if (table) {
+      blocks.push({ y: lines[index]!.y, markdown: renderTable(table.rows) });
+      index = table.end;
+      continue;
+    }
+
+    const line = lines[index]!;
+    if (isHeadingAt(lines, index, layout.bodyHeight)) {
+      const tier = Math.max(0, headingHeights.indexOf(Math.round(line.height * 2) / 2));
+      blocks.push({ y: line.y, markdown: `${"#".repeat(Math.min(6, 3 + tier))} ${line.text}` });
+      index += 1;
+      continue;
+    }
+
+    const bullet = bulletText(line.text);
+    if (bullet) {
+      const listLines = [bullet];
+      let next = index + 1;
+      while (next < lines.length) {
+        const nextBullet = bulletText(lines[next]!.text);
+        if (
+          !nextBullet ||
+          isHeadingAt(lines, next, layout.bodyHeight) ||
+          tableAt(lines, next, layout.bodyHeight)
+        ) {
+          break;
+        }
+        listLines.push(nextBullet);
+        next += 1;
+      }
+      blocks.push({ y: line.y, markdown: listLines.map((value) => `- ${value}`).join("\n") });
+      index = next;
+      continue;
+    }
+
+    const paragraph = [line.text];
+    let previous = line;
+    let next = index + 1;
+    while (next < lines.length) {
+      const candidate = lines[next]!;
+      if (
+        isHeadingAt(lines, next, layout.bodyHeight) ||
+        bulletText(candidate.text) ||
+        tableAt(lines, next, layout.bodyHeight) ||
+        !continuesParagraph(previous, candidate, layout.bodyHeight)
+      ) {
+        break;
+      }
+      paragraph.push(candidate.text);
+      previous = candidate;
+      next += 1;
+    }
+    blocks.push({ y: line.y, markdown: joinWrappedLines(paragraph) });
+    index = next;
+  }
+  return blocks;
+}
+
+function isHeadingLine(line: TextLine, bodyHeight: number): boolean {
+  return (
+    line.segments.length === 1 &&
+    line.height >= bodyHeight * 1.18 &&
+    line.text.length <= 160 &&
+    !endsLikeSentence(line.text)
+  );
+}
+
+function isHeadingAt(lines: TextLine[], index: number, bodyHeight: number): boolean {
+  const line = lines[index];
+  if (!line || !isHeadingLine(line, bodyHeight)) return false;
+  const next = lines[index + 1];
+  return !(
+    next &&
+    Math.abs(line.height - next.height) <= 1 &&
+    continuesParagraph(line, next, bodyHeight)
+  );
+}
+
+function continuesParagraph(previous: TextLine, current: TextLine, bodyHeight: number): boolean {
+  const verticalGap = previous.y - current.y;
+  return (
+    verticalGap > 0 &&
+    verticalGap <= Math.max(bodyHeight * 1.8, previous.height * 1.8) &&
+    Math.abs(previous.height - current.height) <= Math.max(2, bodyHeight * 0.25) &&
+    Math.abs(previous.x - current.x) <= Math.max(8, bodyHeight)
+  );
+}
+
+function joinWrappedLines(lines: string[]): string {
+  return lines.reduce((text, line) => {
+    if (!text) return line;
+    if (text.endsWith("\u00ad")) return `${text.slice(0, -1)}${line}`;
+    if (text.endsWith("-")) return `${text}${line}`;
+    return `${text} ${line}`;
+  }, "");
+}
+
+function bulletText(value: string): string | undefined {
+  const match = value.match(/^\s*(?:[•●▪◦‣⁃*\-–—]|\d+[.)])\s+(.+)$/u);
+  return match?.[1]?.trim() || undefined;
+}
+
+function endsLikeSentence(value: string): boolean {
+  return /[.;,]$/.test(value.trim());
+}
+
+interface DetectedTable {
+  rows: TextSegment[][];
+  end: number;
+}
+
+function tableAt(lines: TextLine[], start: number, bodyHeight: number): DetectedTable | undefined {
+  const first = lines[start];
+  if (!first || first.segments.length < 2) return undefined;
+  const columns = first.segments.length;
+  const rows = [first.segments];
+  const rowLines = [first];
+  let end = start + 1;
+  while (end < lines.length) {
+    const candidate = lines[end]!;
+    if (
+      candidate.segments.length !== columns ||
+      !alignedColumns(rows, candidate.segments, bodyHeight)
+    ) {
+      break;
+    }
+    const previousGap = rowLines.length > 1 ? rowLines.at(-2)!.y - rowLines.at(-1)!.y : undefined;
+    const gap = rowLines.at(-1)!.y - candidate.y;
+    if (
+      gap <= 0 ||
+      gap > bodyHeight * 3.5 ||
+      (previousGap !== undefined &&
+        Math.abs(previousGap - gap) > Math.max(bodyHeight, previousGap * 0.45))
+    ) {
+      break;
+    }
+    rows.push(candidate.segments);
+    rowLines.push(candidate);
+    end += 1;
+  }
+  if (rows.length < 3) return undefined;
+  const distinctHeader = rowLines.slice(1).some((line) => line.fontName !== rowLines[0]!.fontName);
+  if (columns === 2 && !distinctHeader) return undefined;
+  return { rows, end };
+}
+
+function alignedColumns(
+  existingRows: TextSegment[][],
+  candidate: TextSegment[],
+  bodyHeight: number,
+): boolean {
+  const tolerance = Math.max(8, bodyHeight);
+  return candidate.every((cell, column) => {
+    const prior = existingRows.map((row) => row[column]!).filter(Boolean);
+    const leftSpread = spread([...prior.map((entry) => entry.x), cell.x]);
+    const rightSpread = spread([...prior.map((entry) => entry.right), cell.right]);
+    return Math.min(leftSpread, rightSpread) <= tolerance;
+  });
+}
+
+function spread(values: number[]): number {
+  return Math.max(...values) - Math.min(...values);
+}
+
+function renderTable(rows: TextSegment[][]): string {
+  const cells = rows.map((row) => row.map((cell) => escapeTableCell(cell.text)));
+  const separator = cells[0]!.map(() => "---");
+  return [cells[0]!, separator, ...cells.slice(1)]
+    .map((row) => `| ${row.join(" | ")} |`)
+    .join("\n");
+}
+
+function escapeTableCell(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|").replace(/\s+/g, " ").trim();
+}
+
+function normalizedText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+async function pageFigures(
+  page: { objs: PdfObjectStore; commonObjs: PdfObjectStore },
   operations: number[],
   argumentsList: unknown[][],
-): { figures: PdfFigure[]; filtered: number; omitted: number[] } {
+): Promise<{ figures: PdfFigure[]; filtered: number; omitted: number[] }> {
   const figures: PdfFigure[] = [];
   const omitted: number[] = [];
   let filtered = 0;
   let matrix: Matrix = [1, 0, 0, 1, 0, 0];
   const stack: Matrix[] = [];
+  const resolvedObjects = new Map<string, Promise<unknown>>();
+  const resolveObject = (id: string): Promise<unknown> => {
+    const existing = resolvedObjects.get(id);
+    if (existing) return existing;
+    const store = id.startsWith("g_") ? page.commonObjs : page.objs;
+    const pending = pdfObject(store, id);
+    resolvedObjects.set(id, pending);
+    return pending;
+  };
   for (let index = 0; index < operations.length; index += 1) {
     const operation = operations[index];
     const args = argumentsList[index] ?? [];
@@ -235,7 +573,7 @@ function pageFigures(
     } else if (operation === OPS.paintImageXObject) {
       const id = String(args[0] ?? "");
       try {
-        const image = id.startsWith("g_") ? page.commonObjs.get(id) : page.objs.get(id);
+        const image = await resolveObject(id);
         const figure = imageFigure(image, matrix);
         figure ? figures.push(figure) : omitted.push(matrix[5]);
       } catch {
@@ -260,7 +598,7 @@ function pageFigures(
           Number(positions[position + 1] ?? 0),
         ]);
         try {
-          const image = id.startsWith("g_") ? page.commonObjs.get(id) : page.objs.get(id);
+          const image = await resolveObject(id);
           const figure = imageFigure(image, positioned);
           figure ? figures.push(figure) : omitted.push(positioned[5]);
         } catch {
@@ -277,6 +615,21 @@ function pageFigures(
     }
   }
   return { figures, filtered, omitted };
+}
+
+interface PdfObjectStore {
+  get(id: string, callback?: (value: unknown) => void): unknown;
+}
+
+function pdfObject(store: PdfObjectStore, id: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    try {
+      const immediate = store.get(id, resolve);
+      if (immediate !== undefined && immediate !== null) resolve(immediate);
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 type Matrix = [number, number, number, number, number, number];
@@ -383,7 +736,10 @@ function crc32(data: Uint8Array): number {
 function cleanMetadata(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const cleaned = value.replace(/\s+/g, " ").trim();
-  return cleaned ? cleaned.slice(0, 500) : undefined;
+  if (!cleaned || /^\(?\s*(?:anonymous|unspecified|untitled|unknown)\s*\)?$/i.test(cleaned)) {
+    return undefined;
+  }
+  return cleaned.slice(0, 500);
 }
 
 function isPasswordError(error: unknown): boolean {

@@ -129,7 +129,7 @@ Show me unread pieces tagged architecture.
 | **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering |
 | **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                           |
 
-Extraction includes Readability for articles, PDF.js text and embedded-figure extraction for attached PDFs, local image capture, sanitization, response and redirect limits, and private-network protections. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, vector-diagram reconstruction, DOCX, and PPTX are not yet supported.
+Extraction includes Readability for articles, layout-aware PDF.js text and embedded-figure extraction for attached PDFs, local image capture, sanitization, response and redirect limits, and private-network protections. PDF extraction joins wrapped paragraphs and conservatively recovers headings, lists, and simple tables as Markdown. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, vector-diagram reconstruction, complex multi-column layouts, DOCX, and PPTX are not yet supported.
 
 ## Markdown at the core
 
