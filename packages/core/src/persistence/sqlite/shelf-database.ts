@@ -9,6 +9,8 @@ import type {
   ShelfItem,
 } from "../../domain/library-item.js";
 
+const SCHEMA_VERSION = 1;
+
 export class ShelfDatabase {
   readonly db: DatabaseSync;
   readonly itemsDir: string | undefined;
@@ -22,34 +24,77 @@ export class ShelfDatabase {
   }
 
   private initializeSchema(): void {
+    const version = this.schemaVersion();
+    if (version > SCHEMA_VERSION) {
+      throw new Error(
+        `The uShelf index schema is newer than this version supports (${version} > ${SCHEMA_VERSION})`,
+      );
+    }
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (version < SCHEMA_VERSION && this.hasManagedSchema()) this.dropSchema();
+      this.createSchema();
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private schemaVersion(): number {
+    const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
+    return row.user_version;
+  }
+
+  private hasManagedSchema(): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE name IN ('items', 'item_search', 'delete_tokens') LIMIT 1",
+        )
+        .get(),
+    );
+  }
+
+  private dropSchema(): void {
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS items (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        canonical_url TEXT UNIQUE,
-        source_hash TEXT,
-        source_type TEXT NOT NULL,
-        author TEXT,
-        captured_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        status TEXT NOT NULL,
-        progress REAL NOT NULL,
-        tags_json TEXT NOT NULL,
-        ingestion_state TEXT NOT NULL,
-        summary TEXT,
-        file_path TEXT NOT NULL,
-        revision TEXT NOT NULL
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS items_source_hash ON items(source_hash) WHERE source_hash IS NOT NULL;
-      CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
-        id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
-      );
-      CREATE TABLE IF NOT EXISTS delete_tokens (
-        token TEXT PRIMARY KEY,
-        item_id TEXT NOT NULL,
-        expires_at INTEGER NOT NULL
-      );
+      DROP TABLE IF EXISTS item_search;
+      DROP TABLE IF EXISTS items;
+      DROP TABLE IF EXISTS delete_tokens;
     `);
+  }
+
+  private createSchema(): void {
+    this.db.exec(`
+        CREATE TABLE IF NOT EXISTS items (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          canonical_url TEXT UNIQUE,
+          source_hash TEXT,
+          source_type TEXT NOT NULL,
+          author TEXT,
+          captured_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL,
+          progress REAL NOT NULL,
+          tags_json TEXT NOT NULL,
+          ingestion_state TEXT NOT NULL,
+          summary TEXT,
+          file_path TEXT NOT NULL,
+          revision TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS items_source_hash ON items(source_hash) WHERE source_hash IS NOT NULL;
+        CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
+          id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
+        );
+        CREATE TABLE IF NOT EXISTS delete_tokens (
+          token TEXT PRIMARY KEY,
+          item_id TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
   }
 
   upsert(item: ShelfItem): void {
