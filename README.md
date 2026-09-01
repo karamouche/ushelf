@@ -9,7 +9,7 @@
 
 <p align="center">
   <img alt="Node.js 24+" src="https://img.shields.io/badge/Node.js-24%2B-111111?style=flat-square" />
-  <img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-111111?style=flat-square" />
+  <img alt="pnpm 11" src="https://img.shields.io/badge/pnpm-11-111111?style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-111111?style=flat-square" />
   <img alt="Model Context Protocol" src="https://img.shields.io/badge/MCP-native-111111?style=flat-square" />
   <img alt="Local first" src="https://img.shields.io/badge/storage-local--first-111111?style=flat-square" />
@@ -245,7 +245,7 @@ Package-specific runtime notes live in the README inside each package.
 
 ## Development
 
-Contributors need Node.js 24+, pnpm 10, Go 1.25+, and Docker.
+Contributors need Node.js 24+, pnpm 11, Go 1.25+, and Docker.
 
 ```sh
 git clone https://github.com/karamouche/ushelf.git
