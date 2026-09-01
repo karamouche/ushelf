@@ -61,7 +61,7 @@ ushelf setup codex
 # or: ushelf setup all
 ```
 
-Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. You can now ask the connected agent to save a URL or an attached PDF. Your library, recipes, configuration, and disposable index live under `~/.ushelf`.
+Open the reader at [http://127.0.0.1:43110](http://127.0.0.1:43110), or run `ushelf open`. You can now ask the connected agent to save a URL or an attached PDF. Your library, recipes, configuration, optional Kindle credential, and disposable index live under `~/.ushelf`.
 
 Useful lifecycle commands:
 
@@ -93,6 +93,7 @@ The installer supports macOS and Linux on amd64 and arm64; Windows users can run
 | `ushelf update`        | Verify and install the latest CLI and matching image            |
 | `ushelf rebuild-index` | Rebuild disposable SQLite state from Markdown                   |
 | `ushelf import FILE`   | Import a validated Markdown item                                |
+| `ushelf kindle`        | Connect, inspect, or disconnect Send to Kindle                  |
 | `ushelf config`        | Inspect or update persistent configuration                      |
 | `ushelf version`       | Show CLI build and runtime image information                    |
 
@@ -118,6 +119,19 @@ Search my uShelf for writing about local-first software.
 Show me unread pieces tagged architecture.
 ```
 
+## Send a saved item to Kindle
+
+Connect an Amazon account from the native CLI, then use **Send to Kindle** in any reader page:
+
+```sh
+ushelf kindle setup
+ushelf kindle status
+```
+
+The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader generates a reflowable EPUB from the canonical saved source and its local images, asks you to choose one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included.
+
+This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk). Amazon may change or disable it without notice. Disconnect it with `ushelf kindle disconnect`.
+
 ## What is included
 
 | Layer            | What it does                                                                                                        |
@@ -140,6 +154,7 @@ Extraction includes Readability for articles, layout-aware PDF.js text and embed
 | `~/.ushelf/library/files/`   | Original PDFs and content-addressed item media        |
 | `~/.ushelf/recipes/`         | Editable, hash-versioned agent instructions           |
 | `~/.ushelf/state/ushelf.db`  | Rebuildable search index and transient workflow state |
+| `~/.ushelf/secrets/`         | Owner-readable optional integration credentials       |
 
 Markdown remains the source of truth. Canonical URLs deduplicate web ingestion, original-file hashes deduplicate PDF ingestion, content hashes detect source changes, recipe hashes identify stale enrichment, and revisions protect concurrent updates. If the index disappears, restore it with:
 
@@ -161,10 +176,13 @@ The Compose setup builds the API and reader into one container, restarts after f
 
 ```sh
 cp .env.example .env
-mkdir -p library/items library/history .ushelf
+mkdir -p library/items library/history .ushelf/state .ushelf/secrets
 docker compose up -d --build
 docker compose ps
 ```
+
+For this repository-local Compose layout, configure Kindle credentials in the mounted
+secrets directory with `ushelf --home .ushelf kindle setup`.
 
 The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
 
@@ -189,21 +207,22 @@ To rebuild the disposable index against the same bind mounts:
 
 ```sh
 docker compose stop ushelf
-docker compose run --rm --no-deps ushelf node apps/server/dist/cli.js rebuild-index
+docker compose run --rm --no-deps maintenance rebuild-index
 docker compose up -d
 ```
 
-For a consistent backup, stop the service and copy `library/` and `recipes/`. `.ushelf/` does not need to be backed up.
+For a consistent backup, stop the service and copy `library/` and `recipes/`. SQLite state does not need to be backed up. Back up `~/.ushelf/secrets/` separately only if you want to preserve optional integration credentials.
 
 ### Configuration
 
-| Variable               | Default     | Purpose                                                     |
-| ---------------------- | ----------- | ----------------------------------------------------------- |
-| `USHELF_ROOT`          | `.`         | Directory containing `library/`, `.ushelf/`, and `recipes/` |
-| `USHELF_STATE_DIR`     | `.ushelf`   | Optional separate directory for disposable SQLite state     |
-| `USHELF_HOST`          | `127.0.0.1` | Address published by the HTTP server or Compose             |
-| `USHELF_PORT`          | `43110`     | HTTP port                                                   |
-| `USHELF_WEB_BASE_PATH` | `/`         | Root or subpath where the web app and API are served        |
+| Variable               | Default           | Purpose                                                     |
+| ---------------------- | ----------------- | ----------------------------------------------------------- |
+| `USHELF_ROOT`          | `.`               | Directory containing `library/`, `.ushelf/`, and `recipes/` |
+| `USHELF_STATE_DIR`     | `.ushelf`         | Optional separate directory for disposable SQLite state     |
+| `USHELF_HOST`          | `127.0.0.1`       | Address published by the HTTP server or Compose             |
+| `USHELF_PORT`          | `43110`           | HTTP port                                                   |
+| `USHELF_WEB_BASE_PATH` | `/`               | Root or subpath where the web app and API are served        |
+| `USHELF_SECRETS_DIR`   | `.ushelf/secrets` | Optional integration-credential directory                   |
 
 The installed CLI also accepts `USHELF_HOME` (default `~/.ushelf`) and `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
 
@@ -226,7 +245,7 @@ Package-specific runtime notes live in the README inside each package.
 
 ## Development
 
-Contributors need Node.js 24+, pnpm 10, Go 1.24+, and Docker.
+Contributors need Node.js 24+, pnpm 10, Go 1.25+, and Docker.
 
 ```sh
 git clone https://github.com/karamouche/ushelf.git
