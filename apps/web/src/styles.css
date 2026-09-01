@@ -334,7 +334,11 @@ footer {
   max-width: 100%;
   height: auto;
   margin: 32px auto;
-  filter: grayscale(100%);
+}
+
+.media-omitted {
+  color: var(--muted);
+  font-style: italic;
 }
 .document blockquote {
   border-left: 2px solid #111;

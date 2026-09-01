@@ -74,6 +74,18 @@ describe("readable article extraction", () => {
     expect(result.markdown).toContain("Runtime flow");
   });
 
+  it("preserves inline image data for localization", () => {
+    const dom = articleDom(`
+      <h1>Embedded image guide</h1>
+      <p>A useful introduction with enough text for Readability to identify this as an article.</p>
+      <img src="data:image/png;base64,iVBORw0KGgo=" alt="Embedded diagram">
+      <p>This closing explanation contains enough additional prose to keep extraction deterministic.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guide");
+    expect(result.markdown).toContain("![Embedded diagram](data:image/png;base64,iVBORw0KGgo=)");
+  });
+
   it("uses the metadata image when the article has no inline image", () => {
     const dom = articleDom(
       `<h1>Metadata image guide</h1>

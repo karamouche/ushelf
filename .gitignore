@@ -13,5 +13,6 @@ coverage/
 apps/cli/ushelf
 library/items/
 library/history/
+library/files/
 !library/items/.gitkeep
 !library/history/.gitkeep

@@ -6,7 +6,10 @@ export {
   citationSchema,
   ingestionStateSchema,
   itemFrontmatterSchema,
+  mediaCaptureSchema,
+  mediaCaptureStatsSchema,
   readingStatusSchema,
+  sourceFileSchema,
   sourceTypeSchema,
 } from "./domain/library-item.js";
 export type {
@@ -15,8 +18,11 @@ export type {
   ItemFrontmatter,
   ItemSummary,
   LibraryListQuery,
+  MediaCapture,
+  MediaCaptureStats,
   ReadingStatus,
   ShelfItem,
+  SourceFile,
   SourceType,
 } from "./domain/library-item.js";
 export type { Recipe } from "./domain/recipe.js";

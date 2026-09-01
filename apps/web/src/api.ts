@@ -1,14 +1,15 @@
 import { resolveRuntimeBasePath } from "./runtime-base-path.js";
 
 export type ReadingStatus = "inbox" | "reading" | "read" | "archived";
-export type SourceType = "blog" | "x_thread";
+export type SourceType = "article" | "document" | "x";
+export type Citation = { url: string; label: string } | { page: number; label: string };
 export type IngestionState =
   "extracting" | "awaiting_source" | "awaiting_enrichment" | "ready" | "failed";
 
 export interface ItemSummary {
   id: string;
   title: string;
-  canonicalUrl: string;
+  canonicalUrl?: string;
   sourceType: SourceType;
   author?: string;
   capturedAt: string;
@@ -23,9 +24,16 @@ export interface ItemSummary {
 export interface ShelfItem {
   id: string;
   title: string;
-  originalUrl: string;
-  canonicalUrl: string;
+  originalUrl?: string;
+  canonicalUrl?: string;
   sourceType: SourceType;
+  file?: {
+    name: string;
+    mediaType: "application/pdf";
+    sizeBytes: number;
+    sha256: string;
+    pageCount: number;
+  };
   author?: string;
   capturedAt: string;
   updatedAt: string;
@@ -38,18 +46,41 @@ export interface ShelfItem {
     recipeHash?: string;
     summary?: string;
     keyPoints?: string[];
-    citations?: { url: string; label: string }[];
+    citations?: Citation[];
     error?: string;
+  };
+  media: {
+    source: MediaCaptureStats;
+    insights: MediaCaptureStats;
   };
   sourceMarkdown: string;
   insightMarkdown: string;
   revision: string;
 }
 
+interface MediaCaptureStats {
+  discovered: number;
+  localized: number;
+  omitted: number;
+  filtered: number;
+}
+
 const BASE_PATH = resolveRuntimeBasePath().replace(/\/$/, "");
 
 function apiUrl(path: string): string {
   return `${BASE_PATH}${path}`;
+}
+
+export function originalFileUrl(id: string, page?: number): string {
+  return `${apiUrl(`/api/items/${id}/original`)}${page ? `#page=${page}` : ""}`;
+}
+
+export function localMediaUrl(id: string, source?: string): string | undefined {
+  const prefix = `../../files/${id}/media/`;
+  if (!source?.startsWith(prefix)) return undefined;
+  const filename = source.slice(prefix.length);
+  if (!/^[a-f0-9]{64}\.(?:png|jpg|gif|webp|avif|svg)$/.test(filename)) return undefined;
+  return apiUrl(`/api/items/${encodeURIComponent(id)}/media/${filename}`);
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

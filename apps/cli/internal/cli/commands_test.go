@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCommandTreeIncludesPublicContractWithoutMigrate(t *testing.T) {
+func TestCommandTreeIncludesPublicContract(t *testing.T) {
 	root := NewRootCommand(
 		Dependencies{Runner: &fakeRunner{}, Stdin: &bytes.Buffer{}, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}},
 		BuildInfo{Version: "1.2.3", Commit: "test", BuildDate: "today"},
@@ -17,9 +17,6 @@ func TestCommandTreeIncludesPublicContractWithoutMigrate(t *testing.T) {
 		"rebuild-index": false, "import": false, "config": false,
 	}
 	for _, command := range root.Commands() {
-		if command.Name() == "migrate" {
-			t.Fatal("migrate must not be part of the public command tree")
-		}
 		if _, ok := want[command.Name()]; ok {
 			want[command.Name()] = true
 		}

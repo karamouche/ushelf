@@ -4,7 +4,7 @@ Use this file as the starting context for work anywhere in the repository. Read 
 
 ## Project in one minute
 
-uShelf is a local, agent-native read-later library for articles and X threads. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index.
+uShelf is a local, agent-native read-later library for articles, PDF documents, and X sources. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index.
 
 The main flow is:
 
@@ -27,6 +27,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
 - `library/items`: Canonical saved documents, ignored by Git except for `.gitkeep`.
 - `library/history`: Archived enrichment revisions, also ignored by Git.
+- `library/files`: Retained original PDFs and content-addressed item media, also ignored by Git.
 - `.ushelf/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
 
 Each workspace package has a local README with its runtime details and commands.
@@ -83,7 +84,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Preserve Markdown as the source of truth. Any index change must remain rebuildable with `pnpm rebuild-index`.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
 - Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
-- Preserve URL protections when changing extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
+- Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
 - Keep deterministic extraction separate from LLM enrichment. Avoid introducing token-consuming work into capture, search, or reading-state updates.
 - Treat X fallback content as agent-supplied, not independently verified.
 - Use strict TypeScript and keep `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` clean.
@@ -110,6 +111,7 @@ When changing shared behavior, inspect both adapters and the web client for cont
 - Item Markdown contains validated frontmatter plus separate insight and source sections.
 - Canonical URLs provide ingestion deduplication.
 - Content hashes detect source changes; recipe hashes detect stale enrichment.
+- Rendered Markdown images use validated relative references to content-addressed files beneath the owning item's `library/files` directory; the reader must never fetch external image references.
 - A changed enriched source is archived before its insights are cleared.
 - SQLite startup reconciliation must restore index state from Markdown.
 - Permanent deletion remains a two-step, short-lived confirmation-token flow.
@@ -120,6 +122,19 @@ When changing shared behavior, inspect both adapters and the web client for cont
 The skills under `skills/ushelf-ingest` and `skills/ushelf-library` are part of the product contract. If an MCP tool name, input, output, or required sequence changes, update the affected skill and run `pnpm validate:skills`.
 
 Keep summaries compact and source-grounded. Do not manufacture missing source text or citations. Avoid re-enriching an already-ready duplicate unless the user explicitly requests it; this prevents unnecessary token use.
+
+## Pre-Launch Evolution
+
+Ushelf has not launched and has no production users or production data. Revisit this policy before the first production deployment.
+
+- Optimize for the smallest coherent design that represents the product today.
+- Remove obsolete code, schemas, APIs, configuration, aliases, and transitional paths directly.
+- Do not add backward-compatibility shims, legacy aliases, dual-read or dual-write paths, or data-preserving backfills unless the user explicitly asks for them.
+- Internal interfaces are not public compatibility contracts. Update their callers and tests atomically when they change.
+- Development and test data are disposable. Prefer recreating those databases over complicating the product to preserve local data.
+- Treat migration history as a replaceable development baseline, but keep the checked-in migration chain and setup workflow coherent. Do not rewrite an already-applied migration without also resetting affected development and test databases.
+- Preserve database invariants, transactional safety, migration idempotence, and deterministic setup. These are correctness properties, not backward-compatibility requirements.
+- Consolidate the migration baseline only as an explicit, coordinated change rather than as incidental work in a feature branch.
 
 ## Before handing off
 

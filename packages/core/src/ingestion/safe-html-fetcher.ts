@@ -4,7 +4,30 @@ import { isIP } from "node:net";
 const MAX_BYTES = 5 * 1024 * 1024;
 const REDIRECT_LIMIT = 5;
 
+export interface PublicBytes {
+  bytes: Uint8Array;
+  contentType: string;
+  finalUrl: string;
+}
+
 export async function fetchPublicHtml(input: string): Promise<{ html: string; finalUrl: string }> {
+  const result = await fetchPublicBytes(input, {
+    accept: "text/html,application/xhtml+xml",
+    maxBytes: MAX_BYTES,
+  });
+  if (
+    !result.contentType.includes("text/html") &&
+    !result.contentType.includes("application/xhtml+xml")
+  ) {
+    throw new Error(`Unsupported source content type: ${result.contentType || "unknown"}`);
+  }
+  return { html: new TextDecoder().decode(result.bytes), finalUrl: result.finalUrl };
+}
+
+export async function fetchPublicBytes(
+  input: string,
+  options: { accept: string; maxBytes: number },
+): Promise<PublicBytes> {
   let current = new URL(input);
   for (let redirect = 0; redirect <= REDIRECT_LIMIT; redirect += 1) {
     await assertPublicHost(current);
@@ -13,7 +36,7 @@ export async function fetchPublicHtml(input: string): Promise<{ html: string; fi
       signal: AbortSignal.timeout(15_000),
       headers: {
         "user-agent": "uShelf/0.1 (+local read-later library)",
-        accept: "text/html,application/xhtml+xml",
+        accept: options.accept,
       },
     });
     if (response.status >= 300 && response.status < 400) {
@@ -23,17 +46,42 @@ export async function fetchPublicHtml(input: string): Promise<{ html: string; fi
       continue;
     }
     if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
-    const type = response.headers.get("content-type") ?? "";
-    if (!type.includes("text/html") && !type.includes("application/xhtml+xml")) {
-      throw new Error(`Unsupported source content type: ${type || "unknown"}`);
-    }
+    const type = (response.headers.get("content-type") ?? "")
+      .split(";", 1)[0]!
+      .trim()
+      .toLowerCase();
     const declaredLength = Number(response.headers.get("content-length") ?? 0);
-    if (declaredLength > MAX_BYTES) throw new Error("Source is larger than 5 MB");
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_BYTES) throw new Error("Source is larger than 5 MB");
-    return { html: new TextDecoder().decode(buffer), finalUrl: current.toString() };
+    if (declaredLength > options.maxBytes) throw new Error("Resource exceeds the size limit");
+    const bytes = await readBoundedBody(response, options.maxBytes);
+    return { bytes, contentType: type, finalUrl: current.toString() };
   }
   throw new Error("Source redirected too many times");
+}
+
+async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) throw new Error("Resource exceeds the size limit");
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 async function assertPublicHost(url: URL): Promise<void> {

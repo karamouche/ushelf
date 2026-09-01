@@ -19,7 +19,7 @@ export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): Extrac
     markdown = `![${escapeImageAlt(title)}](${metadataImage})\n\n${markdown}`;
   }
   return {
-    sourceType: "blog",
+    sourceType: "article",
     title,
     ...(article.byline ? { author: clean(article.byline) } : {}),
     markdown,
@@ -38,6 +38,7 @@ function htmlToMarkdown(value: string): string {
       th: ["align"],
     },
     allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: { img: ["http", "https", "data"] },
   });
   const turndown = new TurndownService({
     headingStyle: "atx",
@@ -108,9 +109,7 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
       image.getAttribute("src"),
       firstSrcsetUrl(image.getAttribute("srcset")),
       firstSrcsetUrl(pictureSource?.getAttribute("srcset") ?? null),
-    ].find(
-      (candidate) => candidate && !candidate.startsWith("data:") && !candidate.startsWith("blob:"),
-    );
+    ].find((candidate) => candidate && !candidate.startsWith("blob:"));
     if (source) image.setAttribute("src", resolveUrl(source, baseUrl));
   }
 

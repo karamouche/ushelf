@@ -9,6 +9,8 @@ import type {
   ShelfItem,
 } from "../../domain/library-item.js";
 
+const SCHEMA_VERSION = 1;
+
 export class ShelfDatabase {
   readonly db: DatabaseSync;
   readonly itemsDir: string | undefined;
@@ -18,36 +20,81 @@ export class ShelfDatabase {
     this.itemsDir = itemsDir ? path.resolve(itemsDir) : undefined;
     this.db = new DatabaseSync(databasePath);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-    this.migrate();
+    this.initializeSchema();
   }
 
-  private migrate(): void {
+  private initializeSchema(): void {
+    const version = this.schemaVersion();
+    if (version > SCHEMA_VERSION) {
+      throw new Error(
+        `The uShelf index schema is newer than this version supports (${version} > ${SCHEMA_VERSION})`,
+      );
+    }
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (version < SCHEMA_VERSION && this.hasManagedSchema()) this.dropSchema();
+      this.createSchema();
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private schemaVersion(): number {
+    const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
+    return row.user_version;
+  }
+
+  private hasManagedSchema(): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE name IN ('items', 'item_search', 'delete_tokens') LIMIT 1",
+        )
+        .get(),
+    );
+  }
+
+  private dropSchema(): void {
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS items (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        canonical_url TEXT NOT NULL UNIQUE,
-        source_type TEXT NOT NULL,
-        author TEXT,
-        captured_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        status TEXT NOT NULL,
-        progress REAL NOT NULL,
-        tags_json TEXT NOT NULL,
-        ingestion_state TEXT NOT NULL,
-        summary TEXT,
-        file_path TEXT NOT NULL,
-        revision TEXT NOT NULL
-      );
-      CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
-        id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
-      );
-      CREATE TABLE IF NOT EXISTS delete_tokens (
-        token TEXT PRIMARY KEY,
-        item_id TEXT NOT NULL,
-        expires_at INTEGER NOT NULL
-      );
+      DROP TABLE IF EXISTS item_search;
+      DROP TABLE IF EXISTS items;
+      DROP TABLE IF EXISTS delete_tokens;
     `);
+  }
+
+  private createSchema(): void {
+    this.db.exec(`
+        CREATE TABLE IF NOT EXISTS items (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          canonical_url TEXT UNIQUE,
+          source_hash TEXT,
+          source_type TEXT NOT NULL,
+          author TEXT,
+          captured_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL,
+          progress REAL NOT NULL,
+          tags_json TEXT NOT NULL,
+          ingestion_state TEXT NOT NULL,
+          summary TEXT,
+          file_path TEXT NOT NULL,
+          revision TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS items_source_hash ON items(source_hash) WHERE source_hash IS NOT NULL;
+        CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(
+          id UNINDEXED, title, source, insights, tags, tokenize='porter unicode61'
+        );
+        CREATE TABLE IF NOT EXISTS delete_tokens (
+          token TEXT PRIMARY KEY,
+          item_id TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
   }
 
   upsert(item: ShelfItem): void {
@@ -56,10 +103,10 @@ export class ShelfDatabase {
       this.db
         .prepare(
           `
-        INSERT INTO items (id,title,canonical_url,source_type,author,captured_at,updated_at,status,progress,tags_json,ingestion_state,summary,file_path,revision)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO items (id,title,canonical_url,source_hash,source_type,author,captured_at,updated_at,status,progress,tags_json,ingestion_state,summary,file_path,revision)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
-          title=excluded.title, canonical_url=excluded.canonical_url, source_type=excluded.source_type,
+          title=excluded.title, canonical_url=excluded.canonical_url, source_hash=excluded.source_hash, source_type=excluded.source_type,
           author=excluded.author, captured_at=excluded.captured_at, updated_at=excluded.updated_at,
           status=excluded.status, progress=excluded.progress, tags_json=excluded.tags_json,
           ingestion_state=excluded.ingestion_state, summary=excluded.summary,
@@ -69,7 +116,8 @@ export class ShelfDatabase {
         .run(
           item.id,
           item.title,
-          item.canonicalUrl,
+          item.sourceType === "document" ? null : item.canonicalUrl,
+          item.sourceType === "document" ? item.file.sha256 : null,
           item.sourceType,
           item.author ?? null,
           item.capturedAt,
@@ -114,6 +162,12 @@ export class ShelfDatabase {
 
   findByCanonicalUrl(url: string): string | undefined {
     const row = this.db.prepare("SELECT id FROM items WHERE canonical_url = ?").get(url) as
+      { id: string } | undefined;
+    return row?.id;
+  }
+
+  findBySourceHash(hash: string): string | undefined {
+    const row = this.db.prepare("SELECT id FROM items WHERE source_hash = ?").get(hash) as
       { id: string } | undefined;
     return row?.id;
   }
@@ -233,8 +287,9 @@ function isWithin(root: string, candidate: string): boolean {
 interface DatabaseItemRow {
   id: string;
   title: string;
-  canonical_url: string;
-  source_type: "blog" | "x_thread";
+  canonical_url: string | null;
+  source_hash: string | null;
+  source_type: "article" | "document" | "x";
   author: string | null;
   captured_at: string;
   updated_at: string;
@@ -249,8 +304,8 @@ function rowToSummary(row: DatabaseItemRow): ItemSummary {
   return {
     id: row.id,
     title: row.title,
-    canonicalUrl: row.canonical_url,
     sourceType: row.source_type,
+    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
     ...(row.author ? { author: row.author } : {}),
     capturedAt: row.captured_at,
     updatedAt: row.updated_at,
