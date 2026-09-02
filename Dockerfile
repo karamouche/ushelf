@@ -102,6 +102,6 @@ USER node
 EXPOSE $USHELF_PORT
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "const base = process.env.USHELF_WEB_BASE_PATH === '/' ? '' : process.env.USHELF_WEB_BASE_PATH.replace(/\/$/, ''); const port = process.env.USHELF_PORT; fetch(`http://127.0.0.1:${port}${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
+  CMD ["node", "-e", "const configured = process.env.USHELF_WEB_BASE_PATH; const base = configured === '/' ? '' : configured.endsWith('/') ? configured.slice(0, -1) : configured; const port = process.env.USHELF_PORT; fetch(`http://127.0.0.1:${port}${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 
 CMD ["node", "apps/server/dist/index.js"]
