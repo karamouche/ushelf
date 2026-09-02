@@ -54,6 +54,10 @@ RUN pnpm install --frozen-lockfile --prod --filter @ushelf/server... --filter @u
 
 FROM node:24-bookworm-slim AS runtime
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 ARG USHELF_WEB_BASE_PATH
 ARG USHELF_PORT
 ARG USHELF_VERSION=dev
