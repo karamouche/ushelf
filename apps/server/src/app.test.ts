@@ -9,7 +9,10 @@ describe("createApp base path", () => {
   it("exposes Kindle status, devices, and targeted delivery", async () => {
     const service = {
       kindleStatus: async () => ({ configured: true, accountName: "Reader", homeRegion: "NA" }),
-      kindleDevices: async () => [{ name: "Paperwhite", serial: "DEVICE123" }],
+      kindleDevices: async () => ({
+        devices: [{ name: "Paperwhite", serial: "DEVICE123" }],
+        preferredTargetSerial: "DEVICE123",
+      }),
       sendToKindle: async (id: string, serial: string) => ({
         sku: "sku-1",
         itemId: id,
@@ -25,6 +28,7 @@ describe("createApp base path", () => {
     });
     await expect((await app.request("/api/kindle/devices")).json()).resolves.toEqual({
       devices: [{ name: "Paperwhite", serial: "DEVICE123" }],
+      preferredTargetSerial: "DEVICE123",
     });
     const delivery = await app.request("/api/items/item-id/kindle-deliveries", {
       method: "POST",

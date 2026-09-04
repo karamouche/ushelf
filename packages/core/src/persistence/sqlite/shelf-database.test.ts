@@ -104,7 +104,7 @@ describe("ShelfDatabase", () => {
     const sqlite = new BetterSqlite3(databasePath);
     const objects = sqlite
       .prepare(
-        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', '__drizzle_migrations') ORDER BY name",
+        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', 'kindle_preferences', '__drizzle_migrations') ORDER BY name",
       )
       .all();
     const appliedBefore = sqlite
@@ -118,8 +118,9 @@ describe("ShelfDatabase", () => {
       { name: "item_search", type: "table" },
       { name: "items", type: "table" },
       { name: "items_source_hash", type: "index" },
+      { name: "kindle_preferences", type: "table" },
     ]);
-    expect(appliedBefore.count).toBe(2);
+    expect(appliedBefore.count).toBe(3);
 
     const reopened = new ShelfDatabase(databasePath, itemsDir);
     reopened.close();
@@ -128,11 +129,11 @@ describe("ShelfDatabase", () => {
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
       .get() as { count: number };
     verification.close();
-    expect(appliedAfter.count).toBe(2);
+    expect(appliedAfter.count).toBe(3);
   });
 
   it("provides typed CRUD, filtering, FTS, path, and delete-token behavior", async () => {
-    const { database, itemsDir } = await fixture();
+    const { databasePath, database, itemsDir } = await fixture();
     const savedArticle = article(itemsDir);
     const savedDocument = document(itemsDir);
 
@@ -176,12 +177,21 @@ describe("ShelfDatabase", () => {
     database.createDeleteToken("expired", savedDocument.id, Date.now() - 1);
     expect(database.consumeDeleteToken("expired", savedDocument.id)).toBe(false);
 
+    expect(database.lastUsedKindleDeviceSerial()).toBeUndefined();
+    database.setLastUsedKindleDeviceSerial("DEVICE123");
+    expect(database.lastUsedKindleDeviceSerial()).toBe("DEVICE123");
+
     database.delete(savedArticle.id);
     expect(database.hasItem(savedArticle.id)).toBe(false);
     expect(database.list({ query: "maintainable" })).toEqual([]);
     database.clearIndex();
     expect(database.indexedCount()).toBe(0);
+    expect(database.lastUsedKindleDeviceSerial()).toBe("DEVICE123");
     database.close();
+
+    const reopened = new ShelfDatabase(databasePath, itemsDir);
+    expect(reopened.lastUsedKindleDeviceSerial()).toBe("DEVICE123");
+    reopened.close();
   });
 
   it("keeps canonical URL and document hash uniqueness transactional", async () => {

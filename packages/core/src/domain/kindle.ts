@@ -9,6 +9,11 @@ export interface KindleDevice {
   serial: string;
 }
 
+export interface KindleDevices {
+  devices: KindleDevice[];
+  preferredTargetSerial?: string;
+}
+
 export interface KindleStatus {
   configured: boolean;
   accountName?: string;

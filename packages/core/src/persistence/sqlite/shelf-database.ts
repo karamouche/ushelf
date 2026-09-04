@@ -8,7 +8,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { ingestionState } from "../../domain/ingestion-state.js";
 import type { ItemSummary, LibraryListQuery, ShelfItem } from "../../domain/library-item.js";
 import { itemSearch } from "./item-search.js";
-import { deleteTokens, items } from "./schema.js";
+import { deleteTokens, items, kindlePreferences } from "./schema.js";
 import * as schema from "./schema.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../../drizzle", import.meta.url));
@@ -203,6 +203,25 @@ export class ShelfDatabase {
       transaction.delete(deleteTokens).where(eq(deleteTokens.token, token)).run();
       return row?.itemId === itemId && row.expiresAt >= Date.now();
     });
+  }
+
+  lastUsedKindleDeviceSerial(): string | undefined {
+    return this.database
+      .select({ lastUsedDeviceSerial: kindlePreferences.lastUsedDeviceSerial })
+      .from(kindlePreferences)
+      .where(eq(kindlePreferences.id, 1))
+      .get()?.lastUsedDeviceSerial;
+  }
+
+  setLastUsedKindleDeviceSerial(lastUsedDeviceSerial: string): void {
+    this.database
+      .insert(kindlePreferences)
+      .values({ id: 1, lastUsedDeviceSerial })
+      .onConflictDoUpdate({
+        target: kindlePreferences.id,
+        set: { lastUsedDeviceSerial },
+      })
+      .run();
   }
 
   private encodeFilePath(filePath: string): string {

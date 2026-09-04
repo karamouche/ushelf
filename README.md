@@ -128,7 +128,7 @@ ushelf kindle setup
 ushelf kindle status
 ```
 
-The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader generates a reflowable EPUB from the canonical saved source and its local images, asks you to choose one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included.
+The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader generates a reflowable EPUB from the canonical saved source and its local images, asks you to choose one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included. After a successful delivery, the reader remembers that device in local uShelf state and selects it by default next time when it is still registered.
 
 This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk). Amazon may change or disable it without notice. Disconnect it with `ushelf kindle disconnect`.
 
