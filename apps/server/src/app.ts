@@ -23,7 +23,7 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     c.json(await service.kindleStatus(c.req.raw.signal)),
   );
   app.get(route("/api/kindle/devices"), async (c) =>
-    c.json({ devices: await service.kindleDevices(c.req.raw.signal) }),
+    c.json(await service.kindleDevices(c.req.raw.signal)),
   );
   app.get(route("/api/items"), (c) => {
     const statusValue = c.req.query("status");

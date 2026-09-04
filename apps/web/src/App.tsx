@@ -433,8 +433,11 @@ function KindleDelivery({ item }: { item: ShelfItem }) {
       }
       if (!status.configured) return;
       const available = await listKindleDevices();
-      setDevices(available);
-      if (available.length === 1) setTargetSerial(available[0]!.serial);
+      setDevices(available.devices);
+      setTargetSerial(
+        available.preferredTargetSerial ??
+          (available.devices.length === 1 ? available.devices[0]!.serial : ""),
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {

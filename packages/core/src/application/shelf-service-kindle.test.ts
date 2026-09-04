@@ -18,6 +18,7 @@ afterEach(async () =>
 class FakeKindleGateway implements KindleGateway {
   devicesValue: KindleDevice[] = [{ name: "Paperwhite", serial: "DEVICE123" }];
   sent?: { bytes: Uint8Array; title: string; author?: string; targetSerial: string };
+  sendError?: Error;
   sendResult: Promise<string> = Promise.resolve("sku-123");
 
   async status() {
@@ -28,6 +29,7 @@ class FakeKindleGateway implements KindleGateway {
   }
   async send(input: { bytes: Uint8Array; title: string; author?: string; targetSerial: string }) {
     this.sent = input;
+    if (this.sendError) throw this.sendError;
     return this.sendResult;
   }
 }
@@ -115,6 +117,10 @@ describe("ShelfService Kindle delivery", () => {
         targetSerial: "DEVICE123",
       });
       expect(gateway.sent?.targetSerial).toBe("DEVICE123");
+      await expect(service.kindleDevices()).resolves.toEqual({
+        devices: gateway.devicesValue,
+        preferredTargetSerial: "DEVICE123",
+      });
       const archive = unzipSync(gateway.sent!.bytes);
       const article = Buffer.from(archive["EPUB/article.xhtml"]!).toString();
       expect(article).toContain(sourceType === "document" ? "Document source" : "Captured source");
@@ -129,6 +135,27 @@ describe("ShelfService Kindle delivery", () => {
       code: "device_not_found",
     });
     expect(gateway.sent).toBeUndefined();
+  });
+
+  it("does not prefer a remembered device that is no longer registered", async () => {
+    const { service, gateway, item } = await fixture();
+    await service.sendToKindle(item.id, "DEVICE123");
+    gateway.devicesValue = [{ name: "Kindle app", serial: "APP456" }];
+
+    await expect(service.kindleDevices()).resolves.toEqual({ devices: gateway.devicesValue });
+  });
+
+  it("keeps the last successful target when a later delivery fails", async () => {
+    const { service, gateway, item } = await fixture();
+    await service.sendToKindle(item.id, "DEVICE123");
+    gateway.devicesValue.push({ name: "Kindle app", serial: "APP456" });
+    gateway.sendError = new Error("Amazon unavailable");
+
+    await expect(service.sendToKindle(item.id, "APP456")).rejects.toThrow("Amazon unavailable");
+    await expect(service.kindleDevices()).resolves.toEqual({
+      devices: gateway.devicesValue,
+      preferredTargetSerial: "DEVICE123",
+    });
   });
 
   it("returns a redacted export error when a saved source image is missing", async () => {

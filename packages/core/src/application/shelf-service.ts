@@ -27,7 +27,7 @@ import {
 import {
   KindleError,
   type KindleDeliveryResult,
-  type KindleDevice,
+  type KindleDevices,
   type KindleStatus,
 } from "../domain/kindle.js";
 import { exportKindleEpub } from "../kindle/epub-exporter.js";
@@ -413,8 +413,15 @@ export class ShelfService {
     }
   }
 
-  async kindleDevices(signal?: AbortSignal): Promise<KindleDevice[]> {
-    return this.kindleGateway.devices(signal);
+  async kindleDevices(signal?: AbortSignal): Promise<KindleDevices> {
+    const devices = await this.kindleGateway.devices(signal);
+    const preferredTargetSerial = this.database.lastUsedKindleDeviceSerial();
+    return {
+      devices,
+      ...(preferredTargetSerial && devices.some((device) => device.serial === preferredTargetSerial)
+        ? { preferredTargetSerial }
+        : {}),
+    };
   }
 
   async sendToKindle(
@@ -474,6 +481,7 @@ export class ShelfService {
         },
         signal,
       );
+      this.database.setLastUsedKindleDeviceSerial(targetSerial);
       return { sku, itemId: item.id, revision: item.revision, targetSerial };
     } finally {
       this.kindleDeliveries.delete(deliveryKey);

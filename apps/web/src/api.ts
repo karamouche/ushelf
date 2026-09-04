@@ -70,6 +70,11 @@ export interface KindleDevice {
   serial: string;
 }
 
+export interface KindleDevices {
+  devices: KindleDevice[];
+  preferredTargetSerial?: string;
+}
+
 export interface KindleDeliveryResult {
   sku: string;
   itemId: string;
@@ -116,8 +121,8 @@ export async function getKindleStatus(): Promise<KindleStatus> {
   return request<KindleStatus>("/api/kindle/status");
 }
 
-export async function listKindleDevices(): Promise<KindleDevice[]> {
-  return (await request<{ devices: KindleDevice[] }>("/api/kindle/devices")).devices;
+export async function listKindleDevices(): Promise<KindleDevices> {
+  return request<KindleDevices>("/api/kindle/devices");
 }
 
 export async function sendToKindle(

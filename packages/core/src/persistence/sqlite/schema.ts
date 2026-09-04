@@ -33,3 +33,8 @@ export const deleteTokens = sqliteTable("delete_tokens", {
   itemId: text("item_id").notNull(),
   expiresAt: integer("expires_at").notNull(),
 });
+
+export const kindlePreferences = sqliteTable("kindle_preferences", {
+  id: integer("id").primaryKey(),
+  lastUsedDeviceSerial: text("last_used_device_serial").notNull(),
+});

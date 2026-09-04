@@ -175,6 +175,65 @@ test("reader sends source content to an explicitly selected Kindle device", asyn
   expect(requestedTarget).toBe("DEVICE1234");
 });
 
+test("reader defaults to the last successfully used Kindle device", async ({ page }) => {
+  const itemId = "kindle-remembered-device";
+  const devices = [
+    { name: "Paperwhite", serial: "DEVICE1234" },
+    { name: "Kindle app", serial: "APP5678" },
+  ];
+  let preferredTargetSerial = "";
+  const requestedTargets: string[] = [];
+
+  await page.context().route(`**/api/items/${itemId}`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ item: mermaidItem(itemId, "A complete saved source.") }),
+    });
+  });
+  await page.context().route(`**/api/items/${itemId}/kindle-deliveries`, async (route) => {
+    const targetSerial = (route.request().postDataJSON() as { targetSerial: string }).targetSerial;
+    requestedTargets.push(targetSerial);
+    preferredTargetSerial = targetSerial;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        sku: `sku-${requestedTargets.length}`,
+        itemId,
+        revision: "0123456789abcdef",
+        targetSerial,
+      }),
+    });
+  });
+  await page.context().route("**/api/kindle/status", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, accountName: "Reader", homeRegion: "NA" }),
+    });
+  });
+  await page.context().route("**/api/kindle/devices", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        devices,
+        ...(preferredTargetSerial ? { preferredTargetSerial } : {}),
+      }),
+    });
+  });
+
+  await page.goto(`/items/${itemId}`);
+  await page.getByRole("button", { name: "Send to Kindle" }).click();
+  await page.getByLabel("Kindle device").selectOption("APP5678");
+  await page.getByRole("button", { name: "Send to this device" }).click();
+  await expect(page.getByRole("status")).toContainText("Accepted by Send to Kindle");
+
+  await page.getByRole("button", { name: "Close Send to Kindle" }).click();
+  await page.getByRole("button", { name: "Send to Kindle" }).click();
+  await expect(page.getByLabel("Kindle device")).toHaveValue("APP5678");
+  await page.getByRole("button", { name: "Send to this device" }).click();
+  await expect(page.getByRole("status")).toContainText("Accepted by Send to Kindle");
+  expect(requestedTargets).toEqual(["APP5678", "APP5678"]);
+});
+
 test("reader explains how to configure Kindle when no credential exists", async ({ page }) => {
   const itemId = "kindle-unconfigured";
   await page.context().route(`**/api/items/${itemId}`, async (route) => {

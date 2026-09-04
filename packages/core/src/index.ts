@@ -27,5 +27,10 @@ export type {
 } from "./domain/library-item.js";
 export type { Recipe } from "./domain/recipe.js";
 export { KindleError, kindleTargetSchema } from "./domain/kindle.js";
-export type { KindleDeliveryResult, KindleDevice, KindleStatus } from "./domain/kindle.js";
+export type {
+  KindleDeliveryResult,
+  KindleDevice,
+  KindleDevices,
+  KindleStatus,
+} from "./domain/kindle.js";
 export type { KindleGateway } from "./kindle/kindle-bridge.js";
