@@ -74,6 +74,7 @@ COPY --from=build /app/apps/web/dist apps/web/dist
 COPY --from=build /app/packages/core/package.json packages/core/package.json
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/packages/core/drizzle packages/core/drizzle
+COPY LICENSE licenses/LICENSE
 COPY --from=build --chown=node:node /app/recipes /opt/ushelf/recipes
 COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
 COPY --from=build --chown=node:node /app/recipes /data/recipes
