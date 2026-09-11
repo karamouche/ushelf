@@ -194,7 +194,11 @@ func (d Docker) MCP(ctx context.Context) error {
 	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
-	args := append(d.oneShotArgs(), "-i", d.Settings.Image, "node", "apps/mcp/dist/index.js")
+	args := append(d.oneShotArgs(), "-i",
+		"-e", "USHELF_SECRETS_DIR=/data/secrets",
+		"-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
+		"-v", d.secretsDir()+":/data/secrets:ro",
+		d.Settings.Image, "node", "apps/mcp/dist/index.js")
 	return d.Runner.Run(ctx, d.Stdin, d.Stdout, d.Stderr, "docker", args...)
 }
 
