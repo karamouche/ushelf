@@ -30,6 +30,6 @@ ushelf kindle status
 ushelf kindle disconnect
 ```
 
-The credential is stored owner-readable at `~/.ushelf/secrets/kindle.json`. It is mounted read-only into the reader container and is never mounted into MCP or maintenance containers. If Amazon has already invalidated a credential, `ushelf kindle disconnect --local-only --yes` removes only the local copy.
+The credential is stored owner-readable at `~/.ushelf/secrets/kindle.json`. It is mounted read-only into the reader and MCP containers so either the web UI or a connected agent can deliver saved items, but it is never mounted into maintenance containers or exposed by an MCP tool. If Amazon has already invalidated a credential, `ushelf kindle disconnect --local-only --yes` removes only the local copy.
 
 Never direct tests at a real uShelf home. Use `--home` with a temporary directory and inject a fake `Runner` for unit tests.

@@ -117,31 +117,32 @@ Then try:
 Save this URL to uShelf.
 Search my uShelf for writing about local-first software.
 Show me unread pieces tagged architecture.
+Send the saved post about local-first software to my Kindle.
 ```
 
 ## Send a saved item to Kindle
 
-Connect an Amazon account from the native CLI, then use **Send to Kindle** in any reader page:
+Connect an Amazon account from the native CLI, then use **Send to Kindle** in any reader page or ask your connected agent to send an already-saved item:
 
 ```sh
 ushelf kindle setup
 ushelf kindle status
 ```
 
-The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader generates a reflowable EPUB from the canonical saved source and its local images, asks you to choose one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included. After a successful delivery, the reader remembers that device in local uShelf state and selects it by default next time when it is still registered.
+The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader or agent generates a reflowable EPUB from the canonical saved source and its local images, resolves one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included. After a successful delivery, uShelf remembers that device in local state and selects it by default next time when it is still registered; an agent asks you to choose when several devices are available and no valid preference exists.
 
 This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk). Amazon may change or disable it without notice. Disconnect it with `ushelf kindle disconnect`.
 
 ## What is included
 
-| Layer            | What it does                                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **CLI**          | Native installation, Docker lifecycle, updates, maintenance, and agent-client setup                                 |
-| **Core**         | URL safety, extraction, schemas, recipes, Markdown persistence, SQLite indexing, and all domain rules               |
-| **MCP**          | Ingestion, enrichment, search, reading state, refresh, re-enrichment, and confirmation-gated deletion tools         |
-| **HTTP server**  | A thin Hono API, production web hosting, index rebuilding, and Markdown import commands                             |
-| **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering |
-| **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                           |
+| Layer            | What it does                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **CLI**          | Native installation, Docker lifecycle, updates, maintenance, and agent-client setup                                          |
+| **Core**         | URL safety, extraction, schemas, recipes, Markdown persistence, SQLite indexing, and all domain rules                        |
+| **MCP**          | Ingestion, enrichment, search, reading state, Kindle delivery, refresh, re-enrichment, and confirmation-gated deletion tools |
+| **HTTP server**  | A thin Hono API, production web hosting, index rebuilding, and Markdown import commands                                      |
+| **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering          |
+| **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                                    |
 
 Extraction includes Readability for articles, layout-aware PDF.js text and embedded-figure extraction for attached PDFs, local image capture, sanitization, response and redirect limits, and private-network protections. PDF extraction joins wrapped paragraphs and conservatively recovers headings, lists, and simple tables as Markdown. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, vector-diagram reconstruction, complex multi-column layouts, DOCX, and PPTX are not yet supported.
 
