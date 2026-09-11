@@ -2,13 +2,13 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import BetterSqlite3 from "better-sqlite3";
-import { and, count, desc, eq, getTableColumns, lt, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, lte, lt, sql, type SQL } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { ingestionState } from "../../domain/ingestion-state.js";
 import type { ItemSummary, LibraryListQuery, ShelfItem } from "../../domain/library-item.js";
 import { itemSearch } from "./item-search.js";
-import { deleteTokens, items, kindlePreferences } from "./schema.js";
+import { deleteTokens, items, kindleDeliveryClaims, kindlePreferences } from "./schema.js";
 import * as schema from "./schema.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../../drizzle", import.meta.url));
@@ -221,6 +221,39 @@ export class ShelfDatabase {
         target: kindlePreferences.id,
         set: { lastUsedDeviceSerial },
       })
+      .run();
+  }
+
+  claimKindleDelivery(
+    itemId: string,
+    targetSerial: string,
+    claimToken: string,
+    expiresAt: number,
+    now = Date.now(),
+  ): boolean {
+    const claimed = this.database
+      .insert(kindleDeliveryClaims)
+      .values({ itemId, targetSerial, claimToken, expiresAt })
+      .onConflictDoUpdate({
+        target: [kindleDeliveryClaims.itemId, kindleDeliveryClaims.targetSerial],
+        set: { claimToken, expiresAt },
+        setWhere: lte(kindleDeliveryClaims.expiresAt, now),
+      })
+      .returning({ claimToken: kindleDeliveryClaims.claimToken })
+      .get();
+    return claimed?.claimToken === claimToken;
+  }
+
+  releaseKindleDelivery(itemId: string, targetSerial: string, claimToken: string): void {
+    this.database
+      .delete(kindleDeliveryClaims)
+      .where(
+        and(
+          eq(kindleDeliveryClaims.itemId, itemId),
+          eq(kindleDeliveryClaims.targetSerial, targetSerial),
+          eq(kindleDeliveryClaims.claimToken, claimToken),
+        ),
+      )
       .run();
   }
 
