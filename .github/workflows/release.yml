@@ -139,7 +139,9 @@ jobs:
           go -C apps/cli build -trimpath -ldflags "-s -w -X main.version=${RELEASE_VERSION} -X main.commit=${{ needs.context.outputs.sha }} -X main.buildDate=${built}" -o ushelf ./cmd/ushelf
           go version -m apps/cli/ushelf
           if [ "$GOOS/$GOARCH" = "linux/amd64" ]; then apps/cli/ushelf --version; fi
-          tar -C apps/cli -czf "ushelf_${GOOS}_${GOARCH}.tar.gz" ushelf
+          archive_root="$(mktemp -d)"
+          cp apps/cli/ushelf LICENSE "$archive_root/"
+          tar -C "$archive_root" -czf "ushelf_${GOOS}_${GOARCH}.tar.gz" ushelf LICENSE
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
