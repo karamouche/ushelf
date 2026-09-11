@@ -1,4 +1,9 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const developmentKindleBridgePath = fileURLToPath(
+  new URL("../../../../apps/cli/dist/ushelf-kindle-bridge", import.meta.url),
+);
 
 export interface UshelfConfig {
   root: string;
@@ -36,6 +41,6 @@ export function resolveConfig(root = process.env.USHELF_ROOT ?? process.cwd()): 
       process.env.USHELF_KINDLE_BRIDGE ??
       (process.env.NODE_ENV === "production"
         ? "/app/bin/ushelf-kindle-bridge"
-        : path.resolve("apps/cli/dist/ushelf-kindle-bridge")),
+        : developmentKindleBridgePath),
   };
 }
