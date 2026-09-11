@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/karamouche/ushelf/apps/cli/internal/kindle"
 )
 
 type fakeKindleProvider struct {
-	client *fakeKindleClient
+	client           *fakeKindleClient
+	registerDeadline *time.Time
 }
 
 func (f fakeKindleProvider) NewVerifier() (string, error) { return "verifier", nil }
@@ -22,14 +24,17 @@ func (f fakeKindleProvider) SignInURL(string) string      { return "https://www.
 func (f fakeKindleProvider) AuthorizationCode(string) (string, error) {
 	return "authorization-code", nil
 }
-func (f fakeKindleProvider) Register(context.Context, string, string) (kindle.Client, error) {
+func (f fakeKindleProvider) Register(ctx context.Context, _, _ string) (kindle.Client, error) {
+	recordDeadline(ctx, f.registerDeadline)
 	return f.client, nil
 }
 func (f fakeKindleProvider) Load(io.Reader) (kindle.Client, error) { return f.client, nil }
 
 type fakeKindleClient struct {
-	devices       []kindle.Device
-	deregisterErr error
+	devices            []kindle.Device
+	deregisterErr      error
+	deviceDeadline     *time.Time
+	deregisterDeadline *time.Time
 }
 
 func (f *fakeKindleClient) Marshal(writer io.Writer) error {
@@ -39,25 +44,46 @@ func (f *fakeKindleClient) Marshal(writer io.Writer) error {
 func (f *fakeKindleClient) AccountName() string { return "Test Account" }
 func (f *fakeKindleClient) HomeRegion() string  { return "NA" }
 func (f *fakeKindleClient) Serial() string      { return "INSTALLATION1234" }
-func (f *fakeKindleClient) Devices(context.Context) ([]kindle.Device, error) {
+
+func (f *fakeKindleClient) Devices(ctx context.Context) ([]kindle.Device, error) {
+	recordDeadline(ctx, f.deviceDeadline)
 	return f.devices, nil
 }
 func (f *fakeKindleClient) Send(context.Context, kindle.Document) (string, error) {
 	return "sku", nil
 }
-func (f *fakeKindleClient) Deregister(context.Context) error { return f.deregisterErr }
+func (f *fakeKindleClient) Deregister(ctx context.Context) error {
+	recordDeadline(ctx, f.deregisterDeadline)
+	return f.deregisterErr
+}
+
+func recordDeadline(ctx context.Context, target *time.Time) {
+	if target == nil {
+		return
+	}
+	*target, _ = ctx.Deadline()
+}
+
+func assertKindleDeadline(t *testing.T, deadline time.Time) {
+	t.Helper()
+	remaining := time.Until(deadline)
+	if deadline.IsZero() || remaining <= 0 || remaining > kindle.OperationTimeout {
+		t.Fatalf("Kindle operation deadline has %s remaining, want within (0, %s]", remaining, kindle.OperationTimeout)
+	}
+}
 
 func TestKindleSetupStoresOwnerReadableCredential(t *testing.T) {
 	home := t.TempDir()
 	stdout := &bytes.Buffer{}
 	client := &fakeKindleClient{}
+	var registerDeadline time.Time
 	root := NewRootCommand(
 		Dependencies{
 			Runner: &fakeRunner{},
 			Stdin:  strings.NewReader("yes\nhttps://www.amazon.com/gp/sendtokindle?openid.oa2.authorization_code=code\n"),
 			Stdout: stdout,
 			Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: client},
+			Kindle: fakeKindleProvider{client: client, registerDeadline: &registerDeadline},
 		},
 		BuildInfo{Version: "test"},
 	)
@@ -76,6 +102,7 @@ func TestKindleSetupStoresOwnerReadableCredential(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Kindle connected") {
 		t.Fatalf("missing success output: %s", stdout.String())
 	}
+	assertKindleDeadline(t, registerDeadline)
 }
 
 func TestKindleSetupRejectsUnexpectedRedirect(t *testing.T) {
@@ -106,10 +133,13 @@ func TestKindleStatusMasksDeviceSerial(t *testing.T) {
 		t.Fatal(err)
 	}
 	stdout := &bytes.Buffer{}
+	var deviceDeadline time.Time
 	root := NewRootCommand(
 		Dependencies{
 			Runner: &fakeRunner{}, Stdin: &bytes.Buffer{}, Stdout: stdout, Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: &fakeKindleClient{devices: []kindle.Device{{Name: "Paperwhite", Serial: "ABCDEFGHIJKL"}}}},
+			Kindle: fakeKindleProvider{client: &fakeKindleClient{
+				devices: []kindle.Device{{Name: "Paperwhite", Serial: "ABCDEFGHIJKL"}}, deviceDeadline: &deviceDeadline,
+			}},
 		},
 		BuildInfo{Version: "test"},
 	)
@@ -120,6 +150,7 @@ func TestKindleStatusMasksDeviceSerial(t *testing.T) {
 	if output := stdout.String(); !strings.Contains(output, "••••IJKL") || strings.Contains(output, "ABCDEFGHIJKL") {
 		t.Fatalf("device serial was not masked: %s", output)
 	}
+	assertKindleDeadline(t, deviceDeadline)
 }
 
 func TestKindleDisconnectPreservesCredentialWhenDeregistrationFails(t *testing.T) {
@@ -131,10 +162,13 @@ func TestKindleDisconnectPreservesCredentialWhenDeregistrationFails(t *testing.T
 	if err := os.WriteFile(credentialPath, []byte(`{"version":1}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	var deregisterDeadline time.Time
 	root := NewRootCommand(
 		Dependencies{
 			Runner: &fakeRunner{}, Stdin: &bytes.Buffer{}, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: &fakeKindleClient{deregisterErr: errors.New("Amazon unavailable")}},
+			Kindle: fakeKindleProvider{client: &fakeKindleClient{
+				deregisterErr: errors.New("Amazon unavailable"), deregisterDeadline: &deregisterDeadline,
+			}},
 		},
 		BuildInfo{Version: "test"},
 	)
@@ -145,4 +179,28 @@ func TestKindleDisconnectPreservesCredentialWhenDeregistrationFails(t *testing.T
 	if _, err := os.Stat(credentialPath); err != nil {
 		t.Fatal("credential was removed after deregistration failure")
 	}
+	assertKindleDeadline(t, deregisterDeadline)
+}
+
+func TestKindleDoctorUsesOperationDeadline(t *testing.T) {
+	home := t.TempDir()
+	credentialPath := kindle.CredentialPath(home)
+	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(credentialPath, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var deviceDeadline time.Time
+	state := commandState{
+		deps: Dependencies{
+			Stdout: &bytes.Buffer{},
+			Kindle: fakeKindleProvider{client: &fakeKindleClient{deviceDeadline: &deviceDeadline}},
+		},
+		settings: Settings{Home: home},
+	}
+
+	state.reportKindleDoctor(context.Background())
+
+	assertKindleDeadline(t, deviceDeadline)
 }

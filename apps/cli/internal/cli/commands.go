@@ -240,7 +240,9 @@ func (s *commandState) kindleSetupCommand() *cobra.Command {
 			if err != nil {
 				return errors.New("Amazon sign-in did not provide an authorization code")
 			}
-			client, err := s.deps.Kindle.Register(command.Context(), code, verifier)
+			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+			defer cancel()
+			client, err := s.deps.Kindle.Register(ctx, code, verifier)
 			if err != nil {
 				return fmt.Errorf("register Kindle connection: %w", err)
 			}
@@ -266,7 +268,9 @@ func (s *commandState) kindleStatusCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load Kindle credential: %w", err)
 			}
-			devices, err := client.Devices(command.Context())
+			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+			defer cancel()
+			devices, err := client.Devices(ctx)
 			if err != nil {
 				return fmt.Errorf("contact Amazon Send to Kindle: %w", err)
 			}
@@ -308,7 +312,9 @@ func (s *commandState) kindleDisconnectCommand() *cobra.Command {
 				}
 			}
 			if !localOnly {
-				if err := client.Deregister(command.Context()); err != nil {
+				ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+				defer cancel()
+				if err := client.Deregister(ctx); err != nil {
 					return fmt.Errorf("deregister Kindle connection: %w", err)
 				}
 			}
@@ -344,6 +350,8 @@ func (s *commandState) reportKindleDoctor(ctx context.Context) {
 		fmt.Fprintln(s.deps.Stdout, "INFO Kindle credential is invalid; run `ushelf kindle setup`")
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, kindle.OperationTimeout)
+	defer cancel()
 	devices, err := client.Devices(ctx)
 	if err != nil {
 		fmt.Fprintf(s.deps.Stdout, "INFO Kindle configured, but Amazon connection is unavailable: %v\n", err)

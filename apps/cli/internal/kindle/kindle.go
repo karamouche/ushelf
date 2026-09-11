@@ -6,11 +6,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/cyrgim/stk"
 )
 
-const CredentialFilename = "kindle.json"
+const (
+	CredentialFilename = "kindle.json"
+	OperationTimeout   = 110 * time.Second
+)
 
 type Device struct {
 	Name   string `json:"name"`

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cyrgim/stk"
 	"github.com/karamouche/ushelf/apps/cli/internal/kindle"
@@ -63,7 +62,7 @@ func run(args []string, input io.Reader, provider kindle.Provider) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 110*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), kindle.OperationTimeout)
 	defer cancel()
 
 	switch args[0] {
