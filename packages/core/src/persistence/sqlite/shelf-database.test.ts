@@ -104,7 +104,7 @@ describe("ShelfDatabase", () => {
     const sqlite = new BetterSqlite3(databasePath);
     const objects = sqlite
       .prepare(
-        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', 'kindle_preferences', '__drizzle_migrations') ORDER BY name",
+        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', 'kindle_delivery_claims', 'kindle_preferences', '__drizzle_migrations') ORDER BY name",
       )
       .all();
     const appliedBefore = sqlite
@@ -118,9 +118,10 @@ describe("ShelfDatabase", () => {
       { name: "item_search", type: "table" },
       { name: "items", type: "table" },
       { name: "items_source_hash", type: "index" },
+      { name: "kindle_delivery_claims", type: "table" },
       { name: "kindle_preferences", type: "table" },
     ]);
-    expect(appliedBefore.count).toBe(3);
+    expect(appliedBefore.count).toBe(4);
 
     const reopened = new ShelfDatabase(databasePath, itemsDir);
     reopened.close();
@@ -129,7 +130,7 @@ describe("ShelfDatabase", () => {
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
       .get() as { count: number };
     verification.close();
-    expect(appliedAfter.count).toBe(3);
+    expect(appliedAfter.count).toBe(4);
   });
 
   it("provides typed CRUD, filtering, FTS, path, and delete-token behavior", async () => {
@@ -209,6 +210,28 @@ describe("ShelfDatabase", () => {
     ).toThrow();
     expect(database.indexedCount()).toBe(1);
     expect(database.list({ query: "maintainable" })).toHaveLength(1);
+    database.close();
+  });
+
+  it("claims Kindle delivery atomically across instances and reclaims expired leases", async () => {
+    const { databasePath, database, itemsDir } = await fixture();
+    const otherDatabase = new ShelfDatabase(databasePath, itemsDir);
+    const itemId = "42ff9bd4-00a8-48e7-863f-279d828154e8";
+
+    expect(database.claimKindleDelivery(itemId, "DEVICE123", "first", 2_000, 1_000)).toBe(true);
+    expect(otherDatabase.claimKindleDelivery(itemId, "DEVICE123", "second", 3_000, 1_000)).toBe(
+      false,
+    );
+    expect(otherDatabase.claimKindleDelivery(itemId, "DEVICE123", "second", 4_000, 2_000)).toBe(
+      true,
+    );
+
+    database.releaseKindleDelivery(itemId, "DEVICE123", "first");
+    expect(database.claimKindleDelivery(itemId, "DEVICE123", "third", 5_000, 2_001)).toBe(false);
+    otherDatabase.releaseKindleDelivery(itemId, "DEVICE123", "second");
+    expect(database.claimKindleDelivery(itemId, "DEVICE123", "third", 5_000, 2_001)).toBe(true);
+
+    otherDatabase.close();
     database.close();
   });
 });

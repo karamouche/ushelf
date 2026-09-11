@@ -102,7 +102,7 @@ async function fixture(
   const gateway = new FakeKindleGateway();
   const service = new ShelfService(config, { kindleGateway: gateway });
   await service.initialize();
-  return { service, gateway, item };
+  return { config, service, gateway, item };
 }
 
 describe("ShelfService Kindle delivery", () => {
@@ -173,15 +173,17 @@ describe("ShelfService Kindle delivery", () => {
     expect(gateway.sent).toBeUndefined();
   });
 
-  it("rejects a concurrent delivery for the same item and device", async () => {
-    const { service, gateway, item } = await fixture();
+  it("rejects a concurrent delivery from an independent service sharing SQLite", async () => {
+    const { config, service, gateway, item } = await fixture();
+    const otherService = new ShelfService(config, { kindleGateway: gateway });
+    await otherService.initialize();
     let finish!: (value: string) => void;
     gateway.sendResult = new Promise((resolve) => {
       finish = resolve;
     });
     const first = service.sendToKindle(item.id, "DEVICE123");
     while (!gateway.sent) await new Promise((resolve) => setTimeout(resolve, 0));
-    await expect(service.sendToKindle(item.id, "DEVICE123")).rejects.toEqual(
+    await expect(otherService.sendToKindle(item.id, "DEVICE123")).rejects.toEqual(
       new KindleError(
         "delivery_in_progress",
         "A Kindle delivery for this item and device is already in progress.",
