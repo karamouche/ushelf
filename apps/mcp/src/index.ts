@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ShelfService, citationSchema, readingStatusSchema, sourceTypeSchema } from "@ushelf/core";
 import { z } from "zod";
+import { registerKindleTools } from "./kindle-tools.js";
 
 const service = new ShelfService();
 await service.initialize();
@@ -14,6 +15,8 @@ const json = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   structuredContent: value as Record<string, unknown>,
 });
+
+registerKindleTools(server, service);
 
 server.registerTool(
   "ingest_url",

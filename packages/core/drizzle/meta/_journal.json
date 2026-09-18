@@ -15,6 +15,20 @@
       "when": 1788276769413,
       "tag": "0001_item_search",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788458783619,
+      "tag": "0002_remember_kindle_device",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789164239046,
+      "tag": "0003_claim_kindle_delivery",
+      "breakpoints": true
     }
   ]
 }

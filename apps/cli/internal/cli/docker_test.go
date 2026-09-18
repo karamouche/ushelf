@@ -62,7 +62,7 @@ func TestStartUsesHardenedPortableMounts(t *testing.T) {
 		}
 	}
 	joined := strings.Join(run.args, " ")
-	for _, expected := range []string{"--read-only", "no-new-privileges:true", docker.libraryDir() + ":/data/library", docker.stateDir() + ":/data/state", "USHELF_STATE_DIR=/data/state", "127.0.0.1:43110:43110"} {
+	for _, expected := range []string{"--read-only", "no-new-privileges:true", docker.libraryDir() + ":/data/library", docker.stateDir() + ":/data/state", docker.secretsDir() + ":/data/secrets:ro", "USHELF_STATE_DIR=/data/state", "USHELF_SECRETS_DIR=/data/secrets", "127.0.0.1:43110:43110"} {
 		if !strings.Contains(joined, expected) {
 			t.Errorf("docker run missing %q: %s", expected, joined)
 		}
@@ -103,6 +103,25 @@ func TestMCPKeepsDiagnosticsOffStdout(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(last.args, " "), "apps/mcp/dist/index.js") {
 		t.Fatal("MCP entrypoint missing")
+	}
+	joined := strings.Join(last.args, " ")
+	for _, expected := range []string{docker.secretsDir() + ":/data/secrets:ro", "USHELF_SECRETS_DIR=/data/secrets", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("MCP container missing %q: %s", expected, joined)
+		}
+	}
+}
+
+func TestMaintenanceDoesNotReceiveKindleSecrets(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{output: ""}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	if err := docker.Maintenance(context.Background(), "rebuild-index"); err != nil {
+		t.Fatal(err)
+	}
+	last := runner.calls[len(runner.calls)-1]
+	joined := strings.Join(last.args, " ")
+	if strings.Contains(joined, "/data/secrets") || strings.Contains(joined, "USHELF_KINDLE_BRIDGE") {
+		t.Fatalf("maintenance container received Kindle access: %s", joined)
 	}
 }
 

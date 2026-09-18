@@ -28,7 +28,7 @@ type Docker struct {
 }
 
 func (d Docker) EnsureDirectories() error {
-	for _, path := range []string{d.libraryDir(), d.itemsDir(), d.historyDir(), d.recipesDir(), d.stateDir(), d.assetsDir()} {
+	for _, path := range []string{d.libraryDir(), d.itemsDir(), d.historyDir(), d.recipesDir(), d.stateDir(), d.assetsDir(), d.secretsDir()} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", path, err)
 		}
@@ -102,11 +102,12 @@ func (d Docker) Start(ctx context.Context) error {
 		"--init", "--restart", "unless-stopped", "--read-only", "--tmpfs", "/tmp",
 		"--security-opt", "no-new-privileges:true", "--user", currentUser(),
 		"-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data", "-e", "USHELF_STATE_DIR=/data/state",
+		"-e", "USHELF_SECRETS_DIR=/data/secrets", "-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
 		"-e", "USHELF_HOST=0.0.0.0", "-e", "USHELF_PORT=" + strconv.Itoa(d.Settings.Port),
 		"-e", "USHELF_WEB_BASE_PATH=" + d.Settings.BasePath,
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro",
-		"-v", d.stateDir() + ":/data/state", d.Settings.Image}
+		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro", d.Settings.Image}
 	if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", args...); err != nil {
 		return err
 	}
@@ -193,7 +194,11 @@ func (d Docker) MCP(ctx context.Context) error {
 	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
-	args := append(d.oneShotArgs(), "-i", d.Settings.Image, "node", "apps/mcp/dist/index.js")
+	args := append(d.oneShotArgs(), "-i",
+		"-e", "USHELF_SECRETS_DIR=/data/secrets",
+		"-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
+		"-v", d.secretsDir()+":/data/secrets:ro",
+		d.Settings.Image, "node", "apps/mcp/dist/index.js")
 	return d.Runner.Run(ctx, d.Stdin, d.Stdout, d.Stderr, "docker", args...)
 }
 
@@ -392,6 +397,7 @@ func (d Docker) historyDir() string { return filepath.Join(d.libraryDir(), "hist
 func (d Docker) recipesDir() string { return filepath.Join(d.Settings.Home, "recipes") }
 func (d Docker) stateDir() string   { return filepath.Join(d.Settings.Home, "state") }
 func (d Docker) assetsDir() string  { return filepath.Join(d.Settings.Home, "assets") }
+func (d Docker) secretsDir() string { return filepath.Join(d.Settings.Home, "secrets") }
 
 func (d Docker) publishHost() string {
 	if d.Settings.Host == "localhost" {
