@@ -177,21 +177,22 @@ The Compose setup builds the API and reader into one container, restarts after f
 
 ```sh
 cp .env.example .env
+printf 'USHELF_UID=%s\nUSHELF_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
 mkdir -p library/items library/history .ushelf/state .ushelf/secrets
 docker compose up -d --build
 docker compose ps
 ```
 
 For this repository-local Compose layout, configure Kindle credentials in the mounted
-secrets directory with `ushelf --home .ushelf kindle setup`.
+secrets directory with `ushelf --home .ushelf kindle setup`. If you already have a
+`.env` file, add `USHELF_UID` and `USHELF_GID` with your host user and group IDs before
+starting Compose. The service and maintenance container use these IDs to access the
+host-owned library, state, and owner-only Kindle credential.
 
 The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
 
-The container runs as UID/GID `1000:1000`. If the bind-mount directories are not writable by that user:
-
-```sh
-sudo chown -R 1000:1000 library .ushelf
-```
+The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in
+`.env`, which avoids changing ownership of the host files.
 
 Common operations:
 
