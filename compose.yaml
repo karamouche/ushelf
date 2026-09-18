@@ -9,6 +9,7 @@ services:
     image: ushelf:local
     init: true
     restart: unless-stopped
+    user: "${USHELF_UID:-1000}:${USHELF_GID:-1000}"
     env_file:
       - .env
     environment:
@@ -65,6 +66,7 @@ services:
     profiles: [tools]
     image: ushelf:local
     init: true
+    user: "${USHELF_UID:-1000}:${USHELF_GID:-1000}"
     environment:
       NODE_ENV: production
       USHELF_ROOT: /data
