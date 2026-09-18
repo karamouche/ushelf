@@ -14,7 +14,7 @@ func TestCommandTreeIncludesPublicContract(t *testing.T) {
 	want := map[string]bool{
 		"start": false, "stop": false, "status": false, "logs": false, "open": false,
 		"mcp": false, "setup": false, "doctor": false, "version": false, "update": false,
-		"rebuild-index": false, "import": false, "config": false,
+		"rebuild-index": false, "import": false, "config": false, "kindle": false,
 	}
 	for _, command := range root.Commands() {
 		if _, ok := want[command.Name()]; ok {

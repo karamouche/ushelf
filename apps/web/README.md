@@ -8,6 +8,7 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 - `src/App.tsx` contains the library and reader routes; `src/api.ts` is the API client.
 - The app does not read library files directly. All data and updates go through the API path below
   the configured `USHELF_WEB_BASE_PATH`.
+- Reader pages can send source-only EPUB editions to a Kindle device after credentials are configured through the native CLI, and default to the last successfully used device when it remains registered.
 - Rendered Markdown is sanitized. Only content-addressed item media is rendered; external or malformed image references are shown as omission text and never requested.
 - Fenced `mermaid` blocks render locally in strict mode. Invalid diagrams fall back to their original source code.
 - In development, Vite runs on `127.0.0.1:43111` and proxies the configured base path's `/api`

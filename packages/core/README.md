@@ -14,6 +14,7 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - Common Mermaid HTML forms are normalized to fenced `mermaid` Markdown so diagram source remains portable and canonical.
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
+- Kindle delivery builds a source-only EPUB with validated local media, then delegates device discovery and upload to the bundled Go bridge. Credentials remain outside Markdown and SQLite.
 - `USHELF_ROOT` controls the data root and defaults to `process.cwd()`.
 - `USHELF_STATE_DIR` optionally places disposable SQLite state outside that root; the native CLI uses it for `~/.ushelf/state`.
 - The package uses Drizzle ORM with `better-sqlite3`; Node.js 24+ remains the repository runtime requirement.
