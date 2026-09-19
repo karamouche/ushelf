@@ -20,6 +20,19 @@ config.json  library/  recipes/  state/  assets/  secrets/
 
 Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_HOME` changes the data root.
 
+## Command output
+
+Commands that change local state report each long-running step on stderr and write their final result to stdout. The output is plain text without terminal animation, so it remains readable when redirected or captured in CI:
+
+```text
+==> Preparing the uShelf home at /Users/you/.ushelf...
+==> Creating the uShelf service...
+==> Waiting for uShelf to become ready...
+Done: uShelf is ready at http://127.0.0.1:43110/
+```
+
+If startup becomes unhealthy or times out, the CLI includes a short recent service-log excerpt when available and points to `ushelf logs --tail 200` and `ushelf doctor`. Read-only commands retain their structured output, and `ushelf mcp` reserves stdout exclusively for protocol traffic.
+
 ## Kindle setup
 
 The optional Kindle integration uses Amazon's unofficial Send to Kindle protocol. Connect it interactively, inspect the registered devices, or remove the credential with:
