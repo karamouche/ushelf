@@ -30,6 +30,9 @@ type release struct {
 }
 
 func (s *commandState) update(ctx context.Context, checkOnly bool) error {
+	if !checkOnly {
+		s.actions().Step("Checking for uShelf updates...")
+	}
 	latest, err := fetchRelease(ctx)
 	if err != nil {
 		return err
@@ -37,7 +40,11 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	current := strings.TrimPrefix(s.build.Version, "v")
 	targetVersion := strings.TrimPrefix(latest.TagName, "v")
 	if targetVersion == current {
-		fmt.Fprintf(s.deps.Stdout, "uShelf %s is already current.\n", current)
+		if checkOnly {
+			fmt.Fprintf(s.deps.Stdout, "uShelf %s is already current.\n", current)
+		} else {
+			s.actions().Done("uShelf %s is already current", current)
+		}
 		return nil
 	}
 	if checkOnly {
@@ -57,6 +64,8 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if archiveURL == "" || checksumsURL == "" {
 		return fmt.Errorf("release %s does not contain %s and SHA256SUMS", latest.TagName, archiveName)
 	}
+	actions := s.actions()
+	actions.Step("Downloading uShelf %s...", targetVersion)
 	archive, err := download(ctx, archiveURL)
 	if err != nil {
 		return err
@@ -65,6 +74,7 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
+	actions.Step("Verifying the release archive...")
 	if err := verifyChecksum(archiveName, archive, string(checksums)); err != nil {
 		return err
 	}
@@ -79,7 +89,15 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if s.settings.Image != defaultImage(current) || os.Getenv("USHELF_IMAGE") != "" || s.flags.Changed != nil && s.flags.Changed("image") {
 		updatedSettings.Image = s.settings.Image
 	}
-	updatedDocker := Docker{Settings: updatedSettings, Runner: s.deps.Runner, Stdin: s.deps.Stdin, Stdout: s.deps.Stdout, Stderr: s.deps.Stderr}
+	updatedDocker := Docker{
+		Settings: updatedSettings,
+		Runner:   s.deps.Runner,
+		Stdin:    s.deps.Stdin,
+		Stdout:   s.deps.Stdout,
+		Stderr:   s.deps.Stderr,
+		Actions:  actions,
+	}
+	actions.Step("Preparing uShelf %s runtime assets...", targetVersion)
 	if err := updatedDocker.EnsureImage(ctx); err != nil {
 		return err
 	}
@@ -99,15 +117,17 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
+	actions.Step("Installing uShelf %s...", targetVersion)
 	if err := atomicWrite(executable, binary, 0o755); err != nil {
 		return fmt.Errorf("replace %s: %w", executable, err)
 	}
 	if wasRunning {
+		actions.Step("Restarting uShelf with the updated CLI...")
 		if err := s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, executable, restartArgs(updatedSettings)...); err != nil {
 			return fmt.Errorf("CLI updated, but restarting uShelf failed: %w", err)
 		}
 	}
-	fmt.Fprintf(s.deps.Stdout, "Updated uShelf to %s.\n", targetVersion)
+	actions.Done("Updated uShelf to %s", targetVersion)
 	return nil
 }
 

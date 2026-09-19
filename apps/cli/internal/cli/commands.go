@@ -76,7 +76,18 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 }
 
 func (s *commandState) docker() Docker {
-	return Docker{Settings: s.settings, Runner: s.deps.Runner, Stdin: s.deps.Stdin, Stdout: s.deps.Stdout, Stderr: s.deps.Stderr}
+	return Docker{
+		Settings: s.settings,
+		Runner:   s.deps.Runner,
+		Stdin:    s.deps.Stdin,
+		Stdout:   s.deps.Stdout,
+		Stderr:   s.deps.Stderr,
+		Actions:  s.actions(),
+	}
+}
+
+func (s *commandState) actions() *actionReporter {
+	return newActionReporter(s.deps.Stderr, s.deps.Stdout)
 }
 
 func (s *commandState) startCommand() *cobra.Command {
@@ -114,7 +125,13 @@ func (s *commandState) openCommand() *cobra.Command {
 		if runtime.GOOS == "darwin" {
 			name = "open"
 		}
-		return s.deps.Runner.Run(command.Context(), nil, s.deps.Stdout, s.deps.Stderr, name, s.settings.URL())
+		actions := s.actions()
+		actions.Step("Opening the uShelf reader...")
+		if err := runQuiet(command.Context(), s.deps.Runner, name, s.settings.URL()); err != nil {
+			return err
+		}
+		actions.Done("Opened %s", s.settings.URL())
+		return nil
 	}}
 }
 
@@ -242,6 +259,8 @@ func (s *commandState) kindleSetupCommand() *cobra.Command {
 			}
 			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
 			defer cancel()
+			actions := s.actions()
+			actions.Step("Connecting to Amazon Send to Kindle...")
 			client, err := s.deps.Kindle.Register(ctx, code, verifier)
 			if err != nil {
 				return fmt.Errorf("register Kindle connection: %w", err)
@@ -249,7 +268,7 @@ func (s *commandState) kindleSetupCommand() *cobra.Command {
 			if err := kindle.SaveCredential(credentialPath, client); err != nil {
 				return err
 			}
-			fmt.Fprintf(s.deps.Stdout, "Kindle connected for %q (%s).\n", client.AccountName(), client.HomeRegion())
+			actions.Done("Kindle connected for %q (%s)", client.AccountName(), client.HomeRegion())
 			return nil
 		},
 	}
@@ -314,14 +333,17 @@ func (s *commandState) kindleDisconnectCommand() *cobra.Command {
 			if !localOnly {
 				ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
 				defer cancel()
+				s.actions().Step("Deregistering uShelf from Amazon...")
 				if err := client.Deregister(ctx); err != nil {
 					return fmt.Errorf("deregister Kindle connection: %w", err)
 				}
+			} else {
+				s.actions().Step("Removing the local Kindle credential...")
 			}
 			if err := os.Remove(credentialPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("remove Kindle credential: %w", err)
 			}
-			fmt.Fprintln(s.deps.Stdout, "Kindle disconnected.")
+			s.actions().Done("Kindle disconnected")
 			return nil
 		},
 	}
@@ -436,7 +458,13 @@ func (s *commandState) configCommand() *cobra.Command {
 			if len(args) == 0 {
 				return command.Help()
 			}
-			return setConfigValue(s.settings.ConfigPath, args[0], args[1], false)
+			actions := s.actions()
+			actions.Step("Updating uShelf configuration...")
+			if err := setConfigValue(s.settings.ConfigPath, args[0], args[1], false); err != nil {
+				return err
+			}
+			actions.Done("Set %s to %s", args[0], args[1])
+			return nil
 		},
 	}
 	unset := &cobra.Command{
@@ -447,7 +475,13 @@ func (s *commandState) configCommand() *cobra.Command {
 		ValidArgs: []string{"host", "port", "base-path", "image"},
 		Example:   "  ushelf config unset base-path",
 		RunE: func(_ *cobra.Command, args []string) error {
-			return setConfigValue(s.settings.ConfigPath, args[0], "", true)
+			actions := s.actions()
+			actions.Step("Updating uShelf configuration...")
+			if err := setConfigValue(s.settings.ConfigPath, args[0], "", true); err != nil {
+				return err
+			}
+			actions.Done("Restored %s to its default", args[0])
+			return nil
 		},
 	}
 	command.AddCommand(show, path, set, unset)
