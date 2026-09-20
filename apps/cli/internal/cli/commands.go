@@ -1,16 +1,20 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/karamouche/ushelf/apps/cli/internal/kindle"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +26,7 @@ type Dependencies struct {
 	Runner         Runner
 	Stdin          io.Reader
 	Stdout, Stderr io.Writer
+	Kindle         kindle.Provider
 }
 
 type commandState struct {
@@ -32,6 +37,9 @@ type commandState struct {
 }
 
 func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
+	if deps.Kindle == nil {
+		deps.Kindle = kindle.STKProvider{}
+	}
 	state := &commandState{deps: deps, build: build}
 	root := &cobra.Command{
 		Use:           "ushelf",
@@ -62,13 +70,24 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 		state.startCommand(), state.stopCommand(), state.statusCommand(), state.logsCommand(),
 		state.openCommand(), state.mcpCommand(), state.setupCommand(), state.doctorCommand(),
 		state.versionCommand(), state.updateCommand(), state.rebuildCommand(), state.importCommand(),
-		state.configCommand(),
+		state.configCommand(), state.kindleCommand(),
 	)
 	return root
 }
 
 func (s *commandState) docker() Docker {
-	return Docker{Settings: s.settings, Runner: s.deps.Runner, Stdin: s.deps.Stdin, Stdout: s.deps.Stdout, Stderr: s.deps.Stderr}
+	return Docker{
+		Settings: s.settings,
+		Runner:   s.deps.Runner,
+		Stdin:    s.deps.Stdin,
+		Stdout:   s.deps.Stdout,
+		Stderr:   s.deps.Stderr,
+		Actions:  s.actions(),
+	}
+}
+
+func (s *commandState) actions() *actionReporter {
+	return newActionReporter(s.deps.Stderr, s.deps.Stdout)
 }
 
 func (s *commandState) startCommand() *cobra.Command {
@@ -106,7 +125,13 @@ func (s *commandState) openCommand() *cobra.Command {
 		if runtime.GOOS == "darwin" {
 			name = "open"
 		}
-		return s.deps.Runner.Run(command.Context(), nil, s.deps.Stdout, s.deps.Stderr, name, s.settings.URL())
+		actions := s.actions()
+		actions.Step("Opening the uShelf reader...")
+		if err := runQuiet(command.Context(), s.deps.Runner, name, s.settings.URL()); err != nil {
+			return err
+		}
+		actions.Done("Opened %s", s.settings.URL())
+		return nil
 	}}
 }
 
@@ -163,12 +188,213 @@ func (s *commandState) doctorCommand() *cobra.Command {
 				fmt.Fprintf(s.deps.Stdout, "INFO %s MCP not configured\n", client)
 			}
 		}
+		s.reportKindleDoctor(command.Context())
 		if failures > 0 {
 			return fmt.Errorf("doctor found %d problem(s)", failures)
 		}
 		fmt.Fprintf(s.deps.Stdout, "uShelf is ready to run from %s\n", s.settings.Home)
 		return nil
 	}}
+}
+
+func (s *commandState) kindleCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "kindle",
+		Short: "Connect and manage Amazon Send to Kindle",
+		Long: "Connect and manage the unofficial Amazon Send to Kindle integration.\n\n" +
+			"Authentication is handled by Amazon in your browser; uShelf stores only a device credential.",
+	}
+	command.AddCommand(s.kindleSetupCommand(), s.kindleStatusCommand(), s.kindleDisconnectCommand())
+	return command
+}
+
+func (s *commandState) kindleSetupCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "setup",
+		Short: "Connect uShelf to an Amazon Kindle account",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			credentialPath := kindle.CredentialPath(s.settings.Home)
+			if _, err := os.Stat(credentialPath); err == nil {
+				return errors.New("Kindle is already configured; run `ushelf kindle disconnect` first")
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("inspect Kindle credential: %w", err)
+			}
+
+			reader := bufio.NewReader(s.deps.Stdin)
+			fmt.Fprintln(s.deps.Stdout, "WARNING: This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol.")
+			fmt.Fprintln(s.deps.Stdout, "Amazon may change or disable it without notice. Use it only with an account you own.")
+			fmt.Fprint(s.deps.Stdout, "Continue? [y/N] ")
+			answer, err := reader.ReadString('\n')
+			if err != nil && !errors.Is(err, io.EOF) {
+				return err
+			}
+			if normalized := strings.ToLower(strings.TrimSpace(answer)); normalized != "y" && normalized != "yes" {
+				return errors.New("Kindle setup cancelled")
+			}
+
+			verifier, err := s.deps.Kindle.NewVerifier()
+			if err != nil {
+				return fmt.Errorf("create Amazon verifier: %w", err)
+			}
+			signInURL := s.deps.Kindle.SignInURL(verifier)
+			fmt.Fprintf(s.deps.Stdout, "\nOpen this Amazon sign-in URL:\n\n%s\n\n", signInURL)
+			opener := "xdg-open"
+			if runtime.GOOS == "darwin" {
+				opener = "open"
+			}
+			_ = s.deps.Runner.Run(command.Context(), nil, io.Discard, io.Discard, opener, signInURL)
+			fmt.Fprint(s.deps.Stdout, "After Amazon finishes redirecting, paste the full URL from the address bar:\n> ")
+			redirect, err := reader.ReadString('\n')
+			if err != nil && !errors.Is(err, io.EOF) {
+				return err
+			}
+			redirect = strings.TrimSpace(redirect)
+			if err := validateKindleRedirect(redirect); err != nil {
+				return err
+			}
+			code, err := s.deps.Kindle.AuthorizationCode(redirect)
+			if err != nil {
+				return errors.New("Amazon sign-in did not provide an authorization code")
+			}
+			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+			defer cancel()
+			actions := s.actions()
+			actions.Step("Connecting to Amazon Send to Kindle...")
+			client, err := s.deps.Kindle.Register(ctx, code, verifier)
+			if err != nil {
+				return fmt.Errorf("register Kindle connection: %w", err)
+			}
+			if err := kindle.SaveCredential(credentialPath, client); err != nil {
+				return err
+			}
+			actions.Done("Kindle connected for %q (%s)", client.AccountName(), client.HomeRegion())
+			return nil
+		},
+	}
+}
+
+func (s *commandState) kindleStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Check the Kindle connection and list devices",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			client, err := kindle.LoadCredential(s.deps.Kindle, kindle.CredentialPath(s.settings.Home))
+			if errors.Is(err, os.ErrNotExist) {
+				return errors.New("Kindle is not configured; run `ushelf kindle setup`")
+			}
+			if err != nil {
+				return fmt.Errorf("load Kindle credential: %w", err)
+			}
+			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+			defer cancel()
+			devices, err := client.Devices(ctx)
+			if err != nil {
+				return fmt.Errorf("contact Amazon Send to Kindle: %w", err)
+			}
+			fmt.Fprintf(s.deps.Stdout, "Account: %s\nRegion: %s\nDevices: %d\n", client.AccountName(), client.HomeRegion(), len(devices))
+			for _, device := range devices {
+				fmt.Fprintf(s.deps.Stdout, "  %s · %s\n", device.Name, maskedSerial(device.Serial))
+			}
+			return nil
+		},
+	}
+}
+
+func (s *commandState) kindleDisconnectCommand() *cobra.Command {
+	var yes, localOnly bool
+	command := &cobra.Command{
+		Use:   "disconnect",
+		Short: "Deregister uShelf and remove the Kindle credential",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			credentialPath := kindle.CredentialPath(s.settings.Home)
+			client, err := kindle.LoadCredential(s.deps.Kindle, credentialPath)
+			if errors.Is(err, os.ErrNotExist) {
+				return errors.New("Kindle is not configured")
+			}
+			if err != nil && !localOnly {
+				return fmt.Errorf("load Kindle credential: %w; use --local-only --yes only if it cannot be recovered", err)
+			}
+			if localOnly && !yes {
+				return errors.New("--local-only requires --yes because the Amazon registration will remain active")
+			}
+			if !yes {
+				fmt.Fprint(s.deps.Stdout, "Deregister uShelf from this Amazon account? [y/N] ")
+				answer, readErr := bufio.NewReader(s.deps.Stdin).ReadString('\n')
+				if readErr != nil && !errors.Is(readErr, io.EOF) {
+					return readErr
+				}
+				if normalized := strings.ToLower(strings.TrimSpace(answer)); normalized != "y" && normalized != "yes" {
+					return errors.New("Kindle disconnect cancelled")
+				}
+			}
+			if !localOnly {
+				ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
+				defer cancel()
+				s.actions().Step("Deregistering uShelf from Amazon...")
+				if err := client.Deregister(ctx); err != nil {
+					return fmt.Errorf("deregister Kindle connection: %w", err)
+				}
+			} else {
+				s.actions().Step("Removing the local Kindle credential...")
+			}
+			if err := os.Remove(credentialPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("remove Kindle credential: %w", err)
+			}
+			s.actions().Done("Kindle disconnected")
+			return nil
+		},
+	}
+	command.Flags().BoolVar(&yes, "yes", false, "confirm without prompting")
+	command.Flags().BoolVar(&localOnly, "local-only", false, "remove only the local credential")
+	return command
+}
+
+func (s *commandState) reportKindleDoctor(ctx context.Context) {
+	credentialPath := kindle.CredentialPath(s.settings.Home)
+	info, err := os.Stat(credentialPath)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(s.deps.Stdout, "INFO Kindle not configured")
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(s.deps.Stdout, "INFO Kindle credential unavailable: %v\n", err)
+		return
+	}
+	if info.Mode().Perm() != 0o600 {
+		fmt.Fprintf(s.deps.Stdout, "INFO Kindle credential permissions are %04o; expected 0600\n", info.Mode().Perm())
+		return
+	}
+	client, err := kindle.LoadCredential(s.deps.Kindle, credentialPath)
+	if err != nil {
+		fmt.Fprintln(s.deps.Stdout, "INFO Kindle credential is invalid; run `ushelf kindle setup`")
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, kindle.OperationTimeout)
+	defer cancel()
+	devices, err := client.Devices(ctx)
+	if err != nil {
+		fmt.Fprintf(s.deps.Stdout, "INFO Kindle configured, but Amazon connection is unavailable: %v\n", err)
+		return
+	}
+	fmt.Fprintf(s.deps.Stdout, "INFO Kindle connected (%d device(s))\n", len(devices))
+}
+
+func validateKindleRedirect(value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host != "www.amazon.com" || parsed.Path != "/gp/sendtokindle" {
+		return errors.New("paste the final https://www.amazon.com/gp/sendtokindle URL")
+	}
+	return nil
+}
+
+func maskedSerial(value string) string {
+	if len(value) <= 4 {
+		return value
+	}
+	return "••••" + value[len(value)-4:]
 }
 
 func supportedPlatform() error {
@@ -232,7 +458,13 @@ func (s *commandState) configCommand() *cobra.Command {
 			if len(args) == 0 {
 				return command.Help()
 			}
-			return setConfigValue(s.settings.ConfigPath, args[0], args[1], false)
+			actions := s.actions()
+			actions.Step("Updating uShelf configuration...")
+			if err := setConfigValue(s.settings.ConfigPath, args[0], args[1], false); err != nil {
+				return err
+			}
+			actions.Done("Set %s to %s", args[0], args[1])
+			return nil
 		},
 	}
 	unset := &cobra.Command{
@@ -243,7 +475,13 @@ func (s *commandState) configCommand() *cobra.Command {
 		ValidArgs: []string{"host", "port", "base-path", "image"},
 		Example:   "  ushelf config unset base-path",
 		RunE: func(_ *cobra.Command, args []string) error {
-			return setConfigValue(s.settings.ConfigPath, args[0], "", true)
+			actions := s.actions()
+			actions.Step("Updating uShelf configuration...")
+			if err := setConfigValue(s.settings.ConfigPath, args[0], "", true); err != nil {
+				return err
+			}
+			actions.Done("Restored %s to its default", args[0])
+			return nil
 		},
 	}
 	command.AddCommand(show, path, set, unset)

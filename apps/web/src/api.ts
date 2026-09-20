@@ -58,6 +58,30 @@ export interface ShelfItem {
   revision: string;
 }
 
+export interface KindleStatus {
+  configured: boolean;
+  accountName?: string;
+  homeRegion?: string;
+  error?: { code: string; message: string };
+}
+
+export interface KindleDevice {
+  name: string;
+  serial: string;
+}
+
+export interface KindleDevices {
+  devices: KindleDevice[];
+  preferredTargetSerial?: string;
+}
+
+export interface KindleDeliveryResult {
+  sku: string;
+  itemId: string;
+  revision: string;
+  targetSerial: string;
+}
+
 interface MediaCaptureStats {
   discovered: number;
   localized: number;
@@ -91,6 +115,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const value = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(value.error ?? `Request failed (${response.status})`);
   return value;
+}
+
+export async function getKindleStatus(): Promise<KindleStatus> {
+  return request<KindleStatus>("/api/kindle/status");
+}
+
+export async function listKindleDevices(): Promise<KindleDevices> {
+  return request<KindleDevices>("/api/kindle/devices");
+}
+
+export async function sendToKindle(
+  itemId: string,
+  targetSerial: string,
+): Promise<KindleDeliveryResult> {
+  return request<KindleDeliveryResult>(`/api/items/${itemId}/kindle-deliveries`, {
+    method: "POST",
+    body: JSON.stringify({ targetSerial }),
+  });
 }
 
 export async function listItems(filters: {

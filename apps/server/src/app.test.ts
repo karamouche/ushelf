@@ -2,10 +2,61 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ShelfService } from "@ushelf/core";
+import { KindleError, type ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
 
 describe("createApp base path", () => {
+  it("exposes Kindle status, devices, and targeted delivery", async () => {
+    const service = {
+      kindleStatus: async () => ({ configured: true, accountName: "Reader", homeRegion: "NA" }),
+      kindleDevices: async () => ({
+        devices: [{ name: "Paperwhite", serial: "DEVICE123" }],
+        preferredTargetSerial: "DEVICE123",
+      }),
+      sendToKindle: async (id: string, serial: string) => ({
+        sku: "sku-1",
+        itemId: id,
+        revision: "a".repeat(64),
+        targetSerial: serial,
+      }),
+    } as unknown as ShelfService;
+    const app = createApp(service);
+
+    await expect((await app.request("/api/kindle/status")).json()).resolves.toMatchObject({
+      configured: true,
+      accountName: "Reader",
+    });
+    await expect((await app.request("/api/kindle/devices")).json()).resolves.toEqual({
+      devices: [{ name: "Paperwhite", serial: "DEVICE123" }],
+      preferredTargetSerial: "DEVICE123",
+    });
+    const delivery = await app.request("/api/items/item-id/kindle-deliveries", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetSerial: "DEVICE123" }),
+    });
+    expect(delivery.status).toBe(200);
+    await expect(delivery.json()).resolves.toMatchObject({
+      sku: "sku-1",
+      itemId: "item-id",
+      targetSerial: "DEVICE123",
+    });
+  });
+
+  it("returns stable Kindle error codes", async () => {
+    const service = {
+      kindleDevices: async () => {
+        throw new KindleError("credential_invalid", "Reconnect Kindle.");
+      },
+    } as unknown as ShelfService;
+    const response = await createApp(service).request("/api/kindle/devices");
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "Reconnect Kindle.",
+      code: "credential_invalid",
+    });
+  });
+
   it("serves retained PDFs inline without exposing their storage path", async () => {
     const service = {
       getOriginalFile: async () => ({

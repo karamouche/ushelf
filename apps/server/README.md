@@ -4,7 +4,7 @@ The HTTP and command-line adapter for uShelf. It exposes the library to the web 
 
 ## What to know
 
-- `src/app.ts` defines a small Hono API for health checks, listing/searching items, reading an item, serving validated local item media, updating reading progress, and listing recipes.
+- `src/app.ts` defines a small Hono API for health checks, listing/searching items, reading an item, serving validated local item media, updating reading progress, listing recipes, and targeted Kindle delivery.
 - `src/index.ts` initializes `ShelfService` and starts the Node server.
 - `src/cli.ts` implements the `rebuild-index` and `import` maintenance commands.
 - Business rules, extraction, Markdown persistence, and SQLite indexing belong in `@ushelf/core`, not this package.
