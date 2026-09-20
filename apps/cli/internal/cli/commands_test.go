@@ -14,7 +14,7 @@ func TestCommandTreeIncludesPublicContract(t *testing.T) {
 	want := map[string]bool{
 		"start": false, "stop": false, "status": false, "logs": false, "open": false,
 		"mcp": false, "setup": false, "doctor": false, "version": false, "update": false,
-		"rebuild-index": false, "import": false, "config": false,
+		"rebuild-index": false, "import": false, "config": false, "kindle": false,
 	}
 	for _, command := range root.Commands() {
 		if _, ok := want[command.Name()]; ok {
@@ -108,5 +108,24 @@ func TestConfigShowUsesCLIKeyNames(t *testing.T) {
 	}
 	if strings.Contains(output, `"basePath"`) {
 		t.Fatalf("config show contains storage key name:\n%s", output)
+	}
+}
+
+func TestConfigSetReportsProgressAndResultOnSeparateStreams(t *testing.T) {
+	home := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand(
+		Dependencies{Runner: &fakeRunner{}, Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr},
+		BuildInfo{Version: "1.2.3"},
+	)
+	root.SetArgs([]string{"--home", home, "config", "set", "port", "43120"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if stderr.String() != "==> Updating uShelf configuration...\n" {
+		t.Fatalf("unexpected progress output: %q", stderr.String())
+	}
+	if stdout.String() != "Done: Set port to 43120\n" {
+		t.Fatalf("unexpected result output: %q", stdout.String())
 	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -19,16 +20,22 @@ import (
 
 const containerName = "ushelf"
 
+var (
+	healthTimeout      = 45 * time.Second
+	healthPollInterval = 500 * time.Millisecond
+)
+
 type Docker struct {
 	Settings Settings
 	Runner   Runner
 	Stdin    io.Reader
 	Stdout   io.Writer
 	Stderr   io.Writer
+	Actions  *actionReporter
 }
 
 func (d Docker) EnsureDirectories() error {
-	for _, path := range []string{d.libraryDir(), d.itemsDir(), d.historyDir(), d.recipesDir(), d.stateDir(), d.assetsDir()} {
+	for _, path := range []string{d.libraryDir(), d.itemsDir(), d.historyDir(), d.recipesDir(), d.stateDir(), d.assetsDir(), d.secretsDir()} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", path, err)
 		}
@@ -40,8 +47,8 @@ func (d Docker) EnsureImage(ctx context.Context) error {
 	if _, err := d.Runner.Output(ctx, "docker", "image", "inspect", d.Settings.Image); err == nil {
 		return nil
 	}
-	fmt.Fprintf(d.Stderr, "Pulling %s...\n", d.Settings.Image)
-	return d.Runner.Run(ctx, nil, d.Stderr, d.Stderr, "docker", "pull", d.Settings.Image)
+	d.step("Downloading runtime image %s...", d.Settings.Image)
+	return d.runQuiet(ctx, "docker", "pull", d.Settings.Image)
 }
 
 func (d Docker) SeedRecipe(ctx context.Context) error {
@@ -51,6 +58,7 @@ func (d Docker) SeedRecipe(ctx context.Context) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	d.step("Installing the default enrichment recipe...")
 	if err := d.EnsureImage(ctx); err != nil {
 		return err
 	}
@@ -62,6 +70,7 @@ func (d Docker) SeedRecipe(ctx context.Context) error {
 }
 
 func (d Docker) Start(ctx context.Context) error {
+	d.step("Preparing the uShelf home at %s...", d.Settings.Home)
 	if err := d.EnsureDirectories(); err != nil {
 		return err
 	}
@@ -87,30 +96,45 @@ func (d Docker) Start(ctx context.Context) error {
 				return runningErr
 			}
 			if strings.TrimSpace(running) != "true" {
-				if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "start", containerName); err != nil {
+				d.step("Starting the existing uShelf service...")
+				if err := d.runQuiet(ctx, "docker", "start", containerName); err != nil {
 					return err
 				}
+			} else {
+				d.step("Checking the running uShelf service...")
 			}
-			return d.waitForHealth(ctx)
+			if err := d.waitForHealth(ctx); err != nil {
+				return err
+			}
+			d.done("uShelf is ready at %s", d.Settings.URL())
+			return nil
 		}
-		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "rm", "-f", containerName); err != nil {
+		d.step("Recreating the uShelf service for the current configuration...")
+		if err := d.runQuiet(ctx, "docker", "rm", "-f", containerName); err != nil {
 			return err
 		}
+	} else {
+		d.step("Creating the uShelf service...")
 	}
 	args := []string{"run", "-d", "--name", containerName,
 		"--label", "io.ushelf.managed=true", "--label", "io.ushelf.config=" + hash,
 		"--init", "--restart", "unless-stopped", "--read-only", "--tmpfs", "/tmp",
 		"--security-opt", "no-new-privileges:true", "--user", currentUser(),
 		"-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data", "-e", "USHELF_STATE_DIR=/data/state",
+		"-e", "USHELF_SECRETS_DIR=/data/secrets", "-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
 		"-e", "USHELF_HOST=0.0.0.0", "-e", "USHELF_PORT=" + strconv.Itoa(d.Settings.Port),
 		"-e", "USHELF_WEB_BASE_PATH=" + d.Settings.BasePath,
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro",
-		"-v", d.stateDir() + ":/data/state", d.Settings.Image}
-	if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", args...); err != nil {
+		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro", d.Settings.Image}
+	if err := d.runQuiet(ctx, "docker", args...); err != nil {
 		return err
 	}
-	return d.waitForHealth(ctx)
+	if err := d.waitForHealth(ctx); err != nil {
+		return err
+	}
+	d.done("uShelf is ready at %s", d.Settings.URL())
+	return nil
 }
 
 func (d Docker) Stop(ctx context.Context) error {
@@ -119,10 +143,15 @@ func (d Docker) Stop(ctx context.Context) error {
 		return err
 	}
 	if !exists {
-		fmt.Fprintln(d.Stdout, "uShelf is not running.")
+		d.done("uShelf is already stopped")
 		return nil
 	}
-	return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "rm", "-f", containerName)
+	d.step("Stopping the uShelf service...")
+	if err := d.runQuiet(ctx, "docker", "rm", "-f", containerName); err != nil {
+		return err
+	}
+	d.done("uShelf stopped; your library is unchanged")
+	return nil
 }
 
 func (d Docker) IsRunning(ctx context.Context) (bool, error) {
@@ -193,7 +222,11 @@ func (d Docker) MCP(ctx context.Context) error {
 	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
-	args := append(d.oneShotArgs(), "-i", d.Settings.Image, "node", "apps/mcp/dist/index.js")
+	args := append(d.oneShotArgs(), "-i",
+		"-e", "USHELF_SECRETS_DIR=/data/secrets",
+		"-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
+		"-v", d.secretsDir()+":/data/secrets:ro",
+		d.Settings.Image, "node", "apps/mcp/dist/index.js")
 	return d.Runner.Run(ctx, d.Stdin, d.Stdout, d.Stderr, "docker", args...)
 }
 
@@ -204,24 +237,16 @@ func (d Docker) Maintenance(ctx context.Context, args ...string) error {
 	if err := d.EnsureImage(ctx); err != nil {
 		return err
 	}
-	if _, err := d.managedContainerExists(ctx); err != nil {
-		return err
-	}
-	wasRunning, err := d.IsRunning(ctx)
-	if err != nil {
-		return err
-	}
-	if wasRunning {
-		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "stop", containerName); err != nil {
-			return err
-		}
-		defer func() {
-			_ = d.Runner.Run(context.Background(), nil, d.Stdout, d.Stderr, "docker", "start", containerName)
-		}()
-	}
 	command := append(d.oneShotArgs(), d.Settings.Image, "node", "apps/server/dist/cli.js")
 	command = append(command, args...)
-	return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", command...)
+	d.step("Running index maintenance...")
+	if err := d.withServiceStopped(ctx, func() error {
+		return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", command...)
+	}); err != nil {
+		return err
+	}
+	d.done("Index rebuild completed")
+	return nil
 }
 
 func (d Docker) Import(ctx context.Context, source string) error {
@@ -242,6 +267,18 @@ func (d Docker) Import(ctx context.Context, source string) error {
 	if err := d.EnsureImage(ctx); err != nil {
 		return err
 	}
+	args := append(d.oneShotArgs(), "-v", abs+":/import/item.md:ro", d.Settings.Image, "node", "apps/server/dist/cli.js", "import", "/import/item.md")
+	d.step("Importing %s...", abs)
+	if err := d.withServiceStopped(ctx, func() error {
+		return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", args...)
+	}); err != nil {
+		return err
+	}
+	d.done("Markdown item imported")
+	return nil
+}
+
+func (d Docker) withServiceStopped(ctx context.Context, operation func() error) error {
 	if _, err := d.managedContainerExists(ctx); err != nil {
 		return err
 	}
@@ -250,15 +287,18 @@ func (d Docker) Import(ctx context.Context, source string) error {
 		return err
 	}
 	if wasRunning {
-		if err := d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", "stop", containerName); err != nil {
+		d.step("Pausing the uShelf service...")
+		if err := d.runQuiet(ctx, "docker", "stop", containerName); err != nil {
 			return err
 		}
-		defer func() {
-			_ = d.Runner.Run(context.Background(), nil, d.Stdout, d.Stderr, "docker", "start", containerName)
-		}()
 	}
-	args := append(d.oneShotArgs(), "-v", abs+":/import/item.md:ro", d.Settings.Image, "node", "apps/server/dist/cli.js", "import", "/import/item.md")
-	return d.Runner.Run(ctx, nil, d.Stdout, d.Stderr, "docker", args...)
+	operationErr := operation()
+	if !wasRunning {
+		return operationErr
+	}
+	d.step("Restoring the uShelf service...")
+	restartErr := d.runQuiet(context.Background(), "docker", "start", containerName)
+	return errors.Join(operationErr, restartErr)
 }
 
 func (d Docker) oneShotArgs() []string {
@@ -268,25 +308,73 @@ func (d Docker) oneShotArgs() []string {
 }
 
 func (d Docker) waitForHealth(ctx context.Context) error {
-	deadline := time.Now().Add(45 * time.Second)
+	d.step("Waiting for uShelf to become ready...")
+	deadline := time.Now().Add(healthTimeout)
 	for time.Now().Before(deadline) {
 		status, err := d.inspect(ctx, "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}")
 		if err == nil {
 			switch strings.TrimSpace(status) {
 			case "healthy", "running":
-				fmt.Fprintf(d.Stdout, "uShelf is ready at %s\n", d.Settings.URL())
 				return nil
 			case "unhealthy", "exited", "dead":
-				return fmt.Errorf("uShelf container became %s", strings.TrimSpace(status))
+				return d.startupFailure(ctx, fmt.Errorf("uShelf container became %s", strings.TrimSpace(status)))
 			}
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(healthPollInterval):
 		}
 	}
-	return fmt.Errorf("timed out waiting for uShelf health check")
+	return d.startupFailure(ctx, errors.New("timed out waiting for uShelf health check"))
+}
+
+func (d Docker) startupFailure(ctx context.Context, cause error) error {
+	var message strings.Builder
+	message.WriteString(cause.Error())
+	if logs, err := d.recentLogs(ctx, 20); err == nil && strings.TrimSpace(logs) != "" {
+		message.WriteString("\n\nRecent service logs:\n")
+		for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+			fmt.Fprintf(&message, "  %s\n", line)
+		}
+	}
+	message.WriteString("\nNext steps:\n  ushelf logs --tail 200\n  ushelf doctor")
+	return errors.New(message.String())
+}
+
+func (d Docker) recentLogs(ctx context.Context, tail int) (string, error) {
+	var output bytes.Buffer
+	err := d.Runner.Run(ctx, nil, &output, &output, "docker", "logs", "--tail", strconv.Itoa(tail), containerName)
+	return output.String(), err
+}
+
+func (d Docker) runQuiet(ctx context.Context, name string, args ...string) error {
+	var output bytes.Buffer
+	if err := d.Runner.Run(ctx, nil, &output, &output, name, args...); err != nil {
+		if detail := strings.TrimSpace(output.String()); detail != "" {
+			return fmt.Errorf("%w: %s", err, detail)
+		}
+		return err
+	}
+	return nil
+}
+
+func (d Docker) step(format string, args ...any) {
+	if d.Actions != nil {
+		d.Actions.Step(format, args...)
+		return
+	}
+	if d.Stderr != nil {
+		fmt.Fprintf(d.Stderr, "==> "+format+"\n", args...)
+	}
+}
+
+func (d Docker) done(format string, args ...any) {
+	if d.Actions != nil {
+		d.Actions.Done(format, args...)
+		return
+	}
+	fmt.Fprintf(d.Stdout, format+"\n", args...)
 }
 
 func (d Docker) inspect(ctx context.Context, format string) (string, error) {
@@ -392,6 +480,7 @@ func (d Docker) historyDir() string { return filepath.Join(d.libraryDir(), "hist
 func (d Docker) recipesDir() string { return filepath.Join(d.Settings.Home, "recipes") }
 func (d Docker) stateDir() string   { return filepath.Join(d.Settings.Home, "state") }
 func (d Docker) assetsDir() string  { return filepath.Join(d.Settings.Home, "assets") }
+func (d Docker) secretsDir() string { return filepath.Join(d.Settings.Home, "secrets") }
 
 func (d Docker) publishHost() string {
 	if d.Settings.Host == "localhost" {

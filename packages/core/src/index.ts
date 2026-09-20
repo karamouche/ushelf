@@ -1,5 +1,5 @@
 export { ShelfService } from "./application/shelf-service.js";
-export type { IngestResult } from "./application/shelf-service.js";
+export type { IngestResult, ShelfServiceDependencies } from "./application/shelf-service.js";
 export { resolveConfig } from "./configuration/ushelf-config.js";
 export type { UshelfConfig } from "./configuration/ushelf-config.js";
 export {
@@ -26,3 +26,11 @@ export type {
   SourceType,
 } from "./domain/library-item.js";
 export type { Recipe } from "./domain/recipe.js";
+export { KindleError, kindleTargetSchema } from "./domain/kindle.js";
+export type {
+  KindleDeliveryResult,
+  KindleDevice,
+  KindleDevices,
+  KindleStatus,
+} from "./domain/kindle.js";
+export type { KindleGateway } from "./kindle/kindle-bridge.js";

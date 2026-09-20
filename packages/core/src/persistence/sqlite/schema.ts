@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { IngestionState, ReadingStatus, SourceType } from "../../domain/library-item.js";
 
 export const items = sqliteTable(
@@ -33,3 +33,19 @@ export const deleteTokens = sqliteTable("delete_tokens", {
   itemId: text("item_id").notNull(),
   expiresAt: integer("expires_at").notNull(),
 });
+
+export const kindlePreferences = sqliteTable("kindle_preferences", {
+  id: integer("id").primaryKey(),
+  lastUsedDeviceSerial: text("last_used_device_serial").notNull(),
+});
+
+export const kindleDeliveryClaims = sqliteTable(
+  "kindle_delivery_claims",
+  {
+    itemId: text("item_id").notNull(),
+    targetSerial: text("target_serial").notNull(),
+    claimToken: text("claim_token").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.targetSerial] })],
+);

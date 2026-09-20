@@ -29,6 +29,8 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 		}
 		return nil
 	}
+	actions := s.actions()
+	actions.Step("Preparing uShelf agent assets...")
 	docker := s.docker()
 	if err := docker.EnsureDirectories(); err != nil {
 		return err
@@ -41,13 +43,14 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 		return err
 	}
 	for _, current := range clients {
+		actions.Step("Configuring %s...", current)
 		if err := s.configureClient(ctx, current, executable, force); err != nil {
 			return err
 		}
 		if err := linkSkills(current, skillsRoot, force); err != nil {
 			return err
 		}
-		fmt.Fprintf(s.deps.Stdout, "Configured %s for uShelf.\n", current)
+		actions.Done("Configured %s for uShelf", current)
 	}
 	return nil
 }
@@ -78,7 +81,7 @@ func (s *commandState) configureClient(ctx context.Context, client, executable s
 		args = append(args, "--scope", "user")
 	}
 	args = append(args, "ushelf", "--", executable, "--home", s.settings.Home, "mcp")
-	return s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, client, args...)
+	return runQuiet(ctx, s.deps.Runner, client, args...)
 }
 
 func clientConfigurationMatches(client, output, executable, home string) (bool, error) {
@@ -140,6 +143,7 @@ func (d Docker) ExtractSkills(ctx context.Context) (string, error) {
 	if _, err := os.Stat(target); err == nil {
 		return target, nil
 	}
+	d.step("Extracting bundled agent skills...")
 	archive, err := d.Runner.Output(ctx, "docker", "run", "--rm", "--entrypoint", "tar", d.Settings.Image, "-C", "/opt/ushelf/skills", "-cf", "-", ".")
 	if err != nil {
 		return "", fmt.Errorf("extract skills from image: %w", err)
