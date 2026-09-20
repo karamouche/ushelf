@@ -1,10 +1,26 @@
 import { lookup } from "node:dns/promises";
-import { isIP, type LookupFunction } from "node:net";
+import { BlockList, isIP, type LookupFunction } from "node:net";
 import { Agent, fetch } from "undici";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const REDIRECT_LIMIT = 5;
 type UndiciResponse = Awaited<ReturnType<typeof fetch>>;
+
+const privateNetworkBlocks = new BlockList();
+privateNetworkBlocks.addSubnet("0.0.0.0", 8, "ipv4");
+privateNetworkBlocks.addSubnet("10.0.0.0", 8, "ipv4");
+privateNetworkBlocks.addSubnet("100.64.0.0", 10, "ipv4");
+privateNetworkBlocks.addSubnet("127.0.0.0", 8, "ipv4");
+privateNetworkBlocks.addSubnet("169.254.0.0", 16, "ipv4");
+privateNetworkBlocks.addSubnet("172.16.0.0", 12, "ipv4");
+privateNetworkBlocks.addSubnet("192.168.0.0", 16, "ipv4");
+privateNetworkBlocks.addSubnet("224.0.0.0", 4, "ipv4");
+privateNetworkBlocks.addSubnet("240.0.0.0", 4, "ipv4");
+privateNetworkBlocks.addAddress("::", "ipv6");
+privateNetworkBlocks.addAddress("::1", "ipv6");
+privateNetworkBlocks.addSubnet("fc00::", 7, "ipv6");
+privateNetworkBlocks.addSubnet("fe80::", 10, "ipv6");
+privateNetworkBlocks.addSubnet("ff00::", 8, "ipv6");
 
 export interface PublicBytes {
   bytes: Uint8Array;
@@ -131,25 +147,8 @@ export function pinnedLookup(address: string): LookupFunction {
 
 export function isPrivateAddress(address: string): boolean {
   const normalized = address.toLowerCase();
-  if (
-    normalized === "::1" ||
-    normalized === "::" ||
-    normalized.startsWith("fe80:") ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd")
-  )
-    return true;
-  const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
-  const ipv4 = mapped ?? (isIP(normalized) === 4 ? normalized : undefined);
-  if (!ipv4) return false;
-  const [a = 0, b = 0] = ipv4.split(".").map(Number);
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224
-  );
+  const family = isIP(normalized);
+  if (family === 4) return privateNetworkBlocks.check(normalized, "ipv4");
+  if (family === 6) return privateNetworkBlocks.check(normalized, "ipv6");
+  return false;
 }
