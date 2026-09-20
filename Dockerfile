@@ -89,6 +89,7 @@ COPY --from=build /app/packages/core/package.json packages/core/package.json
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/packages/core/drizzle packages/core/drizzle
 COPY --from=kindle-bridge-build /out/ushelf-kindle-bridge bin/ushelf-kindle-bridge
+COPY LICENSE licenses/LICENSE
 COPY THIRD_PARTY_NOTICES.md licenses/THIRD_PARTY_NOTICES.md
 COPY --from=build --chown=node:node /app/recipes /opt/ushelf/recipes
 COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
