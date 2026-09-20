@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { UshelfConfig } from "../../configuration/ushelf-config.js";
 import type { ItemFrontmatter, ShelfItem } from "../../domain/library-item.js";
@@ -46,10 +46,10 @@ export class MarkdownRepository {
     const destination = path.join(
       this.config.itemsDir,
       imported.capturedAt.slice(0, 4),
-      path.basename(sourcePath),
+      `${slugify(imported.title)}--${imported.id}.md`,
     );
     await mkdir(path.dirname(destination), { recursive: true });
-    await atomicWrite(destination, raw);
+    await atomicCreate(destination, raw);
     return parseItemMarkdown(raw, destination);
   }
 
@@ -171,6 +171,25 @@ async function atomicWrite(filePath: string, contents: string | Uint8Array): Pro
     typeof contents === "string" ? { encoding: "utf8", mode: 0o600 } : { mode: 0o600 },
   );
   await rename(temporaryPath, filePath);
+}
+
+async function atomicCreate(filePath: string, contents: string | Uint8Array): Promise<void> {
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(
+      temporaryPath,
+      contents,
+      typeof contents === "string" ? { encoding: "utf8", mode: 0o600 } : { mode: 0o600 },
+    );
+    await link(temporaryPath, filePath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+      throw new Error(`An item file already exists at ${filePath}`);
+    }
+    throw error;
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
 async function walkMarkdown(root: string): Promise<string[]> {
