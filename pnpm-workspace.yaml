@@ -6,3 +6,9 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   sharp: true
+
+overrides:
+  fast-uri: 3.1.6
+  hono: 4.13.5
+  js-yaml@3: 3.15.2
+  qs: 6.16.0
