@@ -628,11 +628,20 @@ export class ShelfService {
   async importMarkdown(sourcePath: string): Promise<ShelfItem> {
     const resolvedPath = path.resolve(sourcePath);
     const imported = await this.repository.load(resolvedPath);
+    if (this.database.hasItem(imported.id)) {
+      throw new Error(`An item with ID ${imported.id} already exists`);
+    }
     const duplicate =
       imported.sourceType === "document"
         ? this.database.findBySourceHash(imported.file.sha256)
         : this.database.findByCanonicalUrl(imported.canonicalUrl);
-    if (duplicate) throw new Error("An item with this canonical URL already exists");
+    if (duplicate) {
+      throw new Error(
+        imported.sourceType === "document"
+          ? "An item with this source file already exists"
+          : "An item with this canonical URL already exists",
+      );
+    }
     const filenames = [
       ...assertLocalMarkdownImages(imported.sourceMarkdown, imported.id),
       ...assertLocalMarkdownImages(imported.insightMarkdown, imported.id),
