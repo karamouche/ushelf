@@ -34,6 +34,7 @@
     "sanitize-html": "^2.17.0",
     "sharp": "^0.34.3",
     "turndown": "^7.2.1",
+    "undici": "^7.29.1",
     "unified": "^11.0.5",
     "zod": "^4.1.5"
   },
