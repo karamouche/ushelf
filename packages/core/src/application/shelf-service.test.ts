@@ -221,6 +221,14 @@ describe("agent-driven workflow", () => {
     ).rejects.toThrow(/not present/);
   });
 
+  it("rejects an imported item whose ID is already in the library", async () => {
+    const { service, item } = await fixture();
+
+    await expect(service.importMarkdown(item.filePath)).rejects.toThrow(
+      `An item with ID ${item.id} already exists`,
+    );
+  });
+
   it("shares portable index paths across different roots", async () => {
     const { root, config, service, item } = await fixture();
     const aliasRoot = `${root}-alias`;
