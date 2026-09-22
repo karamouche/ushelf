@@ -233,7 +233,8 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. SQ
 
 When no path variables are set, every host-side uShelf runtime uses `~/.ushelf` and
 resolves `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The
-service creates its writable library, recipe, and state directories as needed;
+service creates its writable library, recipe, and state directories as needed and
+seeds the bundled default recipe when it is missing;
 `secrets/` remains optional until an integration is configured. Setting only
 `USHELF_ROOT` moves that complete layout together; the state and secrets variables are
 needed only when those directories live elsewhere. Containers use the explicit

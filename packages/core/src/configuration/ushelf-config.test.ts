@@ -8,6 +8,7 @@ describe("resolveConfig", () => {
   const previousRoot = process.env.USHELF_ROOT;
   const previousStateDir = process.env.USHELF_STATE_DIR;
   const previousSecretsDir = process.env.USHELF_SECRETS_DIR;
+  const previousBundledRecipesDir = process.env.USHELF_BUNDLED_RECIPES_DIR;
   const previousKindleBridge = process.env.USHELF_KINDLE_BRIDGE;
   const previousNodeEnv = process.env.NODE_ENV;
   const previousCwd = process.cwd();
@@ -16,6 +17,7 @@ describe("resolveConfig", () => {
     delete process.env.USHELF_ROOT;
     delete process.env.USHELF_STATE_DIR;
     delete process.env.USHELF_SECRETS_DIR;
+    delete process.env.USHELF_BUNDLED_RECIPES_DIR;
   });
 
   afterEach(() => {
@@ -25,6 +27,8 @@ describe("resolveConfig", () => {
     else process.env.USHELF_STATE_DIR = previousStateDir;
     if (previousSecretsDir === undefined) delete process.env.USHELF_SECRETS_DIR;
     else process.env.USHELF_SECRETS_DIR = previousSecretsDir;
+    if (previousBundledRecipesDir === undefined) delete process.env.USHELF_BUNDLED_RECIPES_DIR;
+    else process.env.USHELF_BUNDLED_RECIPES_DIR = previousBundledRecipesDir;
     if (previousKindleBridge === undefined) delete process.env.USHELF_KINDLE_BRIDGE;
     else process.env.USHELF_KINDLE_BRIDGE = previousKindleBridge;
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -90,13 +94,22 @@ describe("resolveConfig", () => {
     expect(config.kindleCredentialPath).toBe(path.resolve("/tmp/ushelf-secrets/kindle.json"));
   });
 
-  it("resolves the development Kindle bridge independently of the process directory", () => {
+  it("allows packaged runtimes to locate bundled recipes", () => {
+    process.env.USHELF_BUNDLED_RECIPES_DIR = "/opt/ushelf/recipes";
+
+    expect(resolveConfig("/tmp/ushelf-root").bundledRecipesDir).toBe("/opt/ushelf/recipes");
+  });
+
+  it("resolves development assets independently of the process directory", () => {
     delete process.env.USHELF_KINDLE_BRIDGE;
     process.env.NODE_ENV = "development";
     process.chdir(fileURLToPath(new URL("../../../../apps/server", import.meta.url)));
 
     const config = resolveConfig("/tmp/ushelf-root");
 
+    expect(config.bundledRecipesDir).toBe(
+      fileURLToPath(new URL("../../../../recipes", import.meta.url)),
+    );
     expect(config.kindleBridgePath).toBe(
       fileURLToPath(new URL("../../../../apps/cli/dist/ushelf-kindle-bridge", import.meta.url)),
     );
