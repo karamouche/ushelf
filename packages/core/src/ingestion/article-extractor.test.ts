@@ -29,7 +29,7 @@ describe("readable article extraction", () => {
       <h1>Agent patterns</h1>
       <p>Before the examples, this introduction provides enough useful prose for reliable article extraction.</p>
       <div class="not-prose my-6"><div class="overflow-hidden"><div class="overflow-y-auto">
-        <pre data-language="typescript"><div><span>const first = await run();</span>\n<span>return first;</span></div></pre>
+        <pre data-language="typescript"><div><span>const first = await run();</span></div><div><span>  return first;</span></div><div></div><div><span>afterFirst();</span></div></pre>
         <button type="button"><span>Copy code</span></button>
       </div></div></div>
       <p>Between the examples, the article explains why each operation needs its own durable checkpoint.</p>
@@ -42,7 +42,7 @@ describe("readable article extraction", () => {
     const result = extractReadableArticle(dom, "https://docs.example.test/agent-patterns");
 
     expect(result.markdown).toContain(
-      "```typescript\nconst first = await run();\nreturn first;\n```",
+      "```typescript\nconst first = await run();\n  return first;\n\nafterFirst();\n```",
     );
     expect(result.markdown).toContain("```\nawait sendLater();\n```");
     expect(result.markdown).not.toContain("overflow-hidden");
@@ -56,6 +56,19 @@ describe("readable article extraction", () => {
     expect(result.markdown.indexOf("Between the examples")).toBeLessThan(
       result.markdown.indexOf("await sendLater"),
     );
+  });
+
+  it("preserves explicit line breaks in highlighted code", () => {
+    const dom = articleDom(`
+      <h1>Code guide</h1>
+      <p>A useful introduction with enough text for Readability to identify this as an article.</p>
+      <pre><code class="language-typescript"><span>const config = {</span><br><span>  enabled: true,</span><br><span>};</span></code></pre>
+      <p>This closing explanation contains enough additional prose to keep extraction deterministic and useful.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/code-breaks");
+
+    expect(result.markdown).toContain("```typescript\nconst config = {\n  enabled: true,\n};\n```");
   });
 
   it.each([

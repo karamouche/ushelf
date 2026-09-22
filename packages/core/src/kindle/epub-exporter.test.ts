@@ -25,7 +25,7 @@ function article(): ShelfItem {
       source: { discovered: 1, localized: 1, omitted: 0, filtered: 0 },
       insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
-    sourceMarkdown: `# Source heading\n\nA table:\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n<script>alert("no")</script>\n\n![Pixel](../../files/${itemId}/media/${"b".repeat(64)}.png)`,
+    sourceMarkdown: `# Source heading\n\nA table:\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n\`\`\`typescript\nconst config = {\n  enabled: true,\n};\n\`\`\`\n\n<script>alert("no")</script>\n\n![Pixel](../../files/${itemId}/media/${"b".repeat(64)}.png)`,
     insightMarkdown: "SECRET INSIGHT BODY",
     revision,
     filePath: "/tmp/item.md",
@@ -65,6 +65,8 @@ describe("exportKindleEpub", () => {
     const xhtml = Buffer.from(archive["EPUB/article.xhtml"]!).toString();
     expect(xhtml).toContain("Source heading");
     expect(xhtml).toContain("<table>");
+    expect(xhtml).toContain('<pre><code class="language-typescript">');
+    expect(xhtml).toContain("const config = {\n  enabled: true,\n};");
     expect(xhtml).toContain("media/");
     expect(xhtml).not.toContain("SECRET INSIGHT");
     expect(xhtml).not.toContain("<script");
