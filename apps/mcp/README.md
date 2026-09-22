@@ -9,7 +9,7 @@ The Model Context Protocol adapter for uShelf. It lets a connected agent ingest 
 - Tools cover URL and attached-PDF ingestion, X-thread source fallback, enrichment, listing/search, reading state, Kindle device discovery and delivery, source refresh, re-enrichment, and confirmation-gated deletion. Images in captured and agent-supplied Markdown are localized by Core before the item is saved.
 - Resources expose normalized source Markdown, complete item data, and recipe instructions through `ushelf://` URIs.
 - Inputs are validated with Zod. Mutating operations use item revisions where appropriate to prevent stale writes.
-- `USHELF_ROOT` must point at the uShelf data root when the process is launched from elsewhere. Otherwise it defaults to the current working directory.
+- `USHELF_ROOT` must point at the complete uShelf data root when the process is launched from elsewhere. Otherwise it defaults to the current working directory. `state/` and `secrets/` follow that root automatically unless explicitly overridden.
 - Agent workflow guidance lives separately in `skills/ushelf-ingest` and `skills/ushelf-library`.
 
 ## Kindle delivery

@@ -66,7 +66,6 @@ ENV USHELF_ROOT=/data
 ENV USHELF_PORT=$USHELF_PORT
 ENV USHELF_WEB_BASE_PATH=$USHELF_WEB_BASE_PATH
 ENV USHELF_VERSION=$USHELF_VERSION
-ENV USHELF_SECRETS_DIR=/data/secrets
 ENV USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge
 
 WORKDIR /app
@@ -95,7 +94,7 @@ COPY --from=build --chown=node:node /app/recipes /opt/ushelf/recipes
 COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
 COPY --from=build --chown=node:node /app/recipes /data/recipes
 
-RUN mkdir -p /data/library/items /data/library/history /data/.ushelf /data/state /data/secrets \
+RUN mkdir -p /data/library/items /data/library/history /data/state /data/secrets \
   && chown -R node:node /data
 
 USER node

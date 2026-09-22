@@ -5,7 +5,7 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 ## What to know
 
 - `ShelfService` is the main entry point. Apps should call it instead of coordinating repositories and the database themselves.
-- Markdown under `library/items/` is canonical. Original PDFs live under `library/files/`; `.ushelf/ushelf.db` is a disposable SQLite/FTS5 index reconciled from Markdown during initialization.
+- Markdown under `library/items/` is canonical. Original PDFs live under `library/files/`; `state/ushelf.db` is a disposable SQLite/FTS5 index reconciled from Markdown during initialization.
 - SQLite stores item locations relative to `library/items` so host-side agents and the Docker server can safely share the same index across different mount paths. Drizzle applies checked-in schema migrations before the index is reconciled from Markdown during initialization.
 - Previous enriched revisions are archived under `library/history/`; recipe Markdown under `recipes/` is hash-versioned.
 - `MarkdownRepository` validates and atomically writes item documents. `ShelfDatabase` indexes summaries and searchable text.
@@ -15,8 +15,8 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
 - Kindle delivery builds a source-only EPUB with validated local media, then delegates device discovery and upload to the bundled Go bridge. Credentials remain outside Markdown and SQLite.
-- `USHELF_ROOT` controls the data root and defaults to `process.cwd()`.
-- `USHELF_STATE_DIR` optionally places disposable SQLite state outside that root; the native CLI uses it for `~/.ushelf/state`.
+- `USHELF_ROOT` controls the complete data root and defaults to `process.cwd()`.
+- State and secrets default to `<USHELF_ROOT>/state` and `<USHELF_ROOT>/secrets`. `USHELF_STATE_DIR` and `USHELF_SECRETS_DIR` optionally place either directory elsewhere.
 - The package uses Drizzle ORM with `better-sqlite3`; Node.js 24+ remains the repository runtime requirement.
 
 ## Source layout

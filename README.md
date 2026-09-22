@@ -178,13 +178,13 @@ The Compose setup builds the API and reader into one container, restarts after f
 ```sh
 cp .env.example .env
 printf 'USHELF_UID=%s\nUSHELF_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
-mkdir -p library/items library/history .ushelf/state .ushelf/secrets
+mkdir -p library/items library/history state secrets
 docker compose up -d --build
 docker compose ps
 ```
 
 For this repository-local Compose layout, configure Kindle credentials in the mounted
-secrets directory with `ushelf --home .ushelf kindle setup`. If you already have a
+secrets directory with `ushelf --home . kindle setup`. If you already have a
 `.env` file, add `USHELF_UID` and `USHELF_GID` with your host user and group IDs before
 starting Compose. The service and maintenance container use these IDs to access the
 host-owned library, state, and owner-only Kindle credential.
@@ -213,18 +213,25 @@ docker compose run --rm --no-deps maintenance rebuild-index
 docker compose up -d
 ```
 
-For a consistent backup, stop the service and copy `library/` and `recipes/`. SQLite state does not need to be backed up. Back up `~/.ushelf/secrets/` separately only if you want to preserve optional integration credentials.
+For a consistent backup, stop the service and copy `library/` and `recipes/`. SQLite state does not need to be backed up. Back up the root's `secrets/` directory separately only if you want to preserve optional integration credentials.
 
 ### Configuration
 
-| Variable               | Default           | Purpose                                                     |
-| ---------------------- | ----------------- | ----------------------------------------------------------- |
-| `USHELF_ROOT`          | `.`               | Directory containing `library/`, `.ushelf/`, and `recipes/` |
-| `USHELF_STATE_DIR`     | `.ushelf`         | Optional separate directory for disposable SQLite state     |
-| `USHELF_HOST`          | `127.0.0.1`       | Address published by the HTTP server or Compose             |
-| `USHELF_PORT`          | `43110`           | HTTP port                                                   |
-| `USHELF_WEB_BASE_PATH` | `/`               | Root or subpath where the web app and API are served        |
-| `USHELF_SECRETS_DIR`   | `.ushelf/secrets` | Optional integration-credential directory                   |
+| Variable               | Default                   | Purpose                                                          |
+| ---------------------- | ------------------------- | ---------------------------------------------------------------- |
+| `USHELF_ROOT`          | Current working directory | Root containing `library/`, `recipes/`, `state/`, and `secrets/` |
+| `USHELF_STATE_DIR`     | `<USHELF_ROOT>/state`     | Optional override for disposable SQLite state                    |
+| `USHELF_HOST`          | `127.0.0.1`               | Address published by the HTTP server or Compose                  |
+| `USHELF_PORT`          | `43110`                   | HTTP port                                                        |
+| `USHELF_WEB_BASE_PATH` | `/`                       | Root or subpath where the web app and API are served             |
+| `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets`   | Optional override for integration credentials                    |
+
+When no path variables are set, the process uses its current working directory as
+`USHELF_ROOT` and resolves `library/`, `recipes/`, `state/`, and `secrets/` directly
+beneath it. The service creates its writable library, recipe, and state directories as
+needed; `secrets/` remains optional until an integration is configured. Setting only
+`USHELF_ROOT` moves that complete layout together; the state and secrets variables are
+needed only when those directories live elsewhere.
 
 The installed CLI also accepts `USHELF_HOME` (default `~/.ushelf`) and `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
 
