@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -86,9 +87,14 @@ func TestStartUsesHardenedPortableMounts(t *testing.T) {
 		}
 	}
 	joined := strings.Join(run.args, " ")
-	for _, expected := range []string{"--read-only", "no-new-privileges:true", docker.libraryDir() + ":/data/library", docker.stateDir() + ":/data/state", docker.secretsDir() + ":/data/secrets:ro", "USHELF_STATE_DIR=/data/state", "USHELF_SECRETS_DIR=/data/secrets", "127.0.0.1:43110:43110"} {
+	for _, expected := range []string{"--read-only", "no-new-privileges:true", docker.libraryDir() + ":/data/library", docker.stateDir() + ":/data/state", docker.secretsDir() + ":/data/secrets:ro", "USHELF_ROOT=/data", "127.0.0.1:43110:43110"} {
 		if !strings.Contains(joined, expected) {
 			t.Errorf("docker run missing %q: %s", expected, joined)
+		}
+	}
+	for _, redundant := range []string{"USHELF_STATE_DIR", "USHELF_SECRETS_DIR"} {
+		if strings.Contains(joined, redundant) {
+			t.Errorf("docker run should derive %s from USHELF_ROOT: %s", redundant, joined)
 		}
 	}
 }
@@ -129,10 +135,13 @@ func TestMCPKeepsDiagnosticsOffStdout(t *testing.T) {
 		t.Fatal("MCP entrypoint missing")
 	}
 	joined := strings.Join(last.args, " ")
-	for _, expected := range []string{docker.secretsDir() + ":/data/secrets:ro", "USHELF_SECRETS_DIR=/data/secrets", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge"} {
+	for _, expected := range []string{docker.secretsDir() + ":/data/secrets:ro", "USHELF_ROOT=/data", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge"} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("MCP container missing %q: %s", expected, joined)
 		}
+	}
+	if strings.Contains(joined, "USHELF_SECRETS_DIR") {
+		t.Fatalf("MCP container should derive USHELF_SECRETS_DIR from USHELF_ROOT: %s", joined)
 	}
 }
 
@@ -283,6 +292,50 @@ func TestMaintenanceDoesNotReceiveKindleSecrets(t *testing.T) {
 	joined := strings.Join(last.args, " ")
 	if strings.Contains(joined, "/data/secrets") || strings.Contains(joined, "USHELF_KINDLE_BRIDGE") {
 		t.Fatalf("maintenance container received Kindle access: %s", joined)
+	}
+}
+
+func TestMaintenanceSeedsRecipeBeforeReadOnlyContainer(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: "image"}, {output: "seeded recipe"}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	recipePath := filepath.Join(docker.recipesDir(), "default.md")
+	if err := os.Remove(recipePath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := docker.Maintenance(context.Background(), "rebuild-index"); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(recipePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "seeded recipe" {
+		t.Fatalf("recipe = %q", contents)
+	}
+}
+
+func TestImportSeedsRecipeBeforeReadOnlyContainer(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: "image"}, {output: "seeded recipe"}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	recipePath := filepath.Join(docker.recipesDir(), "default.md")
+	if err := os.Remove(recipePath); err != nil {
+		t.Fatal(err)
+	}
+	importPath := filepath.Join(t.TempDir(), "item.md")
+	if err := os.WriteFile(importPath, []byte("item"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := docker.Import(context.Background(), importPath); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(recipePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "seeded recipe" {
+		t.Fatalf("recipe = %q", contents)
 	}
 }
 

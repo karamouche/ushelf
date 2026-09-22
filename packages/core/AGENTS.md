@@ -53,7 +53,7 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 - `better-sqlite3` is a native production dependency. Keep its pnpm build allowlist and Docker build toolchain intact, and ensure the runtime image includes `packages/core/drizzle/` without including compiler tooling.
 - Add new adapter-facing exports to `src/index.ts`; avoid exposing a class solely to make an adapter bypass `ShelfService`.
 - When a `ShelfService` method or public schema changes, inspect both adapters, `apps/web/src/api.ts`, recipes, and skills for contract impact.
-- Use temporary test roots via `resolveConfig`; tests must not write into the real `library/` or `.ushelf/` directories.
+- Use temporary test roots via `resolveConfig`; tests must not write into the real `library/`, `state/`, or `secrets/` directories.
 
 ## Verification
 

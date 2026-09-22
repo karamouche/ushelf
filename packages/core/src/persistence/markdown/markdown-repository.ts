@@ -18,6 +18,10 @@ export class MarkdownRepository {
       mkdir(this.config.recipesDir, { recursive: true }),
       mkdir(this.config.stateDir, { recursive: true }),
     ]);
+    await seedFileIfMissing(
+      path.join(this.config.bundledRecipesDir, "default.md"),
+      path.join(this.config.recipesDir, "default.md"),
+    );
   }
 
   async load(filePath: string): Promise<ShelfItem> {
@@ -174,6 +178,24 @@ async function atomicWrite(filePath: string, contents: string | Uint8Array): Pro
 }
 
 async function atomicCreate(filePath: string, contents: string | Uint8Array): Promise<void> {
+  if (await atomicCreateIfMissing(filePath, contents)) return;
+  throw new Error(`An item file already exists at ${filePath}`);
+}
+
+async function seedFileIfMissing(sourcePath: string, destinationPath: string): Promise<void> {
+  try {
+    await readFile(destinationPath);
+    return;
+  } catch (error) {
+    if (!isMissingFileError(error)) throw error;
+  }
+  await atomicCreateIfMissing(destinationPath, await readFile(sourcePath));
+}
+
+async function atomicCreateIfMissing(
+  filePath: string,
+  contents: string | Uint8Array,
+): Promise<boolean> {
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(
@@ -182,10 +204,9 @@ async function atomicCreate(filePath: string, contents: string | Uint8Array): Pr
       typeof contents === "string" ? { encoding: "utf8", mode: 0o600 } : { mode: 0o600 },
     );
     await link(temporaryPath, filePath);
+    return true;
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-      throw new Error(`An item file already exists at ${filePath}`);
-    }
+    if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
     throw error;
   } finally {
     await rm(temporaryPath, { force: true });

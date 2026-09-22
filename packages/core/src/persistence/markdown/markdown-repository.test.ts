@@ -13,7 +13,28 @@ afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
 
-describe("MarkdownRepository imports", () => {
+describe("MarkdownRepository", () => {
+  it("seeds the bundled default recipe without overwriting local edits", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-repository-test-"));
+    roots.push(root);
+    const config = resolveConfig(root);
+    const repository = new MarkdownRepository(config);
+
+    await repository.initialize();
+
+    const recipePath = path.join(config.recipesDir, "default.md");
+    expect(await readFile(recipePath, "utf8")).toBe(
+      await readFile(path.join(config.bundledRecipesDir, "default.md"), "utf8"),
+    );
+
+    const customizedRecipe =
+      "---\nname: default\ndescription: Customized recipe\n---\n\nKeep this local version.";
+    await writeFile(recipePath, customizedRecipe, "utf8");
+    await repository.initialize();
+
+    expect(await readFile(recipePath, "utf8")).toBe(customizedRecipe);
+  });
+
   it("atomically preserves validated Markdown bytes in the canonical library", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-repository-test-"));
     roots.push(root);

@@ -5,6 +5,8 @@ dist-types/
 *.tsbuildinfo
 .vite/
 .ushelf/
+/state/
+/secrets/
 playwright-report/
 test-results/
 coverage/
