@@ -1,9 +1,11 @@
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const developmentKindleBridgePath = fileURLToPath(
   new URL("../../../../apps/cli/dist/ushelf-kindle-bridge", import.meta.url),
 );
+const developmentBundledRecipesDir = fileURLToPath(new URL("../../../../recipes", import.meta.url));
 
 export interface UshelfConfig {
   root: string;
@@ -12,6 +14,7 @@ export interface UshelfConfig {
   historyDir: string;
   filesDir: string;
   recipesDir: string;
+  bundledRecipesDir: string;
   stateDir: string;
   databasePath: string;
   secretsDir: string;
@@ -19,12 +22,17 @@ export interface UshelfConfig {
   kindleBridgePath: string;
 }
 
-export function resolveConfig(root = process.env.USHELF_ROOT ?? process.cwd()): UshelfConfig {
-  const resolvedRoot = path.resolve(root);
+export function resolveConfig(root?: string): UshelfConfig {
+  const configuredRoot = root ?? process.env.USHELF_ROOT;
+  const resolvedRoot = path.resolve(
+    configuredRoot === undefined || configuredRoot === ""
+      ? path.join(os.homedir(), ".ushelf")
+      : configuredRoot,
+  );
   const libraryDir = path.join(resolvedRoot, "library");
-  const stateDir = path.resolve(process.env.USHELF_STATE_DIR ?? path.join(resolvedRoot, ".ushelf"));
+  const stateDir = path.resolve(process.env.USHELF_STATE_DIR ?? path.join(resolvedRoot, "state"));
   const secretsDir = path.resolve(
-    process.env.USHELF_SECRETS_DIR ?? path.join(resolvedRoot, ".ushelf", "secrets"),
+    process.env.USHELF_SECRETS_DIR ?? path.join(resolvedRoot, "secrets"),
   );
   return {
     root: resolvedRoot,
@@ -33,6 +41,9 @@ export function resolveConfig(root = process.env.USHELF_ROOT ?? process.cwd()): 
     historyDir: path.join(libraryDir, "history"),
     filesDir: path.join(libraryDir, "files"),
     recipesDir: path.join(resolvedRoot, "recipes"),
+    bundledRecipesDir: path.resolve(
+      process.env.USHELF_BUNDLED_RECIPES_DIR || developmentBundledRecipesDir,
+    ),
     stateDir,
     databasePath: path.join(stateDir, "ushelf.db"),
     secretsDir,

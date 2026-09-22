@@ -120,8 +120,8 @@ func (d Docker) Start(ctx context.Context) error {
 		"--label", "io.ushelf.managed=true", "--label", "io.ushelf.config=" + hash,
 		"--init", "--restart", "unless-stopped", "--read-only", "--tmpfs", "/tmp",
 		"--security-opt", "no-new-privileges:true", "--user", currentUser(),
-		"-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data", "-e", "USHELF_STATE_DIR=/data/state",
-		"-e", "USHELF_SECRETS_DIR=/data/secrets", "-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
+		"-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data",
+		"-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
 		"-e", "USHELF_HOST=0.0.0.0", "-e", "USHELF_PORT=" + strconv.Itoa(d.Settings.Port),
 		"-e", "USHELF_WEB_BASE_PATH=" + d.Settings.BasePath,
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
@@ -223,7 +223,6 @@ func (d Docker) MCP(ctx context.Context) error {
 		return err
 	}
 	args := append(d.oneShotArgs(), "-i",
-		"-e", "USHELF_SECRETS_DIR=/data/secrets",
 		"-e", "USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge",
 		"-v", d.secretsDir()+":/data/secrets:ro",
 		d.Settings.Image, "node", "apps/mcp/dist/index.js")
@@ -235,6 +234,9 @@ func (d Docker) Maintenance(ctx context.Context, args ...string) error {
 		return err
 	}
 	if err := d.EnsureImage(ctx); err != nil {
+		return err
+	}
+	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
 	command := append(d.oneShotArgs(), d.Settings.Image, "node", "apps/server/dist/cli.js")
@@ -265,6 +267,9 @@ func (d Docker) Import(ctx context.Context, source string) error {
 		return err
 	}
 	if err := d.EnsureImage(ctx); err != nil {
+		return err
+	}
+	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
 	args := append(d.oneShotArgs(), "-v", abs+":/import/item.md:ro", d.Settings.Image, "node", "apps/server/dist/cli.js", "import", "/import/item.md")
@@ -303,7 +308,7 @@ func (d Docker) withServiceStopped(ctx context.Context, operation func() error) 
 
 func (d Docker) oneShotArgs() []string {
 	return []string{"run", "--rm", "--init", "--read-only", "--tmpfs", "/tmp", "--security-opt", "no-new-privileges:true",
-		"--user", currentUser(), "-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data", "-e", "USHELF_STATE_DIR=/data/state",
+		"--user", currentUser(), "-e", "NODE_ENV=production", "-e", "USHELF_ROOT=/data",
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro", "-v", d.stateDir() + ":/data/state"}
 }
 

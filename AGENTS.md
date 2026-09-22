@@ -28,7 +28,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `library/items`: Canonical saved documents, ignored by Git except for `.gitkeep`.
 - `library/history`: Archived enrichment revisions, also ignored by Git.
 - `library/files`: Retained original PDFs and content-addressed item media, also ignored by Git.
-- `.ushelf/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
+- `state/ushelf.db`: Rebuildable local index and transient workflow state; never treat it as canonical.
 
 Each workspace package has a local README with its runtime details and commands.
 
@@ -96,7 +96,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - When the HTTP response contract changes, update the matching client types in `apps/web/src/api.ts`.
 - Add focused regression tests beside the affected source as `*.test.ts`. Add or update Playwright coverage for user-visible reader workflows.
 - Do not add production dependencies unless the task requires them; prefer existing platform and workspace capabilities.
-- Treat `dist/`, `dist-types/`, `*.tsbuildinfo`, `.ushelf/`, Playwright output, and installed `node_modules/` as generated or local state. Change source files and let the relevant command regenerate outputs; do not include generated artifacts in a patch.
+- Treat `dist/`, `dist-types/`, `*.tsbuildinfo`, `state/`, `secrets/`, Playwright output, and installed `node_modules/` as generated or local state. Change source files and let the relevant command regenerate outputs; do not include generated artifacts in a patch.
 
 ## Where to make a change
 
