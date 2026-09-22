@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -291,6 +292,50 @@ func TestMaintenanceDoesNotReceiveKindleSecrets(t *testing.T) {
 	joined := strings.Join(last.args, " ")
 	if strings.Contains(joined, "/data/secrets") || strings.Contains(joined, "USHELF_KINDLE_BRIDGE") {
 		t.Fatalf("maintenance container received Kindle access: %s", joined)
+	}
+}
+
+func TestMaintenanceSeedsRecipeBeforeReadOnlyContainer(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: "image"}, {output: "seeded recipe"}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	recipePath := filepath.Join(docker.recipesDir(), "default.md")
+	if err := os.Remove(recipePath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := docker.Maintenance(context.Background(), "rebuild-index"); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(recipePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "seeded recipe" {
+		t.Fatalf("recipe = %q", contents)
+	}
+}
+
+func TestImportSeedsRecipeBeforeReadOnlyContainer(t *testing.T) {
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: "image"}, {output: "seeded recipe"}}}
+	docker := testDocker(t, runner, &bytes.Buffer{}, &bytes.Buffer{})
+	recipePath := filepath.Join(docker.recipesDir(), "default.md")
+	if err := os.Remove(recipePath); err != nil {
+		t.Fatal(err)
+	}
+	importPath := filepath.Join(t.TempDir(), "item.md")
+	if err := os.WriteFile(importPath, []byte("item"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := docker.Import(context.Background(), importPath); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(recipePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "seeded recipe" {
+		t.Fatalf("recipe = %q", contents)
 	}
 }
 

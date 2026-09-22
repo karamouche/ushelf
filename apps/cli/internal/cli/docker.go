@@ -236,6 +236,9 @@ func (d Docker) Maintenance(ctx context.Context, args ...string) error {
 	if err := d.EnsureImage(ctx); err != nil {
 		return err
 	}
+	if err := d.SeedRecipe(ctx); err != nil {
+		return err
+	}
 	command := append(d.oneShotArgs(), d.Settings.Image, "node", "apps/server/dist/cli.js")
 	command = append(command, args...)
 	d.step("Running index maintenance...")
@@ -264,6 +267,9 @@ func (d Docker) Import(ctx context.Context, source string) error {
 		return err
 	}
 	if err := d.EnsureImage(ctx); err != nil {
+		return err
+	}
+	if err := d.SeedRecipe(ctx); err != nil {
 		return err
 	}
 	args := append(d.oneShotArgs(), "-v", abs+":/import/item.md:ro", d.Settings.Image, "node", "apps/server/dist/cli.js", "import", "/import/item.md")
