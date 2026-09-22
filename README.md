@@ -187,17 +187,11 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Compose uses `~/.ushelf` by default, matching the native CLI and direct server or MCP
-processes. Configure Kindle credentials with `ushelf kindle setup`. To use another
-location, set an absolute `USHELF_ROOT` in `.env` and prepare the same directory layout
-there. The `.env` file itself is optional; when present, Compose loads it automatically.
-Set `USHELF_UID` and `USHELF_GID` to your host user and group IDs so the service and
-maintenance container can access the host-owned files.
+Compose uses `~/.ushelf` by default, matching the native CLI and direct server or MCP processes. Configure Kindle credentials with `ushelf kindle setup`. To use another location, set an absolute `USHELF_ROOT` in `.env` and prepare the same directory layout there. The `.env` file itself is optional; when present, Compose loads it automatically. Set `USHELF_UID` and `USHELF_GID` to your host user and group IDs so the service and maintenance container can access the host-owned files.
 
 The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
 
-The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in
-`.env`, which avoids changing ownership of the host files.
+The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in `.env`, which avoids changing ownership of the host files.
 
 Common operations:
 
@@ -231,14 +225,9 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. SQ
 | `USHELF_WEB_BASE_PATH` | `/`                     | Root or subpath where the web app and API are served             |
 | `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                    |
 
-When no path variables are set, every host-side uShelf runtime uses `~/.ushelf` and
-resolves `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The
-service creates its writable library, recipe, and state directories as needed and
-seeds the bundled default recipe when it is missing;
-`secrets/` remains optional until an integration is configured. Setting only
-`USHELF_ROOT` moves that complete layout together; the state and secrets variables are
-needed only when those directories live elsewhere. Containers use the explicit
-internal root `/data`, backed by the selected host root.
+Without path overrides, host processes use `~/.ushelf` and keep `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The service creates the writable directories it needs and seeds the bundled default recipe when it is missing. The `secrets/` directory remains optional until an integration is configured.
+
+Set `USHELF_ROOT` to move the complete layout. Use `USHELF_STATE_DIR` or `USHELF_SECRETS_DIR` only when either directory must live outside that root. Containers use `/data` internally, backed by the selected host root.
 
 The native CLI's `--home` flag overrides `USHELF_ROOT`. It also accepts `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
 
@@ -282,8 +271,7 @@ pnpm db:check
 go -C apps/cli vet ./...
 ```
 
-When changing the SQLite schema, edit the Drizzle schema in Core, run
-`pnpm db:generate --name=describe_the_change`, and review the checked-in SQL migration.
+When changing the SQLite schema, edit the Drizzle schema in Core, run `pnpm db:generate --name=describe_the_change`, and review the checked-in SQL migration.
 
 Run the smallest relevant check while iterating. Build before `pnpm test:e2e`, because Playwright launches the compiled production server.
 The E2E command also performs live ingestion checks against the documented X and article fixtures, so it requires internet access and can fail when either upstream source is unavailable or changes its public metadata.

@@ -49,9 +49,7 @@ pnpm test
 
 ## SQLite schema workflow
 
-The readable schema source is `src/persistence/sqlite/schema.ts`. Drizzle Kit generates the
-checked-in SQL history under `drizzle/`, and Core applies pending migrations whenever it opens
-the database.
+The readable schema source is `src/persistence/sqlite/schema.ts`. Drizzle Kit generates the checked-in SQL history under `drizzle/`, and Core applies pending migrations whenever it opens the database.
 
 After changing a relational table or index, generate and review a named migration:
 
@@ -60,15 +58,12 @@ pnpm db:generate --name=describe_the_change
 pnpm db:check
 ```
 
-FTS5 virtual tables are not part of the Drizzle schema. Create those changes as custom SQL
-migrations and keep their query-only mappings outside `schema.ts`:
+FTS5 virtual tables are not part of the Drizzle schema. Create those changes as custom SQL migrations and keep their query-only mappings outside `schema.ts`:
 
 ```sh
 pnpm --dir packages/core exec drizzle-kit generate --config=drizzle.config.ts --custom --name=describe_the_fts_change
 ```
 
-The Drizzle baseline replaces the earlier inline schema outright. Pre-Drizzle development
-databases are unsupported: delete the disposable SQLite database before starting this version,
-then initialize or run `pnpm rebuild-index` to restore the index from canonical Markdown.
+The Drizzle baseline replaces the earlier inline schema outright. Pre-Drizzle development databases are unsupported: delete the disposable SQLite database before starting this version, then initialize or run `pnpm rebuild-index` to restore the index from canonical Markdown.
 
 Unit tests for core behavior live alongside the source as `*.test.ts` files.
