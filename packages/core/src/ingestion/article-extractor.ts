@@ -100,18 +100,7 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     const href = anchor.getAttribute("href");
     if (href) anchor.setAttribute("href", resolveUrl(href, baseUrl));
   }
-  for (const image of document.querySelectorAll("img")) {
-    const pictureSource = image.closest("picture")?.querySelector("source");
-    const source = [
-      image.getAttribute("data-src"),
-      image.getAttribute("data-original"),
-      firstSrcsetUrl(image.getAttribute("data-srcset")),
-      image.getAttribute("src"),
-      firstSrcsetUrl(image.getAttribute("srcset")),
-      firstSrcsetUrl(pictureSource?.getAttribute("srcset") ?? null),
-    ].find((candidate) => candidate && !candidate.startsWith("blob:"));
-    if (source) image.setAttribute("src", resolveUrl(source, baseUrl));
-  }
+  normalizeImages(document, baseUrl);
 
   // Mermaid is commonly embedded as either a div/pre with a `mermaid` class or a
   // code element carrying a language marker. Normalize those variants before
@@ -130,10 +119,9 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     target.replaceWith(replacement);
   }
 
-  // Readability can discard the deeply nested, scrollable wrappers used by documentation
-  // sites for syntax-highlighted code. Replace each block with its semantic content first.
+  // Readability can discard deeply nested presentation wrappers around otherwise semantic
+  // code. Promote the normalized block through ancestors that contain no other content.
   for (const pre of document.querySelectorAll("pre")) {
-    const tabPanel = pre.closest('[data-component-part="tab-content"]');
     const replacement = document.createElement("pre");
     const code = document.createElement("code");
     const language = languageForElement(pre) ?? languageForElement(pre.querySelector("code"));
@@ -143,14 +131,85 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     }
     code.textContent = pre.textContent ?? "";
     replacement.append(code);
-    if (tabPanel) {
-      pre.remove();
-      tabPanel.append(replacement);
-    } else {
-      pre.replaceWith(replacement);
-    }
+    highestCodeOnlyAncestor(pre).replaceWith(replacement);
   }
   return [...classesToPreserve];
+}
+
+function normalizeImages(document: Document, baseUrl: string): void {
+  for (const image of [...document.querySelectorAll("img")]) {
+    if (!image.isConnected) continue;
+    const pictureSource = image.closest("picture")?.querySelector("source");
+    const source = [
+      image.getAttribute("data-src"),
+      image.getAttribute("data-original"),
+      firstSrcsetUrl(image.getAttribute("data-srcset")),
+      image.getAttribute("src"),
+      firstSrcsetUrl(image.getAttribute("srcset")),
+      firstSrcsetUrl(pictureSource?.getAttribute("srcset") ?? null),
+    ].find((candidate) => candidate && !candidate.startsWith("blob:"));
+    if (!source) continue;
+    image.setAttribute("src", resolveUrl(source, baseUrl));
+
+    const target = highestImageOnlyAncestor(image);
+    if (target === image) continue;
+    const figure = document.createElement("figure");
+    const normalizedImage = document.createElement("img");
+    for (const attribute of ["src", "alt", "title"] as const) {
+      const value = image.getAttribute(attribute);
+      if (value !== null) normalizedImage.setAttribute(attribute, value);
+    }
+    figure.append(normalizedImage);
+    const caption = image.closest("figure")?.querySelector("figcaption");
+    if (caption) figure.append(caption.cloneNode(true));
+    target.replaceWith(figure);
+  }
+}
+
+function highestCodeOnlyAncestor(pre: Element): Element {
+  const text = codeContentText(pre);
+  let target = pre;
+  while (
+    target.parentElement &&
+    target.parentElement.tagName !== "BODY" &&
+    codeContentText(target.parentElement) === text &&
+    target.parentElement.querySelectorAll("pre").length === 1 &&
+    !target.parentElement.querySelector(
+      "img, figure, video, audio, iframe, table, blockquote, ul, ol, h1, h2, h3, h4, h5, h6, p",
+    )
+  ) {
+    target = target.parentElement;
+  }
+  return target;
+}
+
+function codeContentText(element: Element): string {
+  const clone = element.cloneNode(true) as Element;
+  for (const control of clone.querySelectorAll("button, [role=button], svg")) control.remove();
+  return normalizedText(clone);
+}
+
+function highestImageOnlyAncestor(image: Element): Element {
+  const figure = image.closest("figure");
+  const caption = figure?.querySelector("figcaption");
+  const text = normalizedText(caption ?? null);
+  let target =
+    figure && figure.querySelectorAll("img").length === 1 && normalizedText(figure) === text
+      ? figure
+      : image;
+  while (
+    target.parentElement &&
+    target.parentElement.tagName !== "BODY" &&
+    target.parentElement.querySelectorAll("img").length === 1 &&
+    normalizedText(target.parentElement) === text
+  ) {
+    target = target.parentElement;
+  }
+  return target;
+}
+
+function normalizedText(element: Element | null): string {
+  return (element?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 function languageForElement(element: Element | null): string | undefined {
