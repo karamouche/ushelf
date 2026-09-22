@@ -7,7 +7,7 @@ import (
 
 func TestResolveSettingsPrecedence(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("USHELF_HOME", home)
+	t.Setenv("USHELF_ROOT", home)
 	if err := writeFileConfig(filepath.Join(home, "config.json"), fileConfig{Host: "127.0.0.2", Port: 4000, BasePath: "/stored/", Image: "example/stored:1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -33,12 +33,26 @@ func TestResolveSettingsPrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveSettingsHomeFlagOverridesRootEnvironment(t *testing.T) {
+	environmentHome := t.TempDir()
+	flagHome := t.TempDir()
+	t.Setenv("USHELF_ROOT", environmentHome)
+	settings, err := ResolveSettings(FlagValues{Home: flagHome}, "1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Home != flagHome {
+		t.Fatalf("home = %q", settings.Home)
+	}
+}
+
 func TestResolveSettingsDefaultsToDotUshelf(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, name := range []string{"USHELF_HOME", "USHELF_HOST", "USHELF_PORT", "USHELF_WEB_BASE_PATH", "USHELF_IMAGE"} {
+	for _, name := range []string{"USHELF_ROOT", "USHELF_HOST", "USHELF_PORT", "USHELF_WEB_BASE_PATH", "USHELF_IMAGE"} {
 		t.Setenv(name, "")
 	}
+	t.Setenv("USHELF_HOME", filepath.Join(home, "legacy-home"))
 	settings, err := ResolveSettings(FlagValues{}, "1.2.3")
 	if err != nil {
 		t.Fatal(err)

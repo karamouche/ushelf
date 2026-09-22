@@ -10,8 +10,6 @@ services:
     init: true
     restart: unless-stopped
     user: "${USHELF_UID:-1000}:${USHELF_GID:-1000}"
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       # These two values describe paths and networking inside the container.
@@ -24,17 +22,17 @@ services:
       - "${USHELF_HOST:-127.0.0.1}:${USHELF_PORT:-43110}:${USHELF_PORT:-43110}"
     volumes:
       - type: bind
-        source: ${USHELF_ROOT:-.}/library
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/library
         target: /data/library
       - type: bind
-        source: ${USHELF_ROOT:-.}/state
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/state
         target: /data/state
       - type: bind
-        source: ${USHELF_ROOT:-.}/recipes
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/recipes
         target: /data/recipes
         read_only: true
       - type: bind
-        source: ${USHELF_ROOT:-.}/secrets
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/secrets
         target: /data/secrets
         read_only: true
     read_only: true
@@ -70,13 +68,13 @@ services:
       USHELF_ROOT: /data
     volumes:
       - type: bind
-        source: ${USHELF_ROOT:-.}/library
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/library
         target: /data/library
       - type: bind
-        source: ${USHELF_ROOT:-.}/state
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/state
         target: /data/state
       - type: bind
-        source: ${USHELF_ROOT:-.}/recipes
+        source: ${USHELF_ROOT:-${HOME}/.ushelf}/recipes
         target: /data/recipes
         read_only: true
     read_only: true

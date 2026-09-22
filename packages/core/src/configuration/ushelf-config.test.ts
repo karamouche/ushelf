@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./ushelf-config.js";
@@ -39,16 +40,17 @@ describe("resolveConfig", () => {
     expect(config.kindleCredentialPath).toBe(path.resolve("/tmp/ushelf-root/secrets/kindle.json"));
   });
 
-  it("uses the current working directory as the complete root when no variables are set", () => {
+  it("uses ~/.ushelf as the complete root when no variables are set", () => {
     process.chdir("/tmp");
 
     const config = resolveConfig();
+    const expectedRoot = path.join(os.homedir(), ".ushelf");
 
-    expect(config.root).toBe(path.resolve("/tmp"));
-    expect(config.libraryDir).toBe(path.resolve("/tmp/library"));
-    expect(config.recipesDir).toBe(path.resolve("/tmp/recipes"));
-    expect(config.stateDir).toBe(path.resolve("/tmp/state"));
-    expect(config.secretsDir).toBe(path.resolve("/tmp/secrets"));
+    expect(config.root).toBe(expectedRoot);
+    expect(config.libraryDir).toBe(path.join(expectedRoot, "library"));
+    expect(config.recipesDir).toBe(path.join(expectedRoot, "recipes"));
+    expect(config.stateDir).toBe(path.join(expectedRoot, "state"));
+    expect(config.secretsDir).toBe(path.join(expectedRoot, "secrets"));
   });
 
   it("moves the complete default layout when USHELF_ROOT is set", () => {
@@ -60,6 +62,18 @@ describe("resolveConfig", () => {
     expect(config.recipesDir).toBe(path.resolve("/tmp/ushelf-home/recipes"));
     expect(config.stateDir).toBe(path.resolve("/tmp/ushelf-home/state"));
     expect(config.secretsDir).toBe(path.resolve("/tmp/ushelf-home/secrets"));
+  });
+
+  it("treats an empty USHELF_ROOT as unset", () => {
+    process.env.USHELF_ROOT = "";
+
+    expect(resolveConfig().root).toBe(path.join(os.homedir(), ".ushelf"));
+  });
+
+  it("prefers an explicit root argument over USHELF_ROOT", () => {
+    process.env.USHELF_ROOT = "/tmp/environment-root";
+
+    expect(resolveConfig("/tmp/explicit-root").root).toBe(path.resolve("/tmp/explicit-root"));
   });
 
   it("allows installed runtimes to use a separate state mount", () => {
