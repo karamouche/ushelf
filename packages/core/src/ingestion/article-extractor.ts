@@ -124,14 +124,15 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
   for (const pre of document.querySelectorAll("pre")) {
     const replacement = document.createElement("pre");
     const code = document.createElement("code");
+    const text = extractCodeText(pre);
     const language = languageForElement(pre) ?? languageForElement(pre.querySelector("code"));
     if (language) {
       code.className = `language-${language}`;
       classesToPreserve.add(code.className);
     }
-    code.textContent = pre.textContent ?? "";
+    code.textContent = text;
     replacement.append(code);
-    highestCodeOnlyAncestor(pre).replaceWith(replacement);
+    highestCodeOnlyAncestor(pre, text).replaceWith(replacement);
   }
   return [...classesToPreserve];
 }
@@ -166,8 +167,8 @@ function normalizeImages(document: Document, baseUrl: string): void {
   }
 }
 
-function highestCodeOnlyAncestor(pre: Element): Element {
-  const text = codeContentText(pre);
+function highestCodeOnlyAncestor(pre: Element, codeText: string): Element {
+  const text = normalizedWhitespace(codeText);
   let target = pre;
   while (
     target.parentElement &&
@@ -186,7 +187,36 @@ function highestCodeOnlyAncestor(pre: Element): Element {
 function codeContentText(element: Element): string {
   const clone = element.cloneNode(true) as Element;
   for (const control of clone.querySelectorAll("button, [role=button], svg")) control.remove();
+  const pre = clone.matches("pre") ? clone : clone.querySelector("pre");
+  if (pre && clone.querySelectorAll("pre").length === 1) {
+    pre.replaceWith(extractCodeText(pre));
+  }
   return normalizedText(clone);
+}
+
+function extractCodeText(pre: Element): string {
+  const root = pre.querySelector("code") ?? pre;
+  const nodes = [...root.childNodes];
+  const lineElements = nodes.filter(
+    (node): node is Element =>
+      node.nodeType === 1 && ["DIV", "P", "LI"].includes((node as Element).tagName),
+  );
+  const usesLineContainers =
+    lineElements.length > 0 &&
+    nodes.every(
+      (node) =>
+        lineElements.includes(node as Element) ||
+        node.nodeType === 8 ||
+        (node.nodeType === 3 && !(node.textContent ?? "").trim()),
+    );
+  if (usesLineContainers) return lineElements.map(textWithBreaks).join("\n");
+  return textWithBreaks(root);
+}
+
+function textWithBreaks(element: Element): string {
+  const clone = element.cloneNode(true) as Element;
+  for (const br of clone.querySelectorAll("br")) br.replaceWith("\n");
+  return clone.textContent ?? "";
 }
 
 function highestImageOnlyAncestor(image: Element): Element {
@@ -209,7 +239,11 @@ function highestImageOnlyAncestor(image: Element): Element {
 }
 
 function normalizedText(element: Element | null): string {
-  return (element?.textContent ?? "").replace(/\s+/g, " ").trim();
+  return normalizedWhitespace(element?.textContent ?? "");
+}
+
+function normalizedWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function languageForElement(element: Element | null): string | undefined {
