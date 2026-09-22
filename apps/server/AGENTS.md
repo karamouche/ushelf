@@ -39,4 +39,4 @@ pnpm --filter @ushelf/core build
 pnpm --filter @ushelf/server build
 ```
 
-If the HTTP contract affects the reader, also run the web typecheck/build and the relevant Playwright tests. Do not hand-edit `dist/` or local `.ushelf/` files.
+If the HTTP contract affects the reader, also run the web typecheck/build and the relevant Playwright tests. Do not hand-edit `dist/`, local `state/`, or local `secrets/` files.
