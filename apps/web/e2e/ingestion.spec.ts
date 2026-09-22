@@ -16,7 +16,7 @@ const blogCanonicalUrl =
 
 test("ingests public X content into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
-    const result = await service.ingestUrl(xUrl);
+    const result = await ingestLiveUrl(service, xUrl);
 
     expect(result.duplicate).toBe(false);
     expect(result.state).toBe("awaiting_enrichment");
@@ -43,7 +43,7 @@ test("ingests public X content into canonical Markdown", async () => {
 
 test("ingests a readable article into canonical Markdown", async () => {
   await withTemporaryShelf(async (service) => {
-    const result = await service.ingestUrl(blogUrl);
+    const result = await ingestLiveUrl(service, blogUrl);
 
     expect(result.duplicate).toBe(false);
     expect(result.state).toBe("awaiting_enrichment");
@@ -74,6 +74,26 @@ test("ingests a readable article into canonical Markdown", async () => {
     });
   });
 });
+
+async function ingestLiveUrl(service: ShelfService, url: string): Promise<IngestResult> {
+  const result = await service.ingestUrl(url);
+  if (
+    result.item.extraction.status === "failed" &&
+    result.item.extraction.error &&
+    isLiveSourceUnavailable(result.item.extraction.error)
+  ) {
+    const warning = `Live ingestion URL is unavailable; skipping regression test: ${url} (${result.item.extraction.error})`;
+    console.warn(warning);
+    test.skip(true, warning);
+  }
+  return result;
+}
+
+function isLiveSourceUnavailable(error: string): boolean {
+  return /Source returned HTTP (?:403|404|410|429|5\d\d)|fetch failed|network|timed? ?out|aborted|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET/i.test(
+    error,
+  );
+}
 
 async function withTemporaryShelf(run: (service: ShelfService) => Promise<void>): Promise<void> {
   const root = await mkdtemp(path.join(tmpdir(), "ushelf-live-ingestion-"));

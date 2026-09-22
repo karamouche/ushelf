@@ -21,6 +21,41 @@ describe("readable article extraction", () => {
     expect(result.markdown).toContain(
       "```python\nfrom deepagents import create_agent\nagent = create_agent()\n```",
     );
+    expect(result.markdown).toContain("agent.py");
+  });
+
+  it("promotes code out of presentation-only wrappers without changing its order", () => {
+    const dom = articleDom(`
+      <h1>Agent patterns</h1>
+      <p>Before the examples, this introduction provides enough useful prose for reliable article extraction.</p>
+      <div class="not-prose my-6"><div class="overflow-hidden"><div class="overflow-y-auto">
+        <pre data-language="typescript"><div><span>const first = await run();</span>\n<span>return first;</span></div></pre>
+        <button type="button"><span>Copy code</span></button>
+      </div></div></div>
+      <p>Between the examples, the article explains why each operation needs its own durable checkpoint.</p>
+      <div class="not-prose my-6"><div class="overflow-hidden"><div class="overflow-y-auto">
+        <pre><div><span>await sendLater();</span></div></pre>
+      </div></div></div>
+      <p>After the examples, this closing explanation contains enough additional prose to remain readable.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/agent-patterns");
+
+    expect(result.markdown).toContain(
+      "```typescript\nconst first = await run();\nreturn first;\n```",
+    );
+    expect(result.markdown).toContain("```\nawait sendLater();\n```");
+    expect(result.markdown).not.toContain("overflow-hidden");
+    expect(result.markdown).not.toContain("Copy code");
+    expect(result.markdown.indexOf("Before the examples")).toBeLessThan(
+      result.markdown.indexOf("const first"),
+    );
+    expect(result.markdown.indexOf("const first")).toBeLessThan(
+      result.markdown.indexOf("Between the examples"),
+    );
+    expect(result.markdown.indexOf("Between the examples")).toBeLessThan(
+      result.markdown.indexOf("await sendLater"),
+    );
   });
 
   it.each([
@@ -72,6 +107,60 @@ describe("readable article extraction", () => {
       "![Agent architecture](https://docs.example.test/media/diagram.png)",
     );
     expect(result.markdown).toContain("Runtime flow");
+  });
+
+  it("promotes inline images out of image-only media wrappers", () => {
+    const dom = articleDom(
+      `<h1>Illustrated workflow</h1>
+       <p>The opening section contains enough explanatory prose for Readability to identify the main article.</p>
+       <div class="content-block content-block--media"><figure class="article-image"><img src="../media/workflow.png" alt="Workflow overview"><figcaption>Workflow at a glance</figcaption></figure></div>
+       <h2>Plan the change</h2>
+       <p>This section explains the planning stage in enough detail to keep extraction deterministic and useful.</p>
+       <div class="content-block content-block--media"><figure class="article-image"><img data-src="https://cdn.example.test/plan.png?width=1200&amp;format=webp" alt="Planning stage" title="Plan first"></figure></div>
+       <p>The closing section verifies that all article images remain in their original reading order.</p>`,
+      '<meta property="og:image" content="/metadata-cover.png">',
+    );
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guides/workflow");
+
+    expect(result.markdown.match(/!\[/g)).toHaveLength(2);
+    expect(result.markdown).toContain(
+      "![Workflow overview](https://docs.example.test/media/workflow.png)",
+    );
+    expect(result.markdown).toContain("Workflow at a glance");
+    expect(result.markdown).toContain(
+      '![Planning stage](https://cdn.example.test/plan.png?width=1200&format=webp "Plan first")',
+    );
+    expect(result.markdown).not.toContain("metadata-cover.png");
+    expect(result.markdown.indexOf("Workflow overview")).toBeLessThan(
+      result.markdown.indexOf("Plan the change"),
+    );
+    expect(result.markdown.indexOf("Plan the change")).toBeLessThan(
+      result.markdown.indexOf("Planning stage"),
+    );
+  });
+
+  it("keeps mixed-content and multi-image figures intact", () => {
+    const dom = articleDom(`
+      <h1>Comparison guide</h1>
+      <p>This introduction contains enough useful prose for Readability to identify the article consistently.</p>
+      <div class="article-content">
+        <p>The two diagrams below should remain together as a comparison.</p>
+        <figure>
+          <img src="/media/before.png" alt="Before">
+          <img src="/media/after.png" alt="After">
+          <figcaption>Before and after</figcaption>
+        </figure>
+      </div>
+      <p>This closing explanation adds enough prose to keep the complete article readable.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/comparison");
+
+    expect(result.markdown).toContain("The two diagrams below should remain together");
+    expect(result.markdown).toContain("![Before](https://docs.example.test/media/before.png)");
+    expect(result.markdown).toContain("![After](https://docs.example.test/media/after.png)");
+    expect(result.markdown).toContain("Before and after");
   });
 
   it("preserves inline image data for localization", () => {

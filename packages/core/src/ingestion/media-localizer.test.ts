@@ -49,6 +49,26 @@ describe("Markdown media localization", () => {
     expect(result.markdown).toContain("*Image omitted: Missing.*");
   });
 
+  it("preserves encoded image transformation queries while localizing", async () => {
+    const url =
+      "https://kimi-file.example.test/image?x-tos-process=image%2Fauto-orient%2C1%2Fstrip%2Fignore-error%2C1";
+    mockedFetch.mockResolvedValue({
+      bytes: PNG,
+      contentType: "image/png",
+      finalUrl: url,
+    });
+
+    const result = await localizeMarkdownImages(`![Workflow](${url})`, ITEM_ID);
+
+    expect(mockedFetch).toHaveBeenCalledWith(url, {
+      accept: "image/avif,image/webp,image/png,image/jpeg,image/gif,image/svg+xml",
+      maxBytes: 10 * 1024 * 1024,
+    });
+    expect(result.stats).toEqual({ discovered: 1, localized: 1, omitted: 0, filtered: 0 });
+    expect(result.markdown).toContain(`![Workflow](../../files/${ITEM_ID}/media/`);
+    expect(result.markdown).not.toContain("x-tos-process");
+  });
+
   it("rejects non-local image references during import", () => {
     expect(() =>
       assertLocalMarkdownImages("![Remote](https://example.com/a.png)", ITEM_ID),
