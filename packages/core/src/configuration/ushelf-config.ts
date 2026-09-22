@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,8 +20,13 @@ export interface UshelfConfig {
   kindleBridgePath: string;
 }
 
-export function resolveConfig(root = process.env.USHELF_ROOT ?? process.cwd()): UshelfConfig {
-  const resolvedRoot = path.resolve(root);
+export function resolveConfig(root?: string): UshelfConfig {
+  const configuredRoot = root ?? process.env.USHELF_ROOT;
+  const resolvedRoot = path.resolve(
+    configuredRoot === undefined || configuredRoot === ""
+      ? path.join(os.homedir(), ".ushelf")
+      : configuredRoot,
+  );
   const libraryDir = path.join(resolvedRoot, "library");
   const stateDir = path.resolve(process.env.USHELF_STATE_DIR ?? path.join(resolvedRoot, "state"));
   const secretsDir = path.resolve(

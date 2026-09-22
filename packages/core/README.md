@@ -15,7 +15,7 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
 - Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
 - Kindle delivery builds a source-only EPUB with validated local media, then delegates device discovery and upload to the bundled Go bridge. Credentials remain outside Markdown and SQLite.
-- `USHELF_ROOT` controls the complete data root and defaults to `process.cwd()`.
+- `USHELF_ROOT` controls the complete data root and defaults to `~/.ushelf`.
 - State and secrets default to `<USHELF_ROOT>/state` and `<USHELF_ROOT>/secrets`. `USHELF_STATE_DIR` and `USHELF_SECRETS_DIR` optionally place either directory elsewhere.
 - The package uses Drizzle ORM with `better-sqlite3`; Node.js 24+ remains the repository runtime requirement.
 

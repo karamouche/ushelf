@@ -45,7 +45,7 @@ type FlagValues struct {
 func ResolveSettings(flags FlagValues, version string) (Settings, error) {
 	home := flags.Home
 	if home == "" {
-		home = os.Getenv("USHELF_HOME")
+		home = os.Getenv("USHELF_ROOT")
 	}
 	if home == "" {
 		userHome, err := os.UserHomeDir()

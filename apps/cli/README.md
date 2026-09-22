@@ -18,7 +18,7 @@ The CLI owns `~/.ushelf` by default:
 config.json  library/  recipes/  state/  assets/  secrets/
 ```
 
-Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_HOME` changes the data root.
+Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
 
 ## Command output
 
