@@ -22,10 +22,12 @@
     "@ushelf/mcp": "workspace:*",
     "better-auth": "^1.7.5",
     "better-sqlite3": "^13.0.3",
-    "hono": "^4.9.4"
+    "hono": "^4.9.4",
+    "tar-stream": "^3.2.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
+    "@types/tar-stream": "^3.1.4",
     "tsx": "^4.20.5"
   }
 }

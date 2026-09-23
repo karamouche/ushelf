@@ -32,6 +32,10 @@ export interface RemoteAuth {
   protectMcp(
     handler: (request: Request, claims: Record<string, unknown>) => Promise<Response>,
   ): (request: Request) => Promise<Response>;
+  protectBearer(
+    requiredScopes: string[],
+    handler: (request: Request, claims: Record<string, unknown>) => Promise<Response>,
+  ): (request: Request) => Promise<Response>;
   close(): void;
 }
 
@@ -143,6 +147,18 @@ export async function createRemoteAuth(options: {
           issuer: `${options.publicUrl.origin}/api/auth`,
           requiredScopes: ["ushelf:read"],
           challengeScopes: ["ushelf:read", "ushelf:write", "ushelf:kindle", "offline_access"],
+        },
+      );
+    },
+    protectBearer(requiredScopes, handler) {
+      return requireMcpAuth(
+        auth,
+        (request, claims) => handler(request, claims as Record<string, unknown>),
+        {
+          resource: `${options.publicUrl.origin}/mcp`,
+          issuer: `${options.publicUrl.origin}/api/auth`,
+          requiredScopes,
+          challengeScopes: requiredScopes,
         },
       );
     },

@@ -35,7 +35,7 @@ serve(
       webRoot,
       basePath,
       remoteAuth && runtime.publicUrl
-        ? { auth: remoteAuth, publicUrl: runtime.publicUrl }
+        ? { auth: remoteAuth, publicUrl: runtime.publicUrl, root: runtime.root }
         : undefined,
     ).fetch,
     port,

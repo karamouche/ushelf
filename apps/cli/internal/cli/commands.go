@@ -73,6 +73,7 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 		state.versionCommand(), state.updateCommand(), state.rebuildCommand(), state.importCommand(),
 		state.configCommand(), state.kindleCommand(),
 		state.connectCommand(), state.disconnectCommand(), state.targetCommand(),
+		state.exportCommand(), state.migrateCommand(),
 	)
 	return root
 }
@@ -202,14 +203,35 @@ func (s *commandState) mcpCommand() *cobra.Command {
 
 func (s *commandState) rebuildCommand() *cobra.Command {
 	return &cobra.Command{Use: "rebuild-index", Short: "Rebuild the disposable search index", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		if s.settings.ActiveTarget == "remote" {
+			return s.remoteRebuild(command.Context())
+		}
 		return s.docker().Maintenance(command.Context(), "rebuild-index")
 	}}
 }
 
 func (s *commandState) importCommand() *cobra.Command {
 	return &cobra.Command{Use: "import FILE", Short: "Import a compatible Markdown item", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		if s.settings.ActiveTarget == "remote" {
+			return s.remoteImport(command.Context(), args[0])
+		}
 		return s.docker().Import(command.Context(), args[0])
 	}}
+}
+
+func (s *commandState) exportCommand() *cobra.Command {
+	return &cobra.Command{Use: "export FILE", Short: "Export a versioned portable archive", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		return s.exportArchive(command.Context(), args[0])
+	}}
+}
+
+func (s *commandState) migrateCommand() *cobra.Command {
+	var includeKindle bool
+	command := &cobra.Command{Use: "migrate", Short: "Move the local library to the configured empty remote", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		return s.migrateRemote(command.Context(), includeKindle)
+	}}
+	command.Flags().BoolVar(&includeKindle, "include-kindle", false, "include the local Kindle credential in the migration")
+	return command
 }
 
 func (s *commandState) versionCommand() *cobra.Command {
@@ -342,6 +364,14 @@ func (s *commandState) kindleSetupCommand() *cobra.Command {
 			if err := kindle.SaveCredential(credentialPath, client); err != nil {
 				return err
 			}
+			if s.settings.ActiveTarget == "remote" {
+				if err := s.remoteKindleUpload(command.Context(), credentialPath); err != nil {
+					return err
+				}
+				if err := os.Remove(credentialPath); err != nil {
+					return fmt.Errorf("remove transferred Kindle credential: %w", err)
+				}
+			}
 			actions.Done("Kindle connected for %q (%s)", client.AccountName(), client.HomeRegion())
 			return nil
 		},
@@ -354,6 +384,9 @@ func (s *commandState) kindleStatusCommand() *cobra.Command {
 		Short: "Check the Kindle connection and list devices",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			if s.settings.ActiveTarget == "remote" {
+				return s.remoteKindleStatus(command.Context())
+			}
 			client, err := kindle.LoadCredential(s.deps.Kindle, kindle.CredentialPath(s.settings.Home))
 			if errors.Is(err, os.ErrNotExist) {
 				return errors.New("Kindle is not configured; run `ushelf kindle setup`")
@@ -383,6 +416,12 @@ func (s *commandState) kindleDisconnectCommand() *cobra.Command {
 		Short: "Deregister uShelf and remove the Kindle credential",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			if s.settings.ActiveTarget == "remote" {
+				if !yes {
+					return errors.New("remote Kindle disconnect requires --yes")
+				}
+				return s.remoteKindleDisconnect(command.Context())
+			}
 			credentialPath := kindle.CredentialPath(s.settings.Home)
 			client, err := kindle.LoadCredential(s.deps.Kindle, credentialPath)
 			if errors.Is(err, os.ErrNotExist) {

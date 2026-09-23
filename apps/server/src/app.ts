@@ -12,12 +12,13 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { RemoteAuth } from "./auth.js";
 import { createHttpMcpHandler } from "./mcp-http.js";
+import { createRemoteMaintenanceHandlers } from "./remote-maintenance.js";
 
 export function createApp(
   service: ShelfService,
   webRoot?: string,
   basePath = "/",
-  remote?: { auth: RemoteAuth; publicUrl: URL },
+  remote?: { auth: RemoteAuth; publicUrl: URL; root?: string },
 ) {
   const app = new Hono();
   const normalizedBasePath = normalizeBasePath(basePath);
@@ -27,12 +28,30 @@ export function createApp(
 
   if (remote) {
     const mcp = createHttpMcpHandler(service, remote.auth);
+    const maintenance = remote.root
+      ? createRemoteMaintenanceHandlers({
+          root: remote.root,
+          service,
+          protect: (scopes, handler) =>
+            remote.auth.protectBearer(scopes, (request) => handler(request)),
+        })
+      : undefined;
     app.get(route("/.well-known/*"), (c) => remote.auth.auth.handler(c.req.raw));
     app.on(["GET", "POST"], route("/api/auth/*"), (c) => {
       if (new URL(c.req.url).pathname.endsWith("/sign-up/email")) return c.notFound();
       return remote.auth.auth.handler(c.req.raw);
     });
     app.post(route("/mcp"), (c) => mcp(c.req.raw));
+    if (maintenance) {
+      app.post(route("/api/remote/rebuild-index"), (c) => maintenance.rebuild(c.req.raw));
+      app.post(route("/api/remote/import"), (c) => maintenance.importMarkdown(c.req.raw));
+      app.put(route("/api/remote/kindle"), (c) => maintenance.kindleUpload(c.req.raw));
+      app.get(route("/api/remote/kindle"), (c) => maintenance.kindleStatus(c.req.raw));
+      app.delete(route("/api/remote/kindle"), (c) => maintenance.kindleDelete(c.req.raw));
+      app.get(route("/api/remote/export"), (c) => maintenance.exportArchive(c.req.raw));
+      app.get(route("/api/remote/skills"), (c) => maintenance.skillsArchive(c.req.raw));
+      app.put(route("/api/remote/migration"), (c) => maintenance.migrate(c.req.raw));
+    }
     app.get(route("/api/setup/status"), (c) => c.json({ claimed: remote.auth.isClaimed() }));
     app.post(route("/api/setup/claim"), async (c) => {
       await assertTrustedMutation(c.req.raw, remote.publicUrl);

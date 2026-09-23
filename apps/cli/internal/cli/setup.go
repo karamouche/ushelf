@@ -53,6 +53,12 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 		if err != nil {
 			return err
 		}
+	} else {
+		var err error
+		skillsRoot, err = s.extractRemoteSkills(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	for _, current := range clients {
 		actions.Step("Configuring %s...", current)
@@ -70,6 +76,45 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 		fmt.Fprintf(s.deps.Stdout, "Desktop clients: open %s/connections for ChatGPT and Claude Desktop.\n", strings.TrimSuffix(s.settings.RemoteURL, "/"))
 	}
 	return nil
+}
+
+func (s *commandState) extractRemoteSkills(ctx context.Context) (string, error) {
+	version := strings.TrimPrefix(s.settings.Version, "v")
+	if version == "" {
+		version = "dev"
+	}
+	target := filepath.Join(s.settings.Home, "assets", version, "skills")
+	if _, err := os.Stat(target); err == nil {
+		return target, nil
+	}
+	response, err := s.remoteRequest(ctx, "GET", "/api/remote/skills", "", nil)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 200 {
+		return "", remoteHTTPError("download agent skills", response)
+	}
+	archive, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	temporary := target + ".tmp"
+	_ = os.RemoveAll(temporary)
+	if err := os.MkdirAll(temporary, 0o700); err != nil {
+		return "", err
+	}
+	if err := untarSkills(archive, temporary); err != nil {
+		_ = os.RemoveAll(temporary)
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporary, target); err != nil {
+		return "", err
+	}
+	return target, nil
 }
 
 func (s *commandState) configureClient(ctx context.Context, client, executable string, force bool) error {

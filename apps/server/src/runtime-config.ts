@@ -8,6 +8,7 @@ export interface ServerRuntimeConfig {
   publicUrl?: URL;
   basePath: string;
   authDir: string;
+  root: string;
 }
 
 export function resolveServerRuntimeConfig(
@@ -21,10 +22,10 @@ export function resolveServerRuntimeConfig(
   const root = resolveConfig(env.USHELF_ROOT).root;
   const basePath = normalizeBasePath(env.USHELF_WEB_BASE_PATH?.trim() || "/");
 
-  if (mode === "local") return { mode, basePath, authDir: path.join(root, "auth") };
+  if (mode === "local") return { mode, basePath, authDir: path.join(root, "auth"), root };
   if (basePath !== "/") throw new Error("Remote mode must be served at the origin root");
   const publicUrl = parsePublicUrl(env.USHELF_PUBLIC_URL);
-  return { mode, publicUrl, basePath, authDir: path.join(root, "auth") };
+  return { mode, publicUrl, basePath, authDir: path.join(root, "auth"), root };
 }
 
 function parsePublicUrl(value: string | undefined): URL {
