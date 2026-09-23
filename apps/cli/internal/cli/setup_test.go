@@ -29,7 +29,7 @@ func TestUntarSkillsRejectsTraversal(t *testing.T) {
 }
 
 func TestSetupCommandLineUsesUserScopeForClaude(t *testing.T) {
-	actual := setupCommandLine("claude", "/usr/local/bin/ushelf", "/Users/test/.ushelf")
+	actual := setupCommandLine("claude-code", "/usr/local/bin/ushelf", "/Users/test/.ushelf")
 	expected := `claude mcp add --scope user ushelf -- "/usr/local/bin/ushelf" --home "/Users/test/.ushelf" mcp`
 	if actual != expected {
 		t.Fatalf("command = %q", actual)
@@ -90,7 +90,7 @@ func TestConfigureClientForceReplacesConflict(t *testing.T) {
 		deps:     Dependencies{Runner: runner, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}},
 		settings: Settings{Home: t.TempDir()},
 	}
-	if err := state.configureClient(context.Background(), "claude", "/usr/local/bin/ushelf", true); err != nil {
+	if err := state.configureClient(context.Background(), "claude-code", "/usr/local/bin/ushelf", true); err != nil {
 		t.Fatal(err)
 	}
 	last := runner.calls[len(runner.calls)-1]
@@ -125,7 +125,7 @@ func TestConfigureClaudeClientAcceptsExactConfiguration(t *testing.T) {
 		deps:     Dependencies{Runner: runner, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}},
 		settings: Settings{Home: home},
 	}
-	if err := state.configureClient(context.Background(), "claude", executable, false); err != nil {
+	if err := state.configureClient(context.Background(), "claude-code", executable, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.calls) != 1 {
@@ -142,7 +142,7 @@ func TestConfigureClaudeClientRejectsWrongHome(t *testing.T) {
 		deps:     Dependencies{Runner: runner, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}},
 		settings: Settings{Home: home},
 	}
-	err := state.configureClient(context.Background(), "claude", executable, false)
+	err := state.configureClient(context.Background(), "claude-code", executable, false)
 	if err == nil || !strings.Contains(err.Error(), "conflicting") {
 		t.Fatalf("expected conflict error, got %v", err)
 	}

@@ -193,6 +193,9 @@ func (s *commandState) openCommand() *cobra.Command {
 
 func (s *commandState) mcpCommand() *cobra.Command {
 	return &cobra.Command{Use: "mcp", Short: "Run the stdio MCP server", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		if s.settings.ActiveTarget == "remote" {
+			return s.remoteMCP(command.Context())
+		}
 		return s.docker().MCP(command.Context())
 	}}
 }
@@ -606,10 +609,10 @@ func setConfigValue(path, key, value string, unset bool) error {
 
 func (s *commandState) setupCommand() *cobra.Command {
 	var printOnly, force bool
-	command := &cobra.Command{Use: "setup codex|claude|all", Short: "Configure an agent client and install uShelf skills", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+	command := &cobra.Command{Use: "setup codex|claude-code|chatgpt|claude-desktop|all", Short: "Configure an agent client and install uShelf skills", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
 		client := strings.ToLower(args[0])
-		if client != "codex" && client != "claude" && client != "all" {
-			return fmt.Errorf("client must be codex, claude, or all")
+		if client != "codex" && client != "claude-code" && client != "chatgpt" && client != "claude-desktop" && client != "all" {
+			return fmt.Errorf("client must be codex, claude-code, chatgpt, claude-desktop, or all")
 		}
 		return s.setupClients(command.Context(), client, printOnly, force)
 	}}

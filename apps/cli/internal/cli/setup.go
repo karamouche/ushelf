@@ -21,7 +21,15 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 	}
 	clients := []string{client}
 	if client == "all" {
-		clients = []string{"codex", "claude"}
+		clients = []string{"codex", "claude-code"}
+	}
+	if client == "chatgpt" || client == "claude-desktop" {
+		if s.settings.ActiveTarget != "remote" {
+			return fmt.Errorf("%s requires an active remote target; run `ushelf connect URL` first", client)
+		}
+		connectionsURL := strings.TrimSuffix(s.settings.RemoteURL, "/") + "/connections"
+		fmt.Fprintf(s.deps.Stdout, "Open %s and add %s with MCP URL %s/mcp\n", connectionsURL, client, strings.TrimSuffix(s.settings.RemoteURL, "/"))
+		return nil
 	}
 	if printOnly {
 		for _, current := range clients {
@@ -31,36 +39,46 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 	}
 	actions := s.actions()
 	actions.Step("Preparing uShelf agent assets...")
-	docker := s.docker()
-	if err := docker.EnsureDirectories(); err != nil {
-		return err
-	}
-	if err := docker.EnsureImage(ctx); err != nil {
-		return err
-	}
-	skillsRoot, err := docker.ExtractSkills(ctx)
-	if err != nil {
-		return err
+	var skillsRoot string
+	if s.settings.ActiveTarget == "local" {
+		docker := s.docker()
+		if err := docker.EnsureDirectories(); err != nil {
+			return err
+		}
+		if err := docker.EnsureImage(ctx); err != nil {
+			return err
+		}
+		var err error
+		skillsRoot, err = docker.ExtractSkills(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	for _, current := range clients {
 		actions.Step("Configuring %s...", current)
 		if err := s.configureClient(ctx, current, executable, force); err != nil {
 			return err
 		}
-		if err := linkSkills(current, skillsRoot, force); err != nil {
-			return err
+		if skillsRoot != "" {
+			if err := linkSkills(current, skillsRoot, force); err != nil {
+				return err
+			}
 		}
 		actions.Done("Configured %s for uShelf", current)
+	}
+	if client == "all" && s.settings.ActiveTarget == "remote" {
+		fmt.Fprintf(s.deps.Stdout, "Desktop clients: open %s/connections for ChatGPT and Claude Desktop.\n", strings.TrimSuffix(s.settings.RemoteURL, "/"))
 	}
 	return nil
 }
 
 func (s *commandState) configureClient(ctx context.Context, client, executable string, force bool) error {
+	commandName := clientCommand(client)
 	getArgs := []string{"mcp", "get", "ushelf"}
 	if client == "codex" {
 		getArgs = append(getArgs, "--json")
 	}
-	existing, getErr := s.deps.Runner.Output(ctx, client, getArgs...)
+	existing, getErr := s.deps.Runner.Output(ctx, commandName, getArgs...)
 	if getErr == nil {
 		matches, matchErr := clientConfigurationMatches(client, existing, executable, s.settings.Home)
 		if matchErr != nil && !force {
@@ -72,16 +90,16 @@ func (s *commandState) configureClient(ctx context.Context, client, executable s
 		if !force {
 			return fmt.Errorf("%s already has a conflicting uShelf MCP entry; inspect it or rerun with --force", client)
 		}
-		if err := runQuiet(ctx, s.deps.Runner, client, "mcp", "remove", "ushelf"); err != nil {
+		if err := runQuiet(ctx, s.deps.Runner, commandName, "mcp", "remove", "ushelf"); err != nil {
 			return err
 		}
 	}
 	args := []string{"mcp", "add"}
-	if client == "claude" {
+	if client == "claude-code" {
 		args = append(args, "--scope", "user")
 	}
 	args = append(args, "ushelf", "--", executable, "--home", s.settings.Home, "mcp")
-	return runQuiet(ctx, s.deps.Runner, client, args...)
+	return runQuiet(ctx, s.deps.Runner, commandName, args...)
 }
 
 func clientConfigurationMatches(client, output, executable, home string) (bool, error) {
@@ -127,8 +145,8 @@ func parseClaudeMCPConfiguration(output string) (string, string, error) {
 }
 
 func setupCommandLine(client, executable, home string) string {
-	prefix := client + " mcp add"
-	if client == "claude" {
+	prefix := clientCommand(client) + " mcp add"
+	if client == "claude-code" {
 		prefix += " --scope user"
 	}
 	return fmt.Sprintf("%s ushelf -- %q --home %q mcp", prefix, executable, home)
@@ -213,7 +231,7 @@ func linkSkills(client, sourceRoot string, force bool) error {
 		return err
 	}
 	destinationRoot := filepath.Join(home, ".agents", "skills")
-	if client == "claude" {
+	if client == "claude-code" {
 		destinationRoot = filepath.Join(home, ".claude", "skills")
 	}
 	if err := os.MkdirAll(destinationRoot, 0o700); err != nil {
@@ -242,6 +260,13 @@ func linkSkills(client, sourceRoot string, force bool) error {
 		}
 	}
 	return nil
+}
+
+func clientCommand(client string) string {
+	if client == "claude-code" {
+		return "claude"
+	}
+	return client
 }
 
 func replaceSymlink(source, destination string) error {

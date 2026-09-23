@@ -18,7 +18,7 @@ const KINDLE_TOOLS = new Set(["list_kindle_devices", "send_to_kindle"]);
 
 export function createHttpMcpHandler(service: ShelfService, remoteAuth: RemoteAuth) {
   const mcpHandler = createMcpHandler(() => createUshelfMcpServer(service), {
-    legacy: "reject",
+    legacy: "stateless",
     responseMode: "auto",
     onerror: (error) => console.error("MCP request failed", error),
   });

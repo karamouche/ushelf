@@ -57,7 +57,7 @@ Next, connect the agent client you use:
 
 ```sh
 ushelf setup codex
-# or: ushelf setup claude
+# or: ushelf setup claude-code
 # or: ushelf setup all
 ```
 
@@ -103,7 +103,7 @@ Configure Codex, Claude Code, or both. This registers `ushelf mcp` at user scope
 
 ```sh
 ushelf setup codex
-ushelf setup claude
+ushelf setup claude-code
 # or: ushelf setup all
 ```
 
