@@ -20,14 +20,13 @@ import {
   localMediaUrl,
   originalFileUrl,
   sendToKindle,
-  updateReading,
-  updateReadingOnExit,
   type ItemSummary,
   type Citation,
   type KindleDevice,
   type ReadingStatus,
   type ShelfItem,
 } from "./api.js";
+import { useReadingProgress } from "./use-reading-progress.js";
 
 const statuses: Array<{ value: "" | ReadingStatus; label: string }> = [
   { value: "", label: "All" },
@@ -205,82 +204,16 @@ function Reader() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [item, setItem] = useState<ShelfItem>();
-  const itemRef = useRef<ShelfItem | undefined>(undefined);
   const [error, setError] = useState("");
-  const lastSaved = useRef(0);
+  const { liveProgress, saveError, changeStatus, flush } = useReadingProgress(item, setItem);
 
   useEffect(() => {
     getItem(id)
       .then((next) => {
         setItem(next);
-        itemRef.current = next;
       })
       .catch((reason: Error) => setError(reason.message));
   }, [id]);
-  useEffect(() => {
-    itemRef.current = item;
-  }, [item]);
-  useEffect(() => {
-    if (!item) return;
-    const timer = window.setTimeout(
-      () =>
-        window.scrollTo({
-          top:
-            item.reading.progress *
-            Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-          behavior: "instant",
-        }),
-      80,
-    );
-    const onScroll = () => {
-      const current = itemRef.current;
-      if (!current || Date.now() - lastSaved.current < 4000) return;
-      const denominator = document.documentElement.scrollHeight - window.innerHeight;
-      const progress = denominator > 0 ? window.scrollY / denominator : 1;
-      if (Math.abs(progress - current.reading.progress) < 0.025) return;
-      lastSaved.current = Date.now();
-      updateReading(
-        current,
-        current.reading.status === "inbox" ? "reading" : current.reading.status,
-        progress,
-      )
-        .then((next) => {
-          itemRef.current = next;
-          setItem(next);
-        })
-        .catch(() => undefined);
-    };
-    const onPageHide = () => {
-      const current = itemRef.current;
-      if (!current) return;
-      const denominator = document.documentElement.scrollHeight - window.innerHeight;
-      const progress = denominator > 0 ? window.scrollY / denominator : 1;
-      updateReadingOnExit(
-        current,
-        current.reading.status === "inbox" ? "reading" : current.reading.status,
-        progress,
-      );
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pagehide", onPageHide);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pagehide", onPageHide);
-    };
-  }, [item?.id]);
-
-  const changeStatus = async (status: ReadingStatus) => {
-    if (!item) return;
-    try {
-      const next = await updateReading(item, status, item.reading.progress);
-      setItem(next);
-      itemRef.current = next;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
-  };
-
   const insightDocument = useMemo(
     () =>
       item
@@ -313,7 +246,13 @@ function Reader() {
   return (
     <div className="reader-shell">
       <header className="reader-nav">
-        <button onClick={() => navigate(-1)} aria-label="Back to library">
+        <button
+          onClick={() => {
+            void flush({ keepalive: true });
+            navigate(-1);
+          }}
+          aria-label="Back to library"
+        >
           ←
         </button>
         <Brand />
@@ -329,8 +268,13 @@ function Reader() {
           ))}
         </select>
       </header>
-      <div className="reading-progress" style={{ width: `${item.reading.progress * 100}%` }} />
+      <div className="reading-progress" style={{ width: `${liveProgress * 100}%` }} />
       <main className="article">
+        {saveError ? (
+          <p className="reader-save-error" role="alert">
+            {saveError}
+          </p>
+        ) : null}
         <p className="eyebrow">
           {sourceTypeLabel(item.sourceType)} · saved {formatDate(item.capturedAt)}
         </p>

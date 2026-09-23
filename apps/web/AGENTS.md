@@ -8,7 +8,8 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 
 ## Source responsibilities
 
-- `src/App.tsx`: library and reader routes, filters, Markdown/Mermaid rendering, reading-state UX, and scroll-progress persistence.
+- `src/App.tsx`: library and reader routes, filters, Markdown/Mermaid rendering, and reading-state UX.
+- `src/use-reading-progress.ts`: live reader progress, restoration suppression, debounced and maximum-interval persistence, serialized revision-aware writes, and exit flushing.
 - `src/api.ts`: the browser-facing HTTP contract and base-path-aware request helpers.
 - `src/styles.css`: the complete visual system and responsive behavior.
 - `src/main.tsx`: React bootstrapping and `BrowserRouter` basename configuration.
@@ -21,6 +22,8 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 - Build every API URL from `import.meta.env.BASE_URL`; avoid root-relative links or fetches that break subpath deployments.
 - Preserve `BrowserRouter`'s configured basename and verify both `/` and a non-root base path when routing logic changes.
 - Send the latest item revision with reading mutations. When a response returns a new item, replace both rendered state and any mutable ref used by scroll/page-exit handlers.
+- Keep live scroll position separate from the last persisted item. Progress for Inbox and Reading items must move in both directions; Read items remain fixed at 100% unless their status is explicitly changed.
+- Preserve the progress controller's trailing 750 ms save, four-second maximum interval, 0.5 percentage-point change threshold, serialized/coalesced writes, one stale-revision retry, and keepalive exit flush. Initial programmatic restoration must not mark an Inbox item as Reading.
 - Keep search/filter state in URL parameters so library views remain navigable and shareable.
 - Maintain accessible names, semantic controls, keyboard-scrollable wide tables, visible failure states, and responsive layouts.
 
@@ -33,11 +36,13 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 ## Testing and verification
 
 - Keep small pure helpers, such as base-path normalization, under Vitest.
+- Keep the progress decision tests in `src/use-reading-progress.test.ts` aligned with the controller invariants, and retain Playwright coverage for timing, navigation flushes, and revision races.
 - Add Playwright coverage for visible library/reader workflows, routing, accessibility-sensitive behavior, and Markdown rendering. Prefer route interception for focused item fixtures.
 - Build before E2E: Playwright starts the compiled production server from `apps/server/dist` and serves `apps/web/dist`.
 
 ```sh
 pnpm test -- apps/web/base-path.test.ts
+pnpm vitest run apps/web/src/use-reading-progress.test.ts
 pnpm --filter @ushelf/web typecheck
 pnpm --filter @ushelf/web build
 pnpm build
