@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,20 +22,24 @@ const (
 var safeBasePath = regexp.MustCompile(`^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$`)
 
 type fileConfig struct {
-	Host     string `json:"host,omitempty"`
-	Port     int    `json:"port,omitempty"`
-	BasePath string `json:"basePath,omitempty"`
-	Image    string `json:"image,omitempty"`
+	Host         string `json:"host,omitempty"`
+	Port         int    `json:"port,omitempty"`
+	BasePath     string `json:"basePath,omitempty"`
+	Image        string `json:"image,omitempty"`
+	ActiveTarget string `json:"activeTarget,omitempty"`
+	RemoteURL    string `json:"remoteUrl,omitempty"`
 }
 
 type Settings struct {
-	Home       string
-	Host       string
-	Port       int
-	BasePath   string
-	Image      string
-	Version    string
-	ConfigPath string
+	Home         string
+	Host         string
+	Port         int
+	BasePath     string
+	Image        string
+	Version      string
+	ConfigPath   string
+	ActiveTarget string
+	RemoteURL    string
 }
 
 type FlagValues struct {
@@ -65,13 +70,15 @@ func ResolveSettings(flags FlagValues, version string) (Settings, error) {
 		return Settings{}, err
 	}
 	settings := Settings{
-		Home:       absHome,
-		Host:       firstNonEmpty(stored.Host, defaultHost),
-		Port:       firstNonZero(stored.Port, defaultPort),
-		BasePath:   firstNonEmpty(stored.BasePath, defaultBasePath),
-		Image:      firstNonEmpty(stored.Image, defaultImage(version)),
-		Version:    version,
-		ConfigPath: configPath,
+		Home:         absHome,
+		Host:         firstNonEmpty(stored.Host, defaultHost),
+		Port:         firstNonZero(stored.Port, defaultPort),
+		BasePath:     firstNonEmpty(stored.BasePath, defaultBasePath),
+		Image:        firstNonEmpty(stored.Image, defaultImage(version)),
+		Version:      version,
+		ConfigPath:   configPath,
+		ActiveTarget: firstNonEmpty(stored.ActiveTarget, "local"),
+		RemoteURL:    stored.RemoteURL,
 	}
 	if value := os.Getenv("USHELF_HOST"); value != "" {
 		settings.Host = value
@@ -127,10 +134,29 @@ func (s Settings) Validate() error {
 	if strings.TrimSpace(s.Image) == "" || strings.ContainsAny(s.Image, " \t\r\n") {
 		return fmt.Errorf("image must be a non-empty Docker image reference")
 	}
+	if s.ActiveTarget != "" && s.ActiveTarget != "local" && s.ActiveTarget != "remote" {
+		return fmt.Errorf("active target must be local or remote")
+	}
+	if s.ActiveTarget == "remote" && s.RemoteURL == "" {
+		return fmt.Errorf("remote target is selected but no remote URL is configured; run `ushelf connect URL`")
+	}
+	if s.RemoteURL != "" {
+		parsed, err := url.Parse(s.RemoteURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" && parsed.Path != "/" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return fmt.Errorf("remote URL must be a credential-free HTTPS origin")
+		}
+	}
 	return nil
 }
 
 func (s Settings) URL() string {
+	if s.ActiveTarget == "remote" && s.RemoteURL != "" {
+		return strings.TrimSuffix(s.RemoteURL, "/") + "/"
+	}
+	return s.LocalURL()
+}
+
+func (s Settings) LocalURL() string {
 	base := strings.TrimSuffix(s.BasePath, "/")
 	return fmt.Sprintf("http://%s%s/", net.JoinHostPort(s.Host, strconv.Itoa(s.Port)), base)
 }

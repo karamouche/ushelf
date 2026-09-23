@@ -106,7 +106,7 @@ func (d Docker) Start(ctx context.Context) error {
 			if err := d.waitForHealth(ctx); err != nil {
 				return err
 			}
-			d.done("uShelf is ready at %s", d.Settings.URL())
+			d.done("uShelf is ready at %s", d.Settings.LocalURL())
 			return nil
 		}
 		d.step("Recreating the uShelf service for the current configuration...")
@@ -133,7 +133,7 @@ func (d Docker) Start(ctx context.Context) error {
 	if err := d.waitForHealth(ctx); err != nil {
 		return err
 	}
-	d.done("uShelf is ready at %s", d.Settings.URL())
+	d.done("uShelf is ready at %s", d.Settings.LocalURL())
 	return nil
 }
 
@@ -172,7 +172,7 @@ func (d Docker) Status(ctx context.Context) error {
 		return ownershipErr
 	}
 	if !exists {
-		fmt.Fprintf(d.Stdout, "Status: stopped\nHealth: unavailable\nURL: %s\nVersion: %s\nImage: %s\nHome: %s\n", d.Settings.URL(), d.Settings.Version, d.Settings.Image, d.Settings.Home)
+		fmt.Fprintf(d.Stdout, "Status: stopped\nHealth: unavailable\nURL: %s\nVersion: %s\nImage: %s\nHome: %s\n", d.Settings.LocalURL(), d.Settings.Version, d.Settings.Image, d.Settings.Home)
 		return nil
 	}
 	value, err := d.inspect(ctx, "{{json .State}}")
@@ -192,7 +192,7 @@ func (d Docker) Status(ctx context.Context) error {
 	if state.Health != nil {
 		health = state.Health.Status
 	}
-	fmt.Fprintf(d.Stdout, "Status: %s\nHealth: %s\nURL: %s\nVersion: %s\nImage: %s\nHome: %s\n", state.Status, health, d.Settings.URL(), d.Settings.Version, d.Settings.Image, d.Settings.Home)
+	fmt.Fprintf(d.Stdout, "Status: %s\nHealth: %s\nURL: %s\nVersion: %s\nImage: %s\nHome: %s\n", state.Status, health, d.Settings.LocalURL(), d.Settings.Version, d.Settings.Image, d.Settings.Home)
 	return nil
 }
 

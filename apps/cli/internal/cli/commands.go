@@ -27,6 +27,7 @@ type Dependencies struct {
 	Stdin          io.Reader
 	Stdout, Stderr io.Writer
 	Kindle         kindle.Provider
+	HTTPClient     HTTPClient
 }
 
 type commandState struct {
@@ -71,6 +72,7 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 		state.openCommand(), state.mcpCommand(), state.setupCommand(), state.doctorCommand(),
 		state.versionCommand(), state.updateCommand(), state.rebuildCommand(), state.importCommand(),
 		state.configCommand(), state.kindleCommand(),
+		state.connectCommand(), state.disconnectCommand(), state.targetCommand(),
 	)
 	return root
 }
@@ -104,8 +106,62 @@ func (s *commandState) stopCommand() *cobra.Command {
 
 func (s *commandState) statusCommand() *cobra.Command {
 	return &cobra.Command{Use: "status", Short: "Show service status", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		if s.settings.ActiveTarget == "remote" {
+			var health struct {
+				OK bool `json:"ok"`
+			}
+			if err := s.getJSON(command.Context(), strings.TrimSuffix(s.settings.RemoteURL, "/")+"/api/health", &health); err != nil {
+				return fmt.Errorf("remote uShelf is unavailable: %w", err)
+			}
+			fmt.Fprintf(s.deps.Stdout, "Target: remote\nStatus: reachable\nURL: %s/\n", strings.TrimSuffix(s.settings.RemoteURL, "/"))
+			return nil
+		}
 		return s.docker().Status(command.Context())
 	}}
+}
+
+func (s *commandState) connectCommand() *cobra.Command {
+	return &cobra.Command{Use: "connect URL", Short: "Connect this CLI to a personal remote uShelf", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		return s.connectRemote(command.Context(), args[0])
+	}}
+}
+
+func (s *commandState) disconnectCommand() *cobra.Command {
+	return &cobra.Command{Use: "disconnect", Short: "Revoke the remote connection and select local", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		return s.disconnectRemote(command.Context())
+	}}
+}
+
+func (s *commandState) targetCommand() *cobra.Command {
+	command := &cobra.Command{Use: "target", Short: "Select the local or remote uShelf"}
+	command.AddCommand(
+		&cobra.Command{Use: "status", Short: "Show the active target", Args: cobra.NoArgs, Run: func(_ *cobra.Command, _ []string) {
+			fmt.Fprintf(s.deps.Stdout, "Active target: %s\nLocal: %s\n", s.settings.ActiveTarget, s.settings.LocalURL())
+			if s.settings.RemoteURL != "" {
+				fmt.Fprintf(s.deps.Stdout, "Remote: %s/\n", strings.TrimSuffix(s.settings.RemoteURL, "/"))
+			}
+		}},
+		&cobra.Command{Use: "use local|remote", Short: "Change the active target", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, args []string) error {
+			target := strings.ToLower(args[0])
+			if target != "local" && target != "remote" {
+				return errors.New("target must be local or remote")
+			}
+			config, err := readFileConfig(s.settings.ConfigPath)
+			if err != nil {
+				return err
+			}
+			if target == "remote" && config.RemoteURL == "" {
+				return errors.New("no remote is configured; run `ushelf connect URL`")
+			}
+			config.ActiveTarget = target
+			if err := writeFileConfig(s.settings.ConfigPath, config); err != nil {
+				return err
+			}
+			fmt.Fprintf(s.deps.Stdout, "Selected %s target.\n", target)
+			return nil
+		}},
+	)
+	return command
 }
 
 func (s *commandState) logsCommand() *cobra.Command {
@@ -161,6 +217,21 @@ func (s *commandState) versionCommand() *cobra.Command {
 
 func (s *commandState) doctorCommand() *cobra.Command {
 	return &cobra.Command{Use: "doctor", Short: "Check the local uShelf installation", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		if s.settings.ActiveTarget == "remote" {
+			fmt.Fprintln(s.deps.Stdout, "PASS target remote")
+			if _, err := loadRemoteCredentials(s.settings.Home); err != nil {
+				return err
+			}
+			fmt.Fprintln(s.deps.Stdout, "PASS credentials owner-only credential file is readable")
+			var health struct {
+				OK bool `json:"ok"`
+			}
+			if err := s.getJSON(command.Context(), strings.TrimSuffix(s.settings.RemoteURL, "/")+"/api/health", &health); err != nil {
+				return err
+			}
+			fmt.Fprintln(s.deps.Stdout, "PASS remote health")
+			return nil
+		}
 		docker := s.docker()
 		failures := 0
 		check := func(name string, err error) {
@@ -427,7 +498,7 @@ func (s *commandState) configCommand() *cobra.Command {
 		Short: "Show effective configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image}
+			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image, "active-target": s.settings.ActiveTarget, "remote-url": s.settings.RemoteURL}
 			encoded, _ := json.MarshalIndent(value, "", "  ")
 			fmt.Fprintln(s.deps.Stdout, string(encoded))
 			return nil
