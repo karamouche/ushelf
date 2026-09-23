@@ -154,10 +154,12 @@ export async function updateReading(
   item: ShelfItem,
   status: ReadingStatus,
   progress: number,
+  options?: { keepalive?: boolean },
 ): Promise<ShelfItem> {
   return (
     await request<{ item: ShelfItem }>(`/api/items/${item.id}/reading`, {
       method: "PATCH",
+      ...(options?.keepalive === undefined ? {} : { keepalive: options.keepalive }),
       body: JSON.stringify({ status, progress, revision: item.revision }),
     })
   ).item;

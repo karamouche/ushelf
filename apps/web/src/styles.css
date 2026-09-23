@@ -263,7 +263,13 @@ footer {
   left: 0;
   height: 2px;
   background: #111;
-  transition: width 0.2s;
+}
+.reader-save-error {
+  margin: 0 0 28px;
+  border: 1px solid #9c1717;
+  padding: 12px 14px;
+  color: #9c1717;
+  font-size: 13px;
 }
 .article {
   width: min(680px, calc(100% - 40px));
