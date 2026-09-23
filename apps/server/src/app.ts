@@ -10,13 +10,59 @@ import {
 } from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { RemoteAuth } from "./auth.js";
 
-export function createApp(service: ShelfService, webRoot?: string, basePath = "/") {
+export function createApp(
+  service: ShelfService,
+  webRoot?: string,
+  basePath = "/",
+  remote?: { auth: RemoteAuth; publicUrl: URL },
+) {
   const app = new Hono();
   const normalizedBasePath = normalizeBasePath(basePath);
   const prefix = normalizedBasePath === "/" ? "" : normalizedBasePath.replace(/\/$/, "");
   const route = (path: string) => `${prefix}${path}`;
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
+
+  if (remote) {
+    app.on(["GET", "POST"], route("/api/auth/*"), (c) => {
+      if (new URL(c.req.url).pathname.endsWith("/sign-up/email")) return c.notFound();
+      return remote.auth.auth.handler(c.req.raw);
+    });
+    app.get(route("/api/setup/status"), (c) => c.json({ claimed: remote.auth.isClaimed() }));
+    app.post(route("/api/setup/claim"), async (c) => {
+      await assertTrustedMutation(c.req.raw, remote.publicUrl);
+      const body = await c.req.json<{
+        code: string;
+        email: string;
+        password: string;
+        name?: string;
+      }>();
+      await remote.auth.claim(body);
+      return c.json({ claimed: true }, 201);
+    });
+    app.post(route("/api/recovery/reset"), async (c) => {
+      await assertTrustedMutation(c.req.raw, remote.publicUrl);
+      const body = await c.req.json<{ code: string; password: string }>();
+      await remote.auth.resetPassword(body);
+      return c.json({ reset: true });
+    });
+    app.use(route("/*"), async (c, next) => {
+      assertForwardedOrigin(c.req.raw, remote.publicUrl);
+      const pathname = new URL(c.req.url).pathname;
+      if (isPublicRemotePath(pathname, prefix)) return next();
+      if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+        await assertTrustedMutation(c.req.raw, remote.publicUrl);
+      }
+      const session = await remote.auth.auth.api.getSession({ headers: c.req.raw.headers });
+      if (!session) return c.json({ error: "Authentication required" }, 401);
+      return next();
+    });
+    app.get(route("/api/account"), async (c) => {
+      const session = await remote.auth.auth.api.getSession({ headers: c.req.raw.headers });
+      return c.json({ user: session?.user });
+    });
+  }
 
   app.get(route("/api/health"), (c) => c.json({ ok: true }));
   app.get(route("/api/kindle/status"), async (c) =>
@@ -123,6 +169,35 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     app.get(webRoute, (c) => c.html(indexHtml));
   }
   return app;
+}
+
+function isPublicRemotePath(pathname: string, prefix: string): boolean {
+  const relative =
+    prefix && pathname.startsWith(prefix) ? pathname.slice(prefix.length) || "/" : pathname;
+  return (
+    relative === "/api/health" ||
+    relative.startsWith("/api/auth/") ||
+    relative.startsWith("/api/setup/") ||
+    relative === "/api/recovery/reset" ||
+    relative === "/setup" ||
+    relative === "/login" ||
+    relative.startsWith("/assets/") ||
+    relative === "/favicon.ico"
+  );
+}
+
+async function assertTrustedMutation(request: Request, publicUrl: URL): Promise<void> {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== publicUrl.origin) throw new Error("Untrusted request origin");
+}
+
+function assertForwardedOrigin(request: Request, publicUrl: URL): void {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedHost && forwardedHost !== publicUrl.host) throw new Error("Invalid forwarded host");
+  if (forwardedProto && forwardedProto.split(",", 1)[0]?.trim() !== "https") {
+    throw new Error("Invalid forwarded protocol");
+  }
 }
 
 function encodeHeaderFilename(value: string): string {
