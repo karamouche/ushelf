@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { KindleError, kindleTargetSchema, type ShelfService } from "@ushelf/core";
 import { z } from "zod";
 
@@ -28,10 +28,10 @@ export function registerKindleTools(server: McpServer, service: KindleService): 
       title: "List Kindle devices",
       description:
         "List registered Kindle devices and the last successfully used device, when available.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async (_input, { signal }) => kindleResult(() => service.kindleDevices(signal)),
+    async (_input, context) => kindleResult(() => service.kindleDevices(context.mcpReq.signal)),
   );
 
   server.registerTool(
@@ -40,10 +40,10 @@ export function registerKindleTools(server: McpServer, service: KindleService): 
       title: "Send to Kindle",
       description:
         "Send an already-saved item's canonical source and local images to a registered Kindle device as an EPUB. Generated insights are excluded.",
-      inputSchema: {
+      inputSchema: z.object({
         itemId: z.uuid(),
         targetSerial: kindleTargetSchema.shape.targetSerial,
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -51,7 +51,7 @@ export function registerKindleTools(server: McpServer, service: KindleService): 
         openWorldHint: true,
       },
     },
-    async ({ itemId, targetSerial }, { signal }) =>
-      kindleResult(() => service.sendToKindle(itemId, targetSerial, signal)),
+    async ({ itemId, targetSerial }, context) =>
+      kindleResult(() => service.sendToKindle(itemId, targetSerial, context.mcpReq.signal)),
   );
 }

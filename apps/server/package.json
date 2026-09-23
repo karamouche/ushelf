@@ -13,8 +13,13 @@
     "reset-password": "tsx src/cli.ts reset-password"
   },
   "dependencies": {
+    "@better-auth/cimd": "^1.7.5",
+    "@better-auth/mcp": "^1.7.5",
+    "@better-auth/oauth-provider": "^1.7.5",
     "@hono/node-server": "^1.19.1",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@ushelf/core": "workspace:*",
+    "@ushelf/mcp": "workspace:*",
     "better-auth": "^1.7.5",
     "better-sqlite3": "^13.0.3",
     "hono": "^4.9.4"

@@ -115,6 +115,42 @@ describe("single-owner remote authentication", () => {
       ).status,
     ).toBe(400);
   });
+
+  it("publishes OAuth discovery and challenges unauthenticated MCP requests", async () => {
+    const { app } = await fixture();
+    const resourceMetadata = await app.request("/.well-known/oauth-protected-resource/mcp");
+    expect(resourceMetadata.status).toBe(200);
+    await expect(resourceMetadata.json()).resolves.toMatchObject({
+      resource: "https://shelf.example/mcp",
+      authorization_servers: ["https://shelf.example/api/auth"],
+      scopes_supported: ["ushelf:read", "ushelf:write", "ushelf:kindle"],
+    });
+
+    const authorizationMetadata = await app.request(
+      "/api/auth/.well-known/oauth-authorization-server",
+    );
+    expect(authorizationMetadata.status).toBe(200);
+    await expect(authorizationMetadata.json()).resolves.toMatchObject({
+      issuer: "https://shelf.example/api/auth",
+      code_challenge_methods_supported: ["S256"],
+      grant_types_supported: expect.arrayContaining([
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:device_code",
+      ]),
+      device_authorization_endpoint: "https://shelf.example/api/auth/device/code",
+    });
+
+    const mcp = await app.request("/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(mcp.status).toBe(401);
+    expect(mcp.headers.get("www-authenticate")).toContain(
+      "https://shelf.example/.well-known/oauth-protected-resource/mcp",
+    );
+  });
 });
 
 describe("remote runtime configuration", () => {

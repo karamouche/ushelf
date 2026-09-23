@@ -1,6 +1,11 @@
 import Database from "better-sqlite3";
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
+import { jwt } from "better-auth/plugins";
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { mcp, requireMcpAuth } from "@better-auth/mcp";
+import { oauthDeviceAuthorization } from "@better-auth/oauth-provider";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +29,9 @@ export interface RemoteAuth {
   claim(input: { code: string; email: string; password: string; name?: string }): Promise<void>;
   issuePasswordReset(): { code: string; expiresAt: string };
   resetPassword(input: { code: string; password: string }): Promise<void>;
+  protectMcp(
+    handler: (request: Request, claims: Record<string, unknown>) => Promise<Response>,
+  ): (request: Request) => Promise<Response>;
   close(): void;
 }
 
@@ -50,6 +58,7 @@ export async function createRemoteAuth(options: {
     )
   `);
   const auth = instantiateAuth(database, secret, options.publicUrl);
+  await auth.$context;
   const ownerCount = Number(
     (database.prepare('SELECT COUNT(*) AS count FROM "user"').get() as { count: number }).count,
   );
@@ -117,9 +126,25 @@ export async function createRemoteAuth(options: {
           .prepare(`UPDATE account SET password = ? WHERE providerId = 'credential'`)
           .run(passwordHash);
         database.prepare("DELETE FROM session").run();
+        database.prepare("DELETE FROM oauthAccessToken").run();
+        database.prepare("DELETE FROM oauthRefreshToken").run();
+        database.prepare("DELETE FROM oauthConsent").run();
+        database.prepare("DELETE FROM deviceCode").run();
         database.prepare("DELETE FROM ushelf_auth_state WHERE key = 'password-reset'").run();
       });
       transaction.immediate();
+    },
+    protectMcp(handler) {
+      return requireMcpAuth(
+        auth,
+        (request, claims) => handler(request, claims as Record<string, unknown>),
+        {
+          resource: `${options.publicUrl.origin}/mcp`,
+          issuer: `${options.publicUrl.origin}/api/auth`,
+          requiredScopes: ["ushelf:read"],
+          challengeScopes: ["ushelf:read", "ushelf:write", "ushelf:kindle", "offline_access"],
+        },
+      );
     },
     close() {
       database.close();
@@ -127,7 +152,12 @@ export async function createRemoteAuth(options: {
   };
 }
 
-function authOptions(database: Database.Database, secret: string, publicUrl: URL) {
+function authOptions(
+  database: Database.Database,
+  secret: string,
+  publicUrl: URL,
+): BetterAuthOptions {
+  const resource = `${publicUrl.origin}/mcp`;
   return {
     database,
     secret,
@@ -137,7 +167,28 @@ function authOptions(database: Database.Database, secret: string, publicUrl: URL
     emailAndPassword: { enabled: true, minPasswordLength: 12 },
     rateLimit: { enabled: true, window: 60, max: 20, storage: "database" as const },
     advanced: { useSecureCookies: true },
-  };
+    plugins: [
+      jwt(),
+      mcp({
+        loginPage: "/login",
+        consentPage: "/oauth/consent",
+        resource,
+        scopes: [
+          "openid",
+          "profile",
+          "email",
+          "ushelf:read",
+          "ushelf:write",
+          "ushelf:kindle",
+          "offline_access",
+        ],
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+      }),
+      cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+      oauthDeviceAuthorization({ verificationUri: "/device" }),
+    ],
+  } as unknown as BetterAuthOptions;
 }
 
 function instantiateAuth(database: Database.Database, secret: string, publicUrl: URL) {

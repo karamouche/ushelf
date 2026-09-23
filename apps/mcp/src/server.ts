@@ -1,4 +1,4 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { ShelfService, citationSchema, readingStatusSchema, sourceTypeSchema } from "@ushelf/core";
 import { z } from "zod";
 import { registerKindleTools } from "./kindle-tools.js";
@@ -24,7 +24,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Ingest URL",
       description: "Create or return a library item and deterministically extract its source.",
-      inputSchema: { url: z.url(), recipe: z.string().default("default") },
+      inputSchema: z.object({ url: z.url(), recipe: z.string().default("default") }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -40,14 +40,14 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Ingest PDF",
       description: "Create or return a document by deterministically extracting an attached PDF.",
-      inputSchema: {
+      inputSchema: z.object({
         filename: z.string().min(1).max(255),
         contentBase64: z
           .string()
           .min(4)
           .max(Math.ceil((10 * 1024 * 1024) / 3) * 4),
         recipe: z.string().default("default"),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -63,7 +63,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Get ingestion",
       description: "Inspect an item's current ingestion stage.",
-      inputSchema: { itemId: z.uuid() },
+      inputSchema: z.object({ itemId: z.uuid() }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ itemId }) => json(await service.getItem(itemId)),
@@ -74,14 +74,14 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Submit X source",
       description: "Supply X source Markdown when public extraction is blocked.",
-      inputSchema: {
+      inputSchema: z.object({
         itemId: z.uuid(),
         title: z.string().min(1),
         markdown: z.string().min(40),
         author: z.string().optional(),
         publishedAt: z.iso.datetime().optional(),
         revision: z.string().optional(),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -97,7 +97,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Get enrichment context",
       description: "Return source, recipe instructions, hash, revision, and output contract.",
-      inputSchema: { itemId: z.uuid() },
+      inputSchema: z.object({ itemId: z.uuid() }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ itemId }) => json(await service.ingestionContext(itemId)),
@@ -108,7 +108,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Save insights",
       description: "Validate and atomically save source-grounded agent insights.",
-      inputSchema: {
+      inputSchema: z.object({
         itemId: z.uuid(),
         recipeHash: z.string().length(64),
         revision: z.string().length(64),
@@ -117,7 +117,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
         tags: z.array(z.string()).max(12),
         citations: z.array(citationSchema),
         bodyMarkdown: z.string(),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -133,13 +133,13 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "List library",
       description: "List items with optional reading and source filters.",
-      inputSchema: {
+      inputSchema: z.object({
         status: readingStatusSchema.optional(),
         sourceType: sourceTypeSchema.optional(),
         tag: z.string().optional(),
         limit: z.number().int().min(1).max(200).default(50),
         offset: z.number().int().min(0).default(0),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => json({ items: service.listItems(input) }),
@@ -150,12 +150,12 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Search library",
       description: "Full-text search across source text, insights, titles, and tags.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().min(1),
         status: readingStatusSchema.optional(),
         sourceType: sourceTypeSchema.optional(),
         limit: z.number().int().min(1).max(100).default(20),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => json({ items: service.listItems(input) }),
@@ -166,7 +166,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Get item",
       description: "Read one complete library item.",
-      inputSchema: { itemId: z.uuid() },
+      inputSchema: z.object({ itemId: z.uuid() }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ itemId }) => json(await service.getItem(itemId)),
@@ -177,12 +177,12 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Update reading state",
       description: "Set status and progress with optional optimistic concurrency.",
-      inputSchema: {
+      inputSchema: z.object({
         itemId: z.uuid(),
         status: readingStatusSchema,
         progress: z.number().min(0).max(1),
         revision: z.string().optional(),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -199,7 +199,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "List stale enrichments",
       description: "Find items produced by an older version of their recipe.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => json({ items: await service.staleItems() }),
@@ -211,7 +211,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
       title: "Refresh source",
       description:
         "Re-fetch a source; changed content archives insights and returns to enrichment pending.",
-      inputSchema: { itemId: z.uuid(), revision: z.string().optional() },
+      inputSchema: z.object({ itemId: z.uuid(), revision: z.string().optional() }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -228,7 +228,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
       title: "Request re-enrichment",
       description:
         "Archive current insights and mark an item pending without changing source content.",
-      inputSchema: { itemId: z.uuid() },
+      inputSchema: z.object({ itemId: z.uuid() }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -244,7 +244,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Request deletion",
       description: "Issue a short-lived confirmation token; this does not delete anything.",
-      inputSchema: { itemId: z.uuid() },
+      inputSchema: z.object({ itemId: z.uuid() }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -260,7 +260,7 @@ export function createUshelfMcpServer(service: ShelfService): McpServer {
     {
       title: "Confirm deletion",
       description: "Permanently delete an item using its confirmation token.",
-      inputSchema: { itemId: z.uuid(), token: z.string().min(20) },
+      inputSchema: z.object({ itemId: z.uuid(), token: z.string().min(20) }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,

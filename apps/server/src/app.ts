@@ -11,6 +11,7 @@ import {
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { RemoteAuth } from "./auth.js";
+import { createHttpMcpHandler } from "./mcp-http.js";
 
 export function createApp(
   service: ShelfService,
@@ -25,10 +26,13 @@ export function createApp(
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
   if (remote) {
+    const mcp = createHttpMcpHandler(service, remote.auth);
+    app.get(route("/.well-known/*"), (c) => remote.auth.auth.handler(c.req.raw));
     app.on(["GET", "POST"], route("/api/auth/*"), (c) => {
       if (new URL(c.req.url).pathname.endsWith("/sign-up/email")) return c.notFound();
       return remote.auth.auth.handler(c.req.raw);
     });
+    app.post(route("/mcp"), (c) => mcp(c.req.raw));
     app.get(route("/api/setup/status"), (c) => c.json({ claimed: remote.auth.isClaimed() }));
     app.post(route("/api/setup/claim"), async (c) => {
       await assertTrustedMutation(c.req.raw, remote.publicUrl);
@@ -177,6 +181,7 @@ function isPublicRemotePath(pathname: string, prefix: string): boolean {
   return (
     relative === "/api/health" ||
     relative.startsWith("/api/auth/") ||
+    relative.startsWith("/.well-known/") ||
     relative.startsWith("/api/setup/") ||
     relative === "/api/recovery/reset" ||
     relative === "/setup" ||
