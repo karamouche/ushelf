@@ -117,6 +117,82 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return value;
 }
 
+export interface Account {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export async function setupStatus(): Promise<{ claimed: boolean }> {
+  return request("/api/setup/status");
+}
+
+export async function claimOwner(input: {
+  code: string;
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<void> {
+  await request("/api/setup/claim", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function signIn(email: string, password: string): Promise<void> {
+  await request("/api/auth/sign-in/email", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function signOut(): Promise<void> {
+  await request("/api/auth/sign-out", { method: "POST", body: "{}" });
+}
+
+export async function getAccount(): Promise<Account> {
+  return (await request<{ user: Account }>("/api/account")).user;
+}
+
+export async function submitOAuthConsent(
+  accept: boolean,
+  oauthQuery: string,
+): Promise<{ url?: string; redirect_uri?: string }> {
+  return request("/api/auth/oauth2/consent", {
+    method: "POST",
+    body: JSON.stringify({ accept, oauth_query: oauthQuery }),
+  });
+}
+
+export async function inspectDeviceCode(userCode: string): Promise<{
+  user_code: string;
+  status: string;
+  client_id?: string;
+  scope?: string;
+}> {
+  return request(`/api/auth/device?user_code=${encodeURIComponent(userCode)}`);
+}
+
+export async function decideDeviceCode(userCode: string, accept: boolean): Promise<void> {
+  await request(`/api/auth/device/${accept ? "approve" : "deny"}`, {
+    method: "POST",
+    body: JSON.stringify({ userCode }),
+  });
+}
+
+export async function listOAuthConsents(): Promise<unknown[]> {
+  const result = await request<{ consents?: unknown[] }>("/api/auth/oauth2/get-consents");
+  return result.consents ?? (Array.isArray(result) ? result : []);
+}
+
+export async function revokeOAuthConsent(id: string): Promise<void> {
+  await request("/api/auth/oauth2/delete-consent", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function mcpUrl(): string {
+  return `${window.location.origin}${apiUrl("/mcp")}`;
+}
+
 export async function getKindleStatus(): Promise<KindleStatus> {
   return request<KindleStatus>("/api/kindle/status");
 }

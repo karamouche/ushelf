@@ -59,7 +59,17 @@ export function createApp(
         await assertTrustedMutation(c.req.raw, remote.publicUrl);
       }
       const session = await remote.auth.auth.api.getSession({ headers: c.req.raw.headers });
-      if (!session) return c.json({ error: "Authentication required" }, 401);
+      if (!session) {
+        if (
+          c.req.method === "GET" &&
+          !pathname.startsWith(`${prefix}/api/`) &&
+          c.req.header("accept")?.includes("text/html")
+        ) {
+          const returnTo = `${pathname}${new URL(c.req.url).search}`;
+          return c.redirect(route(`/login?returnTo=${encodeURIComponent(returnTo)}`));
+        }
+        return c.json({ error: "Authentication required" }, 401);
+      }
       return next();
     });
     app.get(route("/api/account"), async (c) => {

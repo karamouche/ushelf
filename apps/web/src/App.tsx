@@ -6,10 +6,19 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type FormEvent,
   type ReactNode,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import {
@@ -20,6 +29,17 @@ import {
   localMediaUrl,
   originalFileUrl,
   sendToKindle,
+  claimOwner,
+  decideDeviceCode,
+  getAccount,
+  inspectDeviceCode,
+  listOAuthConsents,
+  mcpUrl,
+  revokeOAuthConsent,
+  setupStatus,
+  signIn,
+  signOut,
+  submitOAuthConsent,
   type ItemSummary,
   type Citation,
   type KindleDevice,
@@ -54,6 +74,11 @@ function loadMermaid(): Promise<typeof import("mermaid").default> {
 export function App() {
   return (
     <Routes>
+      <Route path="/setup" element={<Setup />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
+      <Route path="/device" element={<DeviceApproval />} />
+      <Route path="/connections" element={<Connections />} />
       <Route path="/" element={<Library />} />
       <Route path="/items/:id" element={<Reader />} />
     </Routes>
@@ -65,6 +90,315 @@ function Brand() {
     <Link className="brand" to="/" aria-label="uShelf home">
       <span>u</span>Shelf
     </Link>
+  );
+}
+
+function OwnerMenu() {
+  const navigate = useNavigate();
+  return (
+    <nav className="owner-menu" aria-label="Account">
+      <Link to="/connections">Connections</Link>
+      <button
+        onClick={() => {
+          void signOut().finally(() => navigate("/login", { replace: true }));
+        }}
+      >
+        Log out
+      </button>
+    </nav>
+  );
+}
+
+function AuthPage({ children }: { children: ReactNode }) {
+  return (
+    <div className="auth-shell">
+      <Brand />
+      <main className="auth-card">{children}</main>
+    </div>
+  );
+}
+
+function Setup() {
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const [claimed, setClaimed] = useState<boolean>();
+  useEffect(() => {
+    setupStatus()
+      .then(({ claimed: value }) => setClaimed(value))
+      .catch((reason: Error) => setError(reason.message));
+  }, []);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    const data = new FormData(event.currentTarget);
+    try {
+      await claimOwner({
+        code: String(data.get("code") ?? ""),
+        email: String(data.get("email") ?? ""),
+        password: String(data.get("password") ?? ""),
+        name: String(data.get("name") ?? ""),
+      });
+      navigate("/login", { replace: true });
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+
+  return (
+    <AuthPage>
+      <p className="eyebrow">First run</p>
+      <h1>Claim your shelf</h1>
+      {claimed ? (
+        <p>
+          This shelf already has an owner. <Link to="/login">Log in</Link>.
+        </p>
+      ) : (
+        <form className="auth-form" onSubmit={submit}>
+          <p>Enter the one-time code shown in the server logs.</p>
+          <label>
+            Claim code
+            <input name="code" required autoComplete="one-time-code" />
+          </label>
+          <label>
+            Name
+            <input name="name" autoComplete="name" />
+          </label>
+          <label>
+            Email
+            <input name="email" required type="email" autoComplete="email" />
+          </label>
+          <label>
+            Password
+            <input
+              name="password"
+              required
+              minLength={12}
+              type="password"
+              autoComplete="new-password"
+            />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button type="submit">Create owner account</button>
+        </form>
+      )}
+    </AuthPage>
+  );
+}
+
+function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [error, setError] = useState("");
+  const requested = new URLSearchParams(location.search).get("returnTo");
+  const returnTo = requested?.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await signIn(String(data.get("email") ?? ""), String(data.get("password") ?? ""));
+      window.location.assign(returnTo);
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+
+  return (
+    <AuthPage>
+      <p className="eyebrow">Welcome back</p>
+      <h1>Open your shelf</h1>
+      <form className="auth-form" onSubmit={submit}>
+        <label>
+          Email
+          <input name="email" required type="email" autoComplete="email" />
+        </label>
+        <label>
+          Password
+          <input name="password" required type="password" autoComplete="current-password" />
+        </label>
+        {error && <p className="form-error">{error}</p>}
+        <button type="submit">Log in</button>
+      </form>
+    </AuthPage>
+  );
+}
+
+function OAuthConsent() {
+  const location = useLocation();
+  const [error, setError] = useState("");
+  const params = new URLSearchParams(location.search);
+  const oauthQuery = params.get("oauth_query") ?? location.search.slice(1);
+  const scope = params.get("scope")?.split(" ") ?? [];
+
+  async function decide(accept: boolean) {
+    try {
+      const result = await submitOAuthConsent(accept, oauthQuery);
+      const destination = result.url ?? result.redirect_uri;
+      if (destination) window.location.assign(destination);
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+
+  return (
+    <AuthPage>
+      <p className="eyebrow">Agent connection</p>
+      <h1>Allow access to uShelf?</h1>
+      <p>The requesting client is asking for:</p>
+      <ul>
+        {scope.map((value) => (
+          <li key={value}>{scopeLabel(value)}</li>
+        ))}
+      </ul>
+      {error && <p className="form-error">{error}</p>}
+      <div className="button-row">
+        <button onClick={() => void decide(true)}>Allow</button>
+        <button className="secondary" onClick={() => void decide(false)}>
+          Deny
+        </button>
+      </div>
+    </AuthPage>
+  );
+}
+
+function DeviceApproval() {
+  const [params] = useSearchParams();
+  const [code, setCode] = useState(params.get("user_code") ?? "");
+  const [details, setDetails] = useState<{ scope?: string; client_id?: string }>();
+  const [message, setMessage] = useState("");
+
+  async function inspect(event: FormEvent) {
+    event.preventDefault();
+    try {
+      setDetails(await inspectDeviceCode(code.trim()));
+      setMessage("");
+    } catch (reason) {
+      setMessage((reason as Error).message);
+    }
+  }
+
+  async function decide(accept: boolean) {
+    try {
+      await decideDeviceCode(code.trim(), accept);
+      setMessage(accept ? "Device approved. You can return to the CLI." : "Device request denied.");
+      setDetails(undefined);
+    } catch (reason) {
+      setMessage((reason as Error).message);
+    }
+  }
+
+  return (
+    <AuthPage>
+      <p className="eyebrow">Device authorization</p>
+      <h1>Connect the uShelf CLI</h1>
+      <form className="auth-form" onSubmit={inspect}>
+        <label>
+          User code
+          <input value={code} onChange={(event) => setCode(event.target.value)} required />
+        </label>
+        <button type="submit">Continue</button>
+      </form>
+      {details && (
+        <div className="connection-card">
+          <p>Client: {details.client_id ?? "uShelf CLI"}</p>
+          <p>{details.scope}</p>
+          <div className="button-row">
+            <button onClick={() => void decide(true)}>Approve</button>
+            <button className="secondary" onClick={() => void decide(false)}>
+              Deny
+            </button>
+          </div>
+        </div>
+      )}
+      {message && <p>{message}</p>}
+    </AuthPage>
+  );
+}
+
+function Connections() {
+  const [account, setAccount] = useState<{ name: string; email: string }>();
+  const [consents, setConsents] = useState<unknown[]>([]);
+  const [error, setError] = useState("");
+  const refresh = () =>
+    Promise.all([getAccount(), listOAuthConsents()]).then(([owner, grants]) => {
+      setAccount(owner);
+      setConsents(grants);
+    });
+  useEffect(() => {
+    void refresh().catch((reason: Error) => setError(reason.message));
+  }, []);
+
+  return (
+    <div className="shell connections-page">
+      <header className="topbar">
+        <Brand />
+        <OwnerMenu />
+      </header>
+      <main>
+        <p className="eyebrow">Connections</p>
+        <h1>Connect your agents</h1>
+        <p>
+          Signed in as {account?.name ?? "owner"} {account?.email && `(${account.email})`}.
+        </p>
+        <section className="connection-card">
+          <h2>Remote MCP URL</h2>
+          <code>{mcpUrl()}</code>
+          <p>
+            Use this URL in ChatGPT or Claude Desktop. The client will open uShelf to ask for your
+            approval.
+          </p>
+        </section>
+        <section className="connection-card">
+          <h2>Codex and Claude Code</h2>
+          <pre>
+            ushelf connect {window.location.origin}
+            {"\n"}ushelf setup codex{"\n"}ushelf setup claude-code
+          </pre>
+        </section>
+        <section>
+          <h2>Active grants</h2>
+          {consents.length === 0 ? (
+            <p className="muted">No active OAuth grants.</p>
+          ) : (
+            consents.map((value, index) => {
+              const grant = value as Record<string, unknown>;
+              const id = String(grant.id ?? index);
+              return (
+                <div className="connection-card" key={id}>
+                  <pre>{JSON.stringify(grant, null, 2)}</pre>
+                  {Boolean(grant.id) && (
+                    <button
+                      onClick={() =>
+                        void revokeOAuthConsent(String(grant.id))
+                          .then(refresh)
+                          .catch((reason: Error) => setError(reason.message))
+                      }
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </section>
+        {error && <p className="form-error">{error}</p>}
+      </main>
+    </div>
+  );
+}
+
+function scopeLabel(scope: string): string {
+  return (
+    (
+      {
+        "ushelf:read": "Read your library",
+        "ushelf:write": "Add and update items",
+        "ushelf:kindle": "Send saved items to Kindle",
+        offline_access: "Stay connected until revoked",
+      } as Record<string, string>
+    )[scope] ?? scope
   );
 }
 
@@ -98,7 +432,7 @@ function Library() {
     <div className="shell">
       <header className="topbar">
         <Brand />
-        <span className="quiet">A quiet place for unfinished reading.</span>
+        <OwnerMenu />
       </header>
       <main>
         <section className="library-head">
@@ -238,6 +572,7 @@ function Reader() {
       <div className="shell">
         <header className="topbar">
           <Brand />
+          <OwnerMenu />
         </header>
         <Empty title="This piece could not be opened" detail={error} />
       </div>
@@ -256,6 +591,9 @@ function Reader() {
           ←
         </button>
         <Brand />
+        <Link className="quiet" to="/connections">
+          Connections
+        </Link>
         <select
           aria-label="Reading status"
           value={item.reading.status}
