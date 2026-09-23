@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>A local, agent-native library for the writing worth keeping.</strong><br />
+  <strong>A personal, agent-native library for the writing worth keeping.</strong><br />
   Capture deterministically. Enrich with your agent. Keep everything as readable Markdown.
 </p>
 
@@ -40,7 +40,7 @@ Most read-later tools own the database and bolt AI onto the side. uShelf takes t
 
 ## Quick start
 
-Install the native CLI on macOS or Linux. Docker must already be installed and running.
+Install the native CLI on macOS or Linux. Docker is required for a local library; it is not required when connecting to a remote uShelf.
 
 ```sh
 curl -fsSL https://github.com/karamouche/ushelf/releases/latest/download/install.sh | sh
@@ -87,8 +87,8 @@ The installer supports macOS and Linux on amd64 and arm64; Windows users can run
 | `ushelf status`        | Show health, URL, version, image, and home                      |
 | `ushelf logs`          | Read or follow managed service logs                             |
 | `ushelf open`          | Open the reader in the system browser                           |
-| `ushelf mcp`           | Run the foreground stdio MCP container                          |
-| `ushelf setup CLIENT`  | Configure Codex, Claude Code, or both and link bundled skills   |
+| `ushelf mcp`           | Run local stdio MCP or bridge stdio to remote MCP               |
+| `ushelf setup CLIENT`  | Configure Codex, Claude Code, ChatGPT, or Claude Desktop        |
 | `ushelf doctor`        | Check Docker, filesystem, port, image, recipe, and client setup |
 | `ushelf update`        | Verify and install the latest CLI and matching image            |
 | `ushelf rebuild-index` | Rebuild disposable SQLite state from Markdown                   |
@@ -96,6 +96,11 @@ The installer supports macOS and Linux on amd64 and arm64; Windows users can run
 | `ushelf kindle`        | Connect, inspect, or disconnect Send to Kindle                  |
 | `ushelf config`        | Inspect or update persistent configuration                      |
 | `ushelf version`       | Show CLI build and runtime image information                    |
+| `ushelf connect URL`   | Authorize this CLI with a remote uShelf using a browser         |
+| `ushelf disconnect`    | Revoke the remote grant and select local                        |
+| `ushelf target`        | Show or select the local or remote library                      |
+| `ushelf export FILE`   | Export a versioned archive of library and recipes               |
+| `ushelf migrate`       | Copy the stopped local library to an empty remote               |
 
 ## Connect your agent
 
@@ -110,6 +115,12 @@ ushelf setup claude-code
 Use `ushelf setup <client> --print` to inspect the exact registration command without making changes.
 
 If an existing `ushelf` MCP entry or skill path points somewhere else, setup stops without overwriting it. Inspect the conflict first, then rerun with `--force` only when you intend to replace it.
+
+For a remote library, first run `ushelf connect https://your-shelf.example`. The CLI uses browser-based device authorization, keeps its revocable credential in owner-only `~/.ushelf/credentials/remote.json`, and selects remote. `ushelf mcp` then bridges Codex or Claude Code to the remote HTTPS MCP endpoint without Docker. Use `ushelf target use local|remote` to switch libraries and `ushelf target status` to check the active one. `ushelf disconnect` revokes the remote grant and returns to local.
+
+ChatGPT Desktop and Claude Desktop connect directly to the remote `/mcp` URL via OAuth, without running the CLI bridge. Run `ushelf setup chatgpt` or `ushelf setup claude-desktop` for guided steps, or open `/connections` on your remote reader. `ushelf setup all` configures the automatable clients and presents the desktop steps. Client connector menus change over time; use the current client's custom MCP connector flow and verify the URL and granted scopes before approving it.
+
+See the [client compatibility check](docs/remote-compatibility.md) for the versions inspected and the live-deployment checks still needed.
 
 Then try:
 
@@ -189,7 +200,7 @@ docker compose ps
 
 Compose uses `~/.ushelf` by default, matching the native CLI and direct server or MCP processes. Configure Kindle credentials with `ushelf kindle setup`. To use another location, set an absolute `USHELF_ROOT` in `.env` and prepare the same directory layout there. The `.env` file itself is optional; when present, Compose loads it automatically. Set `USHELF_UID` and `USHELF_GID` to your host user and group IDs so the service and maintenance container can access the host-owned files.
 
-The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
+This Compose setup is local mode and binds to `127.0.0.1:43110`. Local mode has no HTTP authentication: do not expose it directly to the public internet. For personal remote access, use the separate remote-mode deployment below.
 
 The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in `.env`, which avoids changing ownership of the host files.
 
@@ -214,6 +225,27 @@ docker compose up -d
 
 For a consistent backup, stop the service and copy `library/` and `recipes/`. SQLite state does not need to be backed up. Back up the root's `secrets/` directory separately only if you want to preserve optional integration credentials.
 
+## Run a personal remote uShelf
+
+Remote mode is one owner, one process, one writable persistent `/data` volume, and one stable HTTPS origin. It is not a hosted multi-user service. Bring any container host and reverse proxy you like; uShelf does not provision a host or TLS certificate. Pin the OCI image to the same release as your native CLI, and do not run horizontal replicas against one volume.
+
+The [remote Compose example](compose.remote.yaml) publishes the service only on the host loopback interface. Set `USHELF_PUBLIC_URL=https://your-shelf.example` and route that origin's root path through your TLS-terminating proxy to port `43110`. The proxy must preserve the request path, method, body, `Authorization`, `Cookie`, `Origin`, and `Host` headers. Configure it to pass streaming MCP responses without buffering, allow request bodies larger than the existing 10 MiB PDF limit (allow at least 16 MiB), and allow long-lived requests and SSE-safe timeouts. Do not rewrite `X-Forwarded-Host` or `X-Forwarded-Proto` to a different public origin. Only the configured `USHELF_PUBLIC_URL` is trusted for OAuth and security-sensitive URLs. WebSockets are not required today, but avoid proxy rules that break upgrade or streaming traffic.
+
+```sh
+export USHELF_PUBLIC_URL=https://your-shelf.example
+export USHELF_IMAGE=ghcr.io/karamouche/ushelf:YOUR_CLI_VERSION
+docker compose -f compose.remote.yaml up -d
+docker compose -f compose.remote.yaml logs -f ushelf
+```
+
+On first start, read the one-time claim code from server logs and open `https://your-shelf.example/setup`. After creating the owner, registration is permanently closed. Use a strong password. The server stores sessions, OAuth grants, and its generated signing secret in `/data/auth/`, separate from disposable `/data/state/ushelf.db`. You may supply `USHELF_AUTH_SECRET` instead of a generated secret, but keep it stable and private. `/api/health` intentionally reveals only `{"ok":true}`; it does not expose the library or owner.
+
+Use `/connections` to see the MCP URL, approve client connections, and revoke grants. `ushelf connect` uses the browser device flow for the CLI bridge; ChatGPT Desktop and Claude Desktop use the direct OAuth connector. Grant only the scopes a client needs: `ushelf:read`, `ushelf:write`, `ushelf:kindle`, and, when a long-lived connection is desired, `offline_access`. Permanent deletion still requires the separate two-step confirmation in uShelf. If you lose the owner password, run `node apps/server/dist/cli.js reset-password` inside the server container, use its short-lived code at `/reset`, and reconnect clients afterward; reset revokes existing sessions and grants.
+
+To move an existing local library once, connect the CLI to the empty remote, switch back with `ushelf target use local`, then run `ushelf migrate`. Add `--include-kindle` only if you explicitly want the Kindle credential transferred. The command stops local mutation while making a versioned, SHA-256-verified archive, validates it on the remote, rebuilds the index, and selects remote only after the server confirms completion. The local library remains untouched as a backup. This is not synchronization. `ushelf export FILE` creates the same portable archive without migrating.
+
+Back up the entire remote `/data` volume while the service is stopped, especially `library/`, `recipes/`, `auth/`, and optional `secrets/`; `state/` can be rebuilt. Protect backups like credentials. For upgrades, keep one process, take a backup first, deploy a matching release image, and wait for `/api/health` before reconnecting clients. Do not expose the container's plain HTTP port directly on a public interface.
+
 ### Configuration
 
 | Variable               | Default                 | Purpose                                                          |
@@ -224,6 +256,9 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. SQ
 | `USHELF_PORT`          | `43110`                 | HTTP port                                                        |
 | `USHELF_WEB_BASE_PATH` | `/`                     | Root or subpath where the web app and API are served             |
 | `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                    |
+| `USHELF_MODE`          | `local`                 | `remote` enables single-owner authentication and HTTP MCP        |
+| `USHELF_PUBLIC_URL`    | —                       | Required HTTPS origin in remote mode; no subpath                 |
+| `USHELF_AUTH_SECRET`   | generated and persisted | Optional stable authentication signing secret                    |
 
 Without path overrides, host processes use `~/.ushelf` and keep `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The service creates the writable directories it needs and seeds the bundled default recipe when it is missing. The `secrets/` directory remains optional until an integration is configured.
 

@@ -4,8 +4,7 @@ The Model Context Protocol adapter for uShelf. It lets a connected agent ingest 
 
 ## What to know
 
-- The server communicates over stdio; stdout is reserved for MCP traffic.
-- `src/index.ts` registers all tools and resources, then delegates their work to `ShelfService` from `@ushelf/core`.
+- `src/index.ts` runs the local stdio transport; stdout is reserved for MCP traffic. `src/server.ts` shares tool and resource registration with the remote HTTP adapter in `apps/server`.
 - Tools cover URL and attached-PDF ingestion, X-thread source fallback, enrichment, listing/search, reading state, Kindle device discovery and delivery, source refresh, re-enrichment, and confirmation-gated deletion. Images in captured and agent-supplied Markdown are localized by Core before the item is saved.
 - Resources expose normalized source Markdown, complete item data, and recipe instructions through `ushelf://` URIs.
 - Inputs are validated with Zod. Mutating operations use item revisions where appropriate to prevent stale writes.
@@ -16,7 +15,7 @@ The Model Context Protocol adapter for uShelf. It lets a connected agent ingest 
 
 Run `ushelf kindle setup` before asking an agent to send a saved item. The agent uses `list_kindle_devices` to resolve a registered destination and `send_to_kindle` with the saved item ID and selected device serial. Delivery produces a source-only EPUB with validated local images; generated insights are excluded.
 
-The native CLI mounts the Kindle credential read-only into the MCP container. MCP tools never return its contents. The integration uses Amazon's unofficial, undocumented Send to Kindle protocol and may stop working if Amazon changes it.
+The native CLI mounts a local Kindle credential read-only into the MCP container. A remote installation keeps its credential on the remote volume. MCP tools never return its contents. The integration uses Amazon's unofficial, undocumented Send to Kindle protocol and may stop working if Amazon changes it.
 
 ## Commands
 

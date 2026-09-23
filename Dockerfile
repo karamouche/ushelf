@@ -96,7 +96,7 @@ COPY --from=build --chown=node:node /app/recipes /opt/ushelf/recipes
 COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
 COPY --from=build --chown=node:node /app/recipes /data/recipes
 
-RUN mkdir -p /data/library/items /data/library/history /data/state /data/secrets \
+RUN mkdir -p /data/library/items /data/library/history /data/state /data/secrets /data/auth \
   && chown -R node:node /data
 
 USER node

@@ -127,6 +127,13 @@ export async function setupStatus(): Promise<{ claimed: boolean }> {
   return request("/api/setup/status");
 }
 
+export async function resetOwnerPassword(code: string, password: string): Promise<void> {
+  await request("/api/recovery/reset", {
+    method: "POST",
+    body: JSON.stringify({ code, password }),
+  });
+}
+
 export async function claimOwner(input: {
   code: string;
   email: string;

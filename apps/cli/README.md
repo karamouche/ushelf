@@ -1,6 +1,6 @@
 # uShelf CLI
 
-The native `ushelf` command is the end-user entrypoint for the local reader, API, and MCP server. It is written in Go with Cobra and delegates product behavior to the existing TypeScript runtime image.
+The native `ushelf` command is the end-user entrypoint for a local or personal remote reader, API, and MCP server. It is written in Go with Cobra. Local runtime operations use the OCI image; a remote target uses authenticated HTTPS and a native stdio-to-HTTP MCP bridge without Docker.
 
 ## Development
 
@@ -15,10 +15,14 @@ Development builds use `ghcr.io/karamouche/ushelf:latest` unless `--image` or `U
 The CLI owns `~/.ushelf` by default:
 
 ```text
-config.json  library/  recipes/  state/  assets/  secrets/
+config.json  credentials/  library/  recipes/  state/  assets/  secrets/
 ```
 
-Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
+Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys include `host`, `port`, `base-path`, `image`, `remote-url`, and `active-target`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it. Remote OAuth credentials stay in owner-only `credentials/remote.json` and are never mounted into local containers.
+
+Use `ushelf connect URL` to authorize in the browser and select remote, `ushelf target use local|remote` to switch, and `ushelf disconnect` to revoke the grant. `ushelf setup codex` and `ushelf setup claude-code` register the active target's `ushelf mcp` command and skills. `ushelf setup chatgpt` and `ushelf setup claude-desktop` show direct remote OAuth connector instructions; both require a remote target. `ushelf setup all` handles the automatable clients and shows the remaining desktop steps.
+
+`ushelf import`, `rebuild-index`, `export`, and Kindle commands act on the active target. `ushelf migrate` copies a stopped local library into an empty version-matched remote and selects remote only after verification. `start`, `stop`, `logs`, and local image lifecycle always remain local.
 
 ## Command output
 
@@ -43,6 +47,6 @@ ushelf kindle status
 ushelf kindle disconnect
 ```
 
-The credential is stored owner-readable at `~/.ushelf/secrets/kindle.json`. It is mounted read-only into the reader and MCP containers so either the web UI or a connected agent can deliver saved items, but it is never mounted into maintenance containers or exposed by an MCP tool. If Amazon has already invalidated a credential, `ushelf kindle disconnect --local-only --yes` removes only the local copy.
+For a local target, the credential is stored owner-readable at `~/.ushelf/secrets/kindle.json` and mounted read-only into the reader and MCP containers. For a remote target, it is uploaded over authenticated HTTPS and removed locally after transfer. It is never exposed by an MCP tool. If Amazon has already invalidated a local credential, `ushelf kindle disconnect --local-only --yes` removes only that copy.
 
 Never direct tests at a real uShelf home. Use `--home` with a temporary directory and inject a fake `Runner` for unit tests.

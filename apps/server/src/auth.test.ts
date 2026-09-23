@@ -74,7 +74,15 @@ describe("single-owner remote authentication", () => {
       password: "correct horse battery staple",
     });
     expect((await app.request("/api/items")).status).toBe(401);
-    expect((await app.request("/api/health")).status).toBe(200);
+    const health = await app.request("/api/health");
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toEqual({ ok: true });
+    expect((await app.request("/reset", { headers: { accept: "text/html" } })).status).not.toBe(
+      302,
+    );
+    expect(
+      (await app.request("/api/items", { headers: { "x-forwarded-host": "evil.example" } })).status,
+    ).toBe(400);
 
     const login = await app.request("/api/auth/sign-in/email", {
       method: "POST",

@@ -6,6 +6,7 @@ description: Search, retrieve, organize, send to Kindle, refresh, and safely del
 # Manage uShelf
 
 Use MCP tools rather than reading or editing library files directly.
+The workflow is the same for local and personal remote shelves. Never request an OAuth token or try to bypass the owner's consent and scope choices.
 
 ## Find and read
 

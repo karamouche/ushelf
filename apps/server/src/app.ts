@@ -215,6 +215,7 @@ function isPublicRemotePath(pathname: string, prefix: string): boolean {
     relative === "/api/recovery/reset" ||
     relative === "/setup" ||
     relative === "/login" ||
+    relative === "/reset" ||
     relative.startsWith("/assets/") ||
     relative === "/favicon.ico"
   );

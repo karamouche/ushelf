@@ -6,6 +6,7 @@ description: Save articles, X sources, and attached PDFs into uShelf and create 
 # Ingest into uShelf
 
 Use the uShelf MCP tools for every mutation. Never edit library Markdown directly.
+These steps are identical for local stdio, a CLI bridge to a personal remote shelf, and a direct remote OAuth MCP connection. Do not ask for or reveal connection tokens.
 
 ## Workflow
 

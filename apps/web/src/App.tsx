@@ -36,6 +36,7 @@ import {
   listOAuthConsents,
   mcpUrl,
   revokeOAuthConsent,
+  resetOwnerPassword,
   setupStatus,
   signIn,
   signOut,
@@ -76,6 +77,7 @@ export function App() {
     <Routes>
       <Route path="/setup" element={<Setup />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset" element={<PasswordReset />} />
       <Route path="/oauth/consent" element={<OAuthConsent />} />
       <Route path="/device" element={<DeviceApproval />} />
       <Route path="/connections" element={<Connections />} />
@@ -219,6 +221,53 @@ function Login() {
         </label>
         {error && <p className="form-error">{error}</p>}
         <button type="submit">Log in</button>
+        <p>
+          <Link to="/reset">Use a server-issued recovery code</Link>
+        </p>
+      </form>
+    </AuthPage>
+  );
+}
+
+function PasswordReset() {
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    const data = new FormData(event.currentTarget);
+    try {
+      await resetOwnerPassword(String(data.get("code") ?? ""), String(data.get("password") ?? ""));
+      navigate("/login", { replace: true });
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+  return (
+    <AuthPage>
+      <p className="eyebrow">Account recovery</p>
+      <h1>Reset your password</h1>
+      <p>
+        Ask the server administrator to run <code>reset-password</code> and enter its short-lived
+        code here. All sessions and connections will be revoked.
+      </p>
+      <form className="auth-form" onSubmit={submit}>
+        <label>
+          Recovery code
+          <input name="code" required autoComplete="one-time-code" />
+        </label>
+        <label>
+          New password
+          <input
+            name="password"
+            required
+            minLength={12}
+            type="password"
+            autoComplete="new-password"
+          />
+        </label>
+        {error && <p className="form-error">{error}</p>}
+        <button type="submit">Reset password</button>
       </form>
     </AuthPage>
   );
