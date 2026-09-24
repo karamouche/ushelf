@@ -65,6 +65,14 @@ select {
 .topbar .quiet {
   font-size: 13px;
 }
+.logout-button {
+  margin-left: auto;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid #aaa;
+  cursor: pointer;
+  font-size: 12px;
+}
 main {
   flex: 1;
 }
