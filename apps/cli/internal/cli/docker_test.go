@@ -99,6 +99,34 @@ func TestStartUsesHardenedPortableMounts(t *testing.T) {
 	}
 }
 
+func TestStartPassesWebPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
+	t.Setenv("USHELF_WEB_PASSWORD", "a-secret-with-spaces")
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
+	var stdout, stderr bytes.Buffer
+	docker := testDocker(t, runner, &stdout, &stderr)
+	withPassword := docker.configHash()
+	if err := docker.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range runner.calls {
+		if len(call.args) == 0 || call.args[0] != "run" {
+			continue
+		}
+		joined := strings.Join(call.args, " ")
+		if !strings.Contains(joined, "-e USHELF_WEB_PASSWORD") || strings.Contains(joined, "a-secret-with-spaces") {
+			t.Fatalf("password environment was not passed safely: %s", joined)
+		}
+	}
+	t.Setenv("USHELF_WEB_PASSWORD", "different-secret")
+	if withPassword == docker.configHash() {
+		t.Fatal("password change should recreate the managed container")
+	}
+	t.Setenv("USHELF_WEB_PASSWORD", "")
+	if withPassword == docker.configHash() {
+		t.Fatal("removing the password should change the managed container configuration")
+	}
+}
+
 func TestStopRefusesUnmanagedContainer(t *testing.T) {
 	runner := &fakeRunner{outputs: []fakeResult{{output: "ushelf"}, {output: "false"}}}
 	var stdout, stderr bytes.Buffer

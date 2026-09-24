@@ -189,7 +189,9 @@ docker compose ps
 
 Compose uses `~/.ushelf` by default, matching the native CLI and direct server or MCP processes. Configure Kindle credentials with `ushelf kindle setup`. To use another location, set an absolute `USHELF_ROOT` in `.env` and prepare the same directory layout there. The `.env` file itself is optional; when present, Compose loads it automatically. Set `USHELF_UID` and `USHELF_GID` to your host user and group IDs so the service and maintenance container can access the host-owned files.
 
-The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
+The service binds to `127.0.0.1:43110` by default. For optional password protection, set `USHELF_WEB_PASSWORD` in your environment or Compose `.env`, then start the service. The password protects every HTTP library route, including the API, PDFs, media, and reader assets. The sign-in page and content-free health response remain public. The password is unset by default, so an unprotected service must not be exposed to the public internet.
+
+Remote password-protected access requires an HTTPS reverse proxy. Keep the uShelf port bound to loopback and have the proxy forward the original `Host` header. The sign-in session uses a Secure cookie, expires after 12 hours, and ends on server restart or password change. Local CLI, MCP, Docker, and filesystem access are separate from this HTTP password. Choose a strong password; short nonempty values are accepted but are easier to guess.
 
 The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in `.env`, which avoids changing ownership of the host files.
 
@@ -223,6 +225,7 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. SQ
 | `USHELF_HOST`          | `127.0.0.1`             | Address published by the HTTP server or Compose                  |
 | `USHELF_PORT`          | `43110`                 | HTTP port                                                        |
 | `USHELF_WEB_BASE_PATH` | `/`                     | Root or subpath where the web app and API are served             |
+| `USHELF_WEB_PASSWORD`  | unset                   | Optional password for all HTTP library content                   |
 | `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                    |
 
 Without path overrides, host processes use `~/.ushelf` and keep `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The service creates the writable directories it needs and seeds the bundled default recipe when it is missing. The `secrets/` directory remains optional until an integration is configured.
@@ -230,6 +233,8 @@ Without path overrides, host processes use `~/.ushelf` and keep `library/`, `rec
 Set `USHELF_ROOT` to move the complete layout. Use `USHELF_STATE_DIR` or `USHELF_SECRETS_DIR` only when either directory must live outside that root. Containers use `/data` internally, backed by the selected host root.
 
 The native CLI's `--home` flag overrides `USHELF_ROOT`. It also accepts `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
+
+For the native CLI, keep `USHELF_WEB_PASSWORD` set for every `ushelf start` or `ushelf update` invocation, for example through a private shell or service environment. The CLI passes it to the managed container without putting its value on the Docker command line, and recreates the container when it changes. Starting again with the variable unset removes password protection. Do not place the password in a shell history command or commit it to `.env` in Git.
 
 For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and your reverse proxy must preserve the prefix.
 
