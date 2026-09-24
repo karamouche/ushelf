@@ -84,7 +84,10 @@ func (d Docker) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	hash := d.configHash()
+	hash, err := d.configHash()
+	if err != nil {
+		return err
+	}
 	if exists {
 		existingHash, inspectErr := d.inspect(ctx, `{{index .Config.Labels "io.ushelf.config"}}`)
 		if inspectErr != nil {
@@ -415,10 +418,18 @@ func (d Docker) managedContainerExists(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (d Docker) configHash() string {
-	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath, os.Getenv("USHELF_WEB_PASSWORD")}, "\x00")
+func (d Docker) configHash() (string, error) {
+	password := os.Getenv("USHELF_WEB_PASSWORD")
+	if password == "" {
+		var err error
+		password, err = readWebPassword(d.Settings.Home)
+		if err != nil {
+			return "", err
+		}
+	}
+	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath, password}, "\x00")
 	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (d Docker) CheckPort() error {
