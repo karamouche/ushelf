@@ -97,7 +97,7 @@ describe("createApp base path", () => {
     const response = await createApp(service).request(`/api/items/item-id/media/${filename}`);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
-    expect(response.headers.get("cache-control")).toContain("immutable");
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
@@ -294,7 +294,7 @@ describe("optional web password", () => {
     ).toBe(401);
   });
 
-  it("rate limits failed sign-ins and keeps subpath redirects inside the mount", async () => {
+  it("limits failed sign-ins without letting them lock out the owner", async () => {
     const app = createApp({} as ShelfService, undefined, "/reader/", { password });
     for (let attempt = 0; attempt < 10; attempt++) {
       const response = await app.request(`${origin}/reader/auth/login`, {
@@ -307,16 +307,28 @@ describe("optional web password", () => {
     const limited = await app.request(`${origin}/reader/auth/login`, {
       method: "POST",
       headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-      body: `password=${password}`,
+      body: "password=wrong",
     });
     expect(limited.status).toBe(429);
+    const cookie = await signIn(app, "/reader");
+    expect((await app.request(`${origin}/reader/auth/login`, { headers: { cookie } })).status).toBe(
+      303,
+    );
+    const afterSignIn = await app.request(`${origin}/reader/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: "password=wrong",
+    });
+    expect(afterSignIn.status).toBe(401);
     const fresh = createApp({} as ShelfService, undefined, "/reader/", { password });
-    const cookie = await signIn(fresh, "/reader");
+    const freshCookie = await signIn(fresh, "/reader");
     expect((await fresh.request(`${origin}/reader/api/health`)).status).toBe(200);
-    expect((await fresh.request(`${origin}/api/items`, { headers: { cookie } })).status).toBe(404);
+    expect(
+      (await fresh.request(`${origin}/api/items`, { headers: { cookie: freshCookie } })).status,
+    ).toBe(404);
     const response = await fresh.request(
       `${origin}/reader/auth/login?next=${encodeURIComponent("//evil.example")}`,
-      { headers: { cookie } },
+      { headers: { cookie: freshCookie } },
     );
     expect(response.headers.get("location")).toBe("/reader/");
   });

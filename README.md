@@ -193,6 +193,8 @@ The service binds to `127.0.0.1:43110` by default. For optional password protect
 
 Remote password-protected access requires an HTTPS reverse proxy. Keep the uShelf port bound to loopback and have the proxy forward the original `Host` header. The sign-in session uses a Secure cookie, expires after 12 hours, and ends on server restart or password change. Local CLI, MCP, Docker, and filesystem access are separate from this HTTP password. Choose a strong password; short nonempty values are accepted but are easier to guess.
 
+Before enabling the password on an installation previously served through a caching proxy or CDN, purge any cached uShelf responses, especially `/api/items/*/media/*`, and disable caching of protected responses at that proxy. Older versions marked media responses public and cacheable for one year; an intermediary can serve an existing cache entry without contacting uShelf, so changing the origin server cannot revoke it. Current media responses use `Cache-Control: no-store` even when the password is unset to avoid creating new shared cache entries.
+
 The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in `.env`, which avoids changing ownership of the host files.
 
 Common operations:

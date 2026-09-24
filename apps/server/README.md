@@ -12,6 +12,7 @@ The HTTP and command-line adapter for uShelf. It exposes the library to the web 
 - `USHELF_ROOT` selects the directory containing `library/`, `recipes/`, `state/`, and `secrets/`; it defaults to `~/.ushelf`. State and secrets follow the root unless their dedicated override variables are set.
 - With `NODE_ENV=production`, the server also serves `apps/web/dist` with an SPA fallback.
 - `USHELF_WEB_PASSWORD` optionally requires sign-in for HTTP library routes. An empty or unset value disables it. Protected production access requires an HTTPS proxy because session cookies are Secure.
+- Media responses always use `Cache-Control: no-store`. Purge media cached by any existing proxy or CDN before enabling a password on a previously exposed installation; old public cache entries can otherwise bypass the origin's sign-in gate.
 - The `dev` command sets `NODE_ENV=development` so password sign-in can use an HTTP cookie on the loopback development servers. Do not expose development servers remotely.
 
 ## Commands

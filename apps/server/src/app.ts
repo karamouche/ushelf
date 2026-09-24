@@ -55,7 +55,7 @@ export function createApp(
     const file = await service.getMediaFile(c.req.param("id")!, c.req.param("filename")!);
     return c.body(new Uint8Array(file.bytes), 200, {
       "content-type": file.mediaType,
-      "cache-control": auth.password ? "no-store" : "public, max-age=31536000, immutable",
+      "cache-control": "no-store",
       "content-security-policy": "default-src 'none'; sandbox",
       "x-content-type-options": "nosniff",
     });
