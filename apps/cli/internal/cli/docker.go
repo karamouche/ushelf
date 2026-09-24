@@ -126,7 +126,11 @@ func (d Docker) Start(ctx context.Context) error {
 		"-e", "USHELF_WEB_BASE_PATH=" + d.Settings.BasePath,
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro",
-		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro", d.Settings.Image}
+		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro"}
+	if os.Getenv("USHELF_WEB_PASSWORD") != "" {
+		args = append(args, "-e", "USHELF_WEB_PASSWORD")
+	}
+	args = append(args, d.Settings.Image)
 	if err := d.runQuiet(ctx, "docker", args...); err != nil {
 		return err
 	}
@@ -412,7 +416,7 @@ func (d Docker) managedContainerExists(ctx context.Context) (bool, error) {
 }
 
 func (d Docker) configHash() string {
-	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath}, "\x00")
+	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath, os.Getenv("USHELF_WEB_PASSWORD")}, "\x00")
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
 }

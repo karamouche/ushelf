@@ -12,6 +12,7 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 - Fenced `mermaid` blocks render locally in strict mode. Invalid diagrams fall back to their original source code.
 - In development, Vite runs on `127.0.0.1:43111` and proxies the configured base path's `/api` endpoint to the server on port `43110`.
 - In production, the server serves the generated `dist/` directory and handles SPA fallback.
+- When `USHELF_WEB_PASSWORD` is set, the server gates the reader and API behind a password form. The browser uses a server-side session and offers Sign out; expired sessions return to the sign-in page.
 - Production assets are path-relative; the server injects the runtime `USHELF_WEB_BASE_PATH` into the HTML shell so one release image supports root and subpath deployments.
 - The API response types in `src/api.ts` intentionally describe the client boundary; update them when the server contract changes.
 

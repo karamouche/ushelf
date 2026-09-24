@@ -20,6 +20,8 @@ config.json  library/  recipes/  state/  assets/  secrets/
 
 Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
 
+Set `USHELF_WEB_PASSWORD` in the environment when running `ushelf start` to require a password for the HTTP reader and API. Keep it set for subsequent starts; an unset value removes the protection. The password is not a persistent `config set` key and is not printed by `config show`.
+
 ## Command output
 
 Commands that change local state report each long-running step on stderr and write their final result to stdout. The output is plain text without terminal animation, so it remains readable when redirected or captured in CI:
