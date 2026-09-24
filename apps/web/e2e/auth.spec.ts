@@ -22,7 +22,7 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       USHELF_PORT: String(port),
-      USHELF_WEB_PASSWORD: password,
+      USHELF_APP_PASSWORD: password,
     },
     stdio: "ignore",
   });

@@ -413,7 +413,7 @@ func (s *commandState) configCommand() *cobra.Command {
   port          HTTP port
   base-path     Web app and API URL prefix
   image         Runtime Docker image
-  web-password  HTTP reader password (prompted and stored privately)`
+  app-password  HTTP reader password (prompted and stored privately)`
 
 	command := &cobra.Command{
 		Use:   "config",
@@ -429,18 +429,18 @@ func (s *commandState) configCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image}
-			password := os.Getenv("USHELF_WEB_PASSWORD")
+			password := os.Getenv("USHELF_APP_PASSWORD")
 			if password == "" {
 				var err error
-				password, err = readWebPassword(s.settings.Home)
+				password, err = readAppPassword(s.settings.Home)
 				if err != nil {
 					return err
 				}
 			}
 			if password == "" {
-				value["web-password"] = "unset"
+				value["app-password"] = "unset"
 			} else {
-				value["web-password"] = "configured"
+				value["app-password"] = "configured"
 			}
 			encoded, _ := json.MarshalIndent(value, "", "  ")
 			fmt.Fprintln(s.deps.Stdout, string(encoded))
@@ -461,33 +461,33 @@ func (s *commandState) configCommand() *cobra.Command {
 			if len(args) == 0 {
 				return nil
 			}
-			if args[0] == "web-password" {
+			if args[0] == "app-password" {
 				if len(args) != 1 {
-					return fmt.Errorf("web-password is prompted; do not pass it as an argument")
+					return fmt.Errorf("app-password is prompted; do not pass it as an argument")
 				}
 				return nil
 			}
 			return cobra.ExactArgs(2)(command, args)
 		},
-		ValidArgs: []string{"host", "port", "base-path", "image", "web-password"},
+		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
 		Example: `  ushelf config set host 0.0.0.0
   ushelf config set port 43120
   ushelf config set base-path /reader/
   ushelf config set image ghcr.io/karamouche/ushelf:latest
-  ushelf config set web-password`,
+  ushelf config set app-password`,
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return command.Help()
 			}
-			if args[0] == "web-password" {
-				password, err := promptWebPassword(s.deps.Stdin, s.deps.Stderr)
+			if args[0] == "app-password" {
+				password, err := promptAppPassword(s.deps.Stdin, s.deps.Stderr)
 				if err != nil {
 					return err
 				}
-				if err := writeWebPassword(s.settings.Home, password); err != nil {
+				if err := writeAppPassword(s.settings.Home, password); err != nil {
 					return err
 				}
-				s.actions().Done("Web password saved. Run ushelf start to apply it")
+				s.actions().Done("App password saved. Run ushelf start to apply it")
 				return nil
 			}
 			actions := s.actions()
@@ -504,14 +504,14 @@ func (s *commandState) configCommand() *cobra.Command {
 		Short:     "Restore a configuration value to its default",
 		Long:      "Restore a configuration value to its default.\n\n" + keys,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"host", "port", "base-path", "image", "web-password"},
-		Example:   "  ushelf config unset base-path\n  ushelf config unset web-password",
+		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
+		Example:   "  ushelf config unset base-path\n  ushelf config unset app-password",
 		RunE: func(_ *cobra.Command, args []string) error {
-			if args[0] == "web-password" {
-				if err := unsetWebPassword(s.settings.Home); err != nil {
+			if args[0] == "app-password" {
+				if err := unsetAppPassword(s.settings.Home); err != nil {
 					return err
 				}
-				s.actions().Done("Web password removed. Run ushelf start to apply it")
+				s.actions().Done("App password removed. Run ushelf start to apply it")
 				return nil
 			}
 			actions := s.actions()

@@ -108,8 +108,8 @@ func TestStartUsesHardenedPortableMounts(t *testing.T) {
 	}
 }
 
-func TestStartPassesWebPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
-	t.Setenv("USHELF_WEB_PASSWORD", "a-secret-with-spaces")
+func TestStartPassesAppPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
+	t.Setenv("USHELF_APP_PASSWORD", "a-secret-with-spaces")
 	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
@@ -122,26 +122,26 @@ func TestStartPassesWebPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
 			continue
 		}
 		joined := strings.Join(call.args, " ")
-		if !strings.Contains(joined, "-e USHELF_WEB_PASSWORD") || strings.Contains(joined, "a-secret-with-spaces") {
+		if !strings.Contains(joined, "-e USHELF_APP_PASSWORD") || strings.Contains(joined, "a-secret-with-spaces") {
 			t.Fatalf("password environment was not passed safely: %s", joined)
 		}
 	}
-	t.Setenv("USHELF_WEB_PASSWORD", "different-secret")
+	t.Setenv("USHELF_APP_PASSWORD", "different-secret")
 	if withPassword == mustConfigHash(t, docker) {
 		t.Fatal("password change should recreate the managed container")
 	}
-	t.Setenv("USHELF_WEB_PASSWORD", "")
+	t.Setenv("USHELF_APP_PASSWORD", "")
 	if withPassword == mustConfigHash(t, docker) {
 		t.Fatal("removing the password should change the managed container configuration")
 	}
 }
 
-func TestStartUsesSavedWebPasswordWithoutEnvironmentValue(t *testing.T) {
-	t.Setenv("USHELF_WEB_PASSWORD", "")
+func TestStartUsesSavedAppPasswordWithoutEnvironmentValue(t *testing.T) {
+	t.Setenv("USHELF_APP_PASSWORD", "")
 	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
-	if err := writeWebPassword(docker.Settings.Home, "saved-secret"); err != nil {
+	if err := writeAppPassword(docker.Settings.Home, "saved-secret"); err != nil {
 		t.Fatal(err)
 	}
 	if err := docker.Start(context.Background()); err != nil {
@@ -152,7 +152,7 @@ func TestStartUsesSavedWebPasswordWithoutEnvironmentValue(t *testing.T) {
 			continue
 		}
 		joined := strings.Join(call.args, " ")
-		if strings.Contains(joined, "saved-secret") || strings.Contains(joined, "-e USHELF_WEB_PASSWORD") {
+		if strings.Contains(joined, "saved-secret") || strings.Contains(joined, "-e USHELF_APP_PASSWORD") {
 			t.Fatalf("saved password leaked into Docker arguments: %s", joined)
 		}
 		if !strings.Contains(joined, docker.secretsDir()+":/data/secrets:ro") {
