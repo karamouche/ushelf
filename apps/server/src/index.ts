@@ -14,6 +14,16 @@ const port = Number(process.env.USHELF_PORT ?? 43110);
 const hostname = process.env.USHELF_HOST ?? "127.0.0.1";
 const basePath = process.env.USHELF_WEB_BASE_PATH?.trim() || "/";
 
-serve({ fetch: createApp(service, webRoot, basePath).fetch, port, hostname }, (info) => {
-  console.log(`uShelf is reading at http://${hostname}:${info.port}`);
-});
+serve(
+  {
+    fetch: createApp(service, webRoot, basePath, {
+      password: process.env.USHELF_WEB_PASSWORD,
+      secureCookie: process.env.NODE_ENV !== "development",
+    }).fetch,
+    port,
+    hostname,
+  },
+  (info) => {
+    console.log(`uShelf is reading at http://${hostname}:${info.port}`);
+  },
+);
