@@ -122,29 +122,31 @@ Send the saved post about local-first software to my Kindle.
 
 ## Send a saved item to Kindle
 
-Connect an Amazon account from the native CLI, then use **Send to Kindle** in any reader page or ask your connected agent to send an already-saved item:
+Connect your Amazon account, then use **Send to Kindle** in the reader or ask your agent to send a saved item:
 
 ```sh
 ushelf kindle setup
 ushelf kindle status
 ```
 
-The CLI opens Amazon's sign-in page and stores the resulting device credential at `~/.ushelf/secrets/kindle.json` with owner-only permissions. The reader or agent generates a reflowable EPUB from the canonical saved source and its local images, resolves one registered device, and sends without retaining an Amazon cloud-library copy. Insights are not included. After a successful delivery, uShelf remembers that device in local state and selects it by default next time when it is still registered; an agent asks you to choose when several devices are available and no valid preference exists.
+The CLI opens Amazon sign-in and stores the device credential in `~/.ushelf/secrets/kindle.json` with owner-only permissions. uShelf sends a reflowable EPUB of the saved source and local images, without insights or an Amazon cloud-library copy. It remembers the last successful device; if no valid preference exists and several devices are available, the agent asks you to choose.
 
-This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk). Amazon may change or disable it without notice. Disconnect it with `ushelf kindle disconnect`.
+This unofficial integration uses Amazon's undocumented protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk), which Amazon may change. Disconnect with `ushelf kindle disconnect`.
 
 ## What is included
 
-| Layer            | What it does                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **CLI**          | Native installation, Docker lifecycle, updates, maintenance, and agent-client setup                                          |
-| **Core**         | URL safety, extraction, schemas, recipes, Markdown persistence, SQLite indexing, and all domain rules                        |
-| **MCP**          | Ingestion, enrichment, search, reading state, Kindle delivery, refresh, re-enrichment, and confirmation-gated deletion tools |
-| **HTTP server**  | A thin Hono API, production web hosting, index rebuilding, and Markdown import commands                                      |
-| **Web reader**   | A responsive React library and reader with full-text search, filters, reading progress, and local Mermaid rendering          |
-| **Agent skills** | Guided ingestion and library-management workflows that stay in sync with the MCP contract                                    |
+| Layer            | What it does                                                              |
+| ---------------- | ------------------------------------------------------------------------- |
+| **CLI**          | Installation, Docker management, updates, and agent setup                 |
+| **Core**         | Capture, validation, Markdown storage, SQLite search, and domain rules    |
+| **MCP**          | Agent tools for saving, enriching, searching, reading, and managing items |
+| **HTTP server**  | API, web hosting, index rebuilding, and Markdown import                   |
+| **Web reader**   | Search, filters, reading progress, and local Mermaid rendering            |
+| **Agent skills** | Guided ingestion and library workflows                                    |
 
-Extraction includes Readability for articles, layout-aware PDF.js text and embedded-figure extraction for attached PDFs, local image capture, sanitization, response and redirect limits, and private-network protections. PDF extraction joins wrapped paragraphs and conservatively recovers headings, lists, and simple tables as Markdown. X sources use a limited public extraction path with an explicitly agent-supplied fallback. PDF attachments are limited to 10 MiB and must contain embedded text; remote PDF URLs, OCR, vector-diagram reconstruction, complex multi-column layouts, DOCX, and PPTX are not yet supported.
+Articles use Readability. Attached PDFs use PDF.js to extract text and embedded figures; uShelf also captures local images and blocks unsafe URLs. X has limited public extraction, with agent-supplied fallback content.
+
+PDF attachments must be at most 10 MiB and contain embedded text. Remote PDF URLs, OCR, vector-diagram reconstruction, complex multi-column layouts, DOCX, and PPTX are unsupported.
 
 ## Markdown at the core
 
@@ -173,7 +175,7 @@ Rendered images are downloaded into `library/files/<item-id>/media/` and referen
 
 ## Run continuously with Docker Compose
 
-The Compose setup builds the API and reader into one container, restarts after failures or reboots, and keeps canonical data on the host.
+Compose builds the API and reader into one container. It restarts automatically and stores your library on the host.
 
 ```sh
 cp .env.example .env
@@ -187,11 +189,15 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Compose uses `~/.ushelf` by default, matching the native CLI and direct server or MCP processes. Configure Kindle credentials with `ushelf kindle setup`. To use another location, set an absolute `USHELF_ROOT` in `.env` and prepare the same directory layout there. The `.env` file itself is optional; when present, Compose loads it automatically. Set `USHELF_UID` and `USHELF_GID` to your host user and group IDs so the service and maintenance container can access the host-owned files.
+Compose uses `~/.ushelf` by default. To use another location, set an absolute `USHELF_ROOT` in `.env` and create the same directories there. Set `USHELF_UID` and `USHELF_GID` to your host IDs so containers can access the files. For Kindle, run `ushelf kindle setup`.
 
-The service binds to `127.0.0.1:43110` by default because uShelf does **not** provide HTTP authentication. For remote access, place an authenticated HTTPS proxy such as Caddy, Nginx, or Cloudflare Access in front of it, or use a VPN or SSH tunnel. Do not expose port `43110` directly to the public internet.
+The service binds to `127.0.0.1:43110` by default. For password protection, set `USHELF_APP_PASSWORD` in `.env` (or run `ushelf config set app-password` and `ushelf start` with the native CLI). It covers the API, PDFs, media, and reader; sign-in and the content-free health check remain public. Do not expose an unprotected service to the internet.
 
-The image defaults to UID/GID `1000:1000` when used directly. Compose uses the IDs in `.env`, which avoids changing ownership of the host files.
+For remote access, use an HTTPS reverse proxy, keep uShelf bound to loopback, and forward the original `Host` header. Sign-in uses a Secure cookie that expires after 12 hours or on server restart or password change. This HTTP password does not protect local CLI, MCP, Docker, or filesystem access.
+
+If a proxy or CDN previously cached uShelf responses, purge its cache before enabling the password, especially `/api/items/*/media/*`, and disable caching of protected responses. Older versions allowed year-long media caches that a password change cannot revoke. Current media responses use `Cache-Control: no-store`.
+
+The image defaults to UID/GID `1000:1000`; Compose uses the IDs in `.env`.
 
 Common operations:
 
@@ -212,7 +218,7 @@ docker compose run --rm --no-deps maintenance rebuild-index
 docker compose up -d
 ```
 
-For a consistent backup, stop the service and copy `library/` and `recipes/`. SQLite state does not need to be backed up. Back up the root's `secrets/` directory separately only if you want to preserve optional integration credentials.
+For a consistent backup, stop the service and copy `library/` and `recipes/`. Copy `secrets/` if you want to keep integration credentials. SQLite state is rebuildable.
 
 ### Configuration
 
@@ -223,13 +229,16 @@ For a consistent backup, stop the service and copy `library/` and `recipes/`. SQ
 | `USHELF_HOST`          | `127.0.0.1`             | Address published by the HTTP server or Compose                  |
 | `USHELF_PORT`          | `43110`                 | HTTP port                                                        |
 | `USHELF_WEB_BASE_PATH` | `/`                     | Root or subpath where the web app and API are served             |
+| `USHELF_APP_PASSWORD`  | unset                   | Optional password for all HTTP library content                   |
 | `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                    |
 
 Without path overrides, host processes use `~/.ushelf` and keep `library/`, `recipes/`, `state/`, and `secrets/` directly beneath it. The service creates the writable directories it needs and seeds the bundled default recipe when it is missing. The `secrets/` directory remains optional until an integration is configured.
 
 Set `USHELF_ROOT` to move the complete layout. Use `USHELF_STATE_DIR` or `USHELF_SECRETS_DIR` only when either directory must live outside that root. Containers use `/data` internally, backed by the selected host root.
 
-The native CLI's `--home` flag overrides `USHELF_ROOT`. It also accepts `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, or image overrides.
+The native CLI's `--home` flag overrides `USHELF_ROOT`. It also accepts `USHELF_IMAGE`. Use `ushelf config show` for effective values and `ushelf config set` for persistent host, port, base-path, image, or app password overrides. The password is prompted without echo and stored in the private `secrets/app-password` file, separate from `config.json`; `config show` reports only `configured` or `unset`.
+
+After `ushelf config set app-password`, run `ushelf start` to apply it to a running service. Password changes and `ushelf config unset app-password` likewise take effect after `ushelf start`; the CLI recreates the container when the saved value changes. A nonempty `USHELF_APP_PASSWORD` overrides the saved value and is passed to the container without putting its value on the Docker command line. Keep an environment override set on subsequent starts if you use one. Do not place the password in a shell history command or commit it to `.env` in Git.
 
 For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and your reverse proxy must preserve the prefix.
 

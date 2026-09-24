@@ -10,6 +10,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, workspaceRoot, "");
   const base = resolveWebBasePath(process.env.USHELF_WEB_BASE_PATH ?? env.USHELF_WEB_BASE_PATH);
   const apiPrefix = `${base.slice(0, -1)}/api`;
+  const authPrefix = `${base.slice(0, -1)}/auth`;
 
   return {
     root: webRoot,
@@ -19,7 +20,9 @@ export default defineConfig(({ command, mode }) => {
       proxy: {
         [apiPrefix]: {
           target: "http://127.0.0.1:43110",
-          rewrite: (requestPath) => requestPath.slice(base.length - 1),
+        },
+        [authPrefix]: {
+          target: "http://127.0.0.1:43110",
         },
       },
     },

@@ -409,10 +409,11 @@ func supportedPlatform() error {
 
 func (s *commandState) configCommand() *cobra.Command {
 	const keys = `Configurable keys:
-  host       Address published by Docker
-  port       HTTP port
-  base-path  Web app and API URL prefix
-  image      Runtime Docker image`
+  host          Address published by Docker
+  port          HTTP port
+  base-path     Web app and API URL prefix
+  image         Runtime Docker image
+  app-password  HTTP reader password (prompted and stored privately)`
 
 	command := &cobra.Command{
 		Use:   "config",
@@ -428,6 +429,19 @@ func (s *commandState) configCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image}
+			password := os.Getenv("USHELF_APP_PASSWORD")
+			if password == "" {
+				var err error
+				password, err = readAppPassword(s.settings.Home)
+				if err != nil {
+					return err
+				}
+			}
+			if password == "" {
+				value["app-password"] = "unset"
+			} else {
+				value["app-password"] = "configured"
+			}
 			encoded, _ := json.MarshalIndent(value, "", "  ")
 			fmt.Fprintln(s.deps.Stdout, string(encoded))
 			return nil
@@ -440,23 +454,41 @@ func (s *commandState) configCommand() *cobra.Command {
 		Run:   func(_ *cobra.Command, _ []string) { fmt.Fprintln(s.deps.Stdout, s.settings.ConfigPath) },
 	}
 	set := &cobra.Command{
-		Use:   "set KEY VALUE",
+		Use:   "set KEY [VALUE]",
 		Short: "Set a persistent configuration value",
 		Long:  "Set a persistent configuration value.\n\n" + keys,
 		Args: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return nil
 			}
+			if args[0] == "app-password" {
+				if len(args) != 1 {
+					return fmt.Errorf("app-password is prompted; do not pass it as an argument")
+				}
+				return nil
+			}
 			return cobra.ExactArgs(2)(command, args)
 		},
-		ValidArgs: []string{"host", "port", "base-path", "image"},
+		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
 		Example: `  ushelf config set host 0.0.0.0
   ushelf config set port 43120
   ushelf config set base-path /reader/
-  ushelf config set image ghcr.io/karamouche/ushelf:latest`,
+  ushelf config set image ghcr.io/karamouche/ushelf:latest
+  ushelf config set app-password`,
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return command.Help()
+			}
+			if args[0] == "app-password" {
+				password, err := promptAppPassword(s.deps.Stdin, s.deps.Stderr)
+				if err != nil {
+					return err
+				}
+				if err := writeAppPassword(s.settings.Home, password); err != nil {
+					return err
+				}
+				s.actions().Done("App password saved. Run ushelf start to apply it")
+				return nil
 			}
 			actions := s.actions()
 			actions.Step("Updating uShelf configuration...")
@@ -472,9 +504,16 @@ func (s *commandState) configCommand() *cobra.Command {
 		Short:     "Restore a configuration value to its default",
 		Long:      "Restore a configuration value to its default.\n\n" + keys,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"host", "port", "base-path", "image"},
-		Example:   "  ushelf config unset base-path",
+		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
+		Example:   "  ushelf config unset base-path\n  ushelf config unset app-password",
 		RunE: func(_ *cobra.Command, args []string) error {
+			if args[0] == "app-password" {
+				if err := unsetAppPassword(s.settings.Home); err != nil {
+					return err
+				}
+				s.actions().Done("App password removed. Run ushelf start to apply it")
+				return nil
+			}
 			actions := s.actions()
 			actions.Step("Updating uShelf configuration...")
 			if err := setConfigValue(s.settings.ConfigPath, args[0], "", true); err != nil {
