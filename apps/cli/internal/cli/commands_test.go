@@ -46,7 +46,7 @@ func TestConfigHelpListsKeysAndExamples(t *testing.T) {
 		"port          HTTP port",
 		"base-path     Web app and API URL prefix",
 		"image         Runtime Docker image",
-		"web-password  HTTP reader password",
+		"app-password  HTTP reader password",
 		"ushelf config set base-path /reader/",
 		"show",
 		"path",

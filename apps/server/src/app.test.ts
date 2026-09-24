@@ -154,7 +154,7 @@ describe("createApp base path", () => {
   });
 });
 
-describe("optional web password", () => {
+describe("optional app password", () => {
   const origin = "https://shelf.example";
   const password = "example-secret";
 

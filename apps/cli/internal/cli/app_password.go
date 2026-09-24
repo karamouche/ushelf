@@ -12,35 +12,35 @@ import (
 	"golang.org/x/term"
 )
 
-const webPasswordFilename = "web-password"
+const appPasswordFilename = "app-password"
 
-func webPasswordPath(home string) string {
-	return filepath.Join(home, "secrets", webPasswordFilename)
+func appPasswordPath(home string) string {
+	return filepath.Join(home, "secrets", appPasswordFilename)
 }
 
-func readWebPassword(home string) (string, error) {
-	value, err := os.ReadFile(webPasswordPath(home))
+func readAppPassword(home string) (string, error) {
+	value, err := os.ReadFile(appPasswordPath(home))
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read web password: %w", err)
+		return "", fmt.Errorf("read app password: %w", err)
 	}
 	if len(value) == 0 {
-		return "", fmt.Errorf("web password file is empty; run ushelf config set web-password or ushelf config unset web-password")
+		return "", fmt.Errorf("app password file is empty; run ushelf config set app-password or ushelf config unset app-password")
 	}
 	return string(value), nil
 }
 
-func writeWebPassword(home, value string) error {
+func writeAppPassword(home, value string) error {
 	if value == "" {
-		return fmt.Errorf("web password cannot be empty")
+		return fmt.Errorf("app password cannot be empty")
 	}
-	secretPath := webPasswordPath(home)
+	secretPath := appPasswordPath(home)
 	if err := os.MkdirAll(filepath.Dir(secretPath), 0o700); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(secretPath), ".web-password-*")
+	temporary, err := os.CreateTemp(filepath.Dir(secretPath), ".app-password-*")
 	if err != nil {
 		return err
 	}
@@ -58,15 +58,15 @@ func writeWebPassword(home, value string) error {
 	return os.Rename(temporary.Name(), secretPath)
 }
 
-func unsetWebPassword(home string) error {
-	err := os.Remove(webPasswordPath(home))
+func unsetAppPassword(home string) error {
+	err := os.Remove(appPasswordPath(home))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	return err
 }
 
-func promptWebPassword(input io.Reader, output io.Writer) (string, error) {
+func promptAppPassword(input io.Reader, output io.Writer) (string, error) {
 	if file, ok := input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
 		read := func(prompt string) (string, error) {
 			if _, err := fmt.Fprint(output, prompt); err != nil {
@@ -76,16 +76,16 @@ func promptWebPassword(input io.Reader, output io.Writer) (string, error) {
 			fmt.Fprintln(output)
 			return string(value), err
 		}
-		first, err := read("Web password: ")
+		first, err := read("App password: ")
 		if err != nil {
 			return "", err
 		}
-		second, err := read("Confirm web password: ")
+		second, err := read("Confirm app password: ")
 		if err != nil {
 			return "", err
 		}
 		if first == "" {
-			return "", fmt.Errorf("web password cannot be empty")
+			return "", fmt.Errorf("app password cannot be empty")
 		}
 		if first != second {
 			return "", fmt.Errorf("passwords do not match")
@@ -112,7 +112,7 @@ func promptWebPassword(input io.Reader, output io.Writer) (string, error) {
 		return "", err
 	}
 	if first == "" {
-		return "", fmt.Errorf("web password cannot be empty")
+		return "", fmt.Errorf("app password cannot be empty")
 	}
 	if first != second {
 		return "", fmt.Errorf("passwords do not match")

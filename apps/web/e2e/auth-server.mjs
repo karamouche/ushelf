@@ -12,7 +12,7 @@ const service = {
   },
 };
 const app = createApp(service, webRoot, "/", {
-  password: process.env.USHELF_WEB_PASSWORD,
+  password: process.env.USHELF_APP_PASSWORD,
   secureCookie: false,
 });
 

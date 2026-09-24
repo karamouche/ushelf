@@ -130,8 +130,8 @@ func (d Docker) Start(ctx context.Context) error {
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro",
 		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro"}
-	if os.Getenv("USHELF_WEB_PASSWORD") != "" {
-		args = append(args, "-e", "USHELF_WEB_PASSWORD")
+	if os.Getenv("USHELF_APP_PASSWORD") != "" {
+		args = append(args, "-e", "USHELF_APP_PASSWORD")
 	}
 	args = append(args, d.Settings.Image)
 	if err := d.runQuiet(ctx, "docker", args...); err != nil {
@@ -419,10 +419,10 @@ func (d Docker) managedContainerExists(ctx context.Context) (bool, error) {
 }
 
 func (d Docker) configHash() (string, error) {
-	password := os.Getenv("USHELF_WEB_PASSWORD")
+	password := os.Getenv("USHELF_APP_PASSWORD")
 	if password == "" {
 		var err error
-		password, err = readWebPassword(d.Settings.Home)
+		password, err = readAppPassword(d.Settings.Home)
 		if err != nil {
 			return "", err
 		}
