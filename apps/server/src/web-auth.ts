@@ -101,13 +101,15 @@ export function installWebAuth(app: Hono, prefix: string, options: WebAuthOption
     const supplied = createHash("sha256")
       .update(form.get("password") ?? "")
       .digest();
+    const validPassword = timingSafeEqual(supplied, expected);
     const threshold = now() - FAILED_LOGIN_WINDOW_MS;
     while (failures.length && failures[0]! <= threshold) failures.shift();
-    if (failures.length >= FAILED_LOGIN_LIMIT) {
-      c.header("Retry-After", "60");
-      return c.html(loginHtml(loginPath, nextPath, "Too many attempts. Try again shortly."), 429);
-    }
-    if (!timingSafeEqual(supplied, expected)) {
+    // A shared failure bucket must never let unauthenticated callers lock out the owner.
+    if (!validPassword) {
+      if (failures.length >= FAILED_LOGIN_LIMIT) {
+        c.header("Retry-After", "60");
+        return c.html(loginHtml(loginPath, nextPath, "Too many attempts. Try again shortly."), 429);
+      }
       failures.push(now());
       return c.html(loginHtml(loginPath, nextPath, "Incorrect password."), 401);
     }
