@@ -153,3 +153,171 @@ describe("createApp base path", () => {
     );
   });
 });
+
+describe("optional web password", () => {
+  const origin = "https://shelf.example";
+  const password = "example-secret";
+
+  async function signIn(app: ReturnType<typeof createApp>, base = "") {
+    const response = await app.request(`${origin}${base}/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password, next: `${base}/items/item-id` }).toString(),
+    });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(response.headers.get("set-cookie")).toContain("Secure");
+    expect(response.headers.get("set-cookie")).toContain("SameSite=Strict");
+    return response.headers.get("set-cookie")!.split(";")[0]!;
+  }
+
+  it("blocks all library routes before handlers run and leaves only health and sign-in public", async () => {
+    const webRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ushelf-auth-web-"));
+    try {
+      await fs.writeFile(
+        path.join(webRoot, "index.html"),
+        "<html><head></head><body>private shell</body></html>",
+      );
+      await fs.writeFile(path.join(webRoot, "app.js"), "private app asset");
+      let called = false;
+      const service = new Proxy({} as ShelfService, {
+        get: () => () => {
+          called = true;
+          throw new Error("handler reached");
+        },
+      });
+      const app = createApp(service, webRoot, "/", { password });
+      for (const path of [
+        "/api/items",
+        "/api/items/item-id",
+        "/api/items/item-id/original",
+        `/api/items/item-id/media/${"a".repeat(64)}.png`,
+        "/api/recipes",
+        "/api/kindle/status",
+        "/api/kindle/devices",
+      ]) {
+        const response = await app.request(`${origin}${path}`);
+        expect(response.status, path).toBe(401);
+        expect(response.headers.get("cache-control"), path).toBe("no-store");
+      }
+      for (const [path, method] of [
+        ["/api/items/item-id/reading", "PATCH"],
+        ["/api/items/item-id/kindle-deliveries", "POST"],
+      ] as const) {
+        expect((await app.request(`${origin}${path}`, { method })).status).toBe(401);
+      }
+      for (const path of ["/", "/items/item-id", "/index.html", "/app.js"]) {
+        const response = await app.request(`${origin}${path}`, {
+          headers: { accept: "text/html" },
+        });
+        expect(response.status, path).toBe(303);
+        expect(response.headers.get("location"), path).toContain("/auth/login");
+      }
+      expect(called).toBe(false);
+      await expect((await app.request(`${origin}/api/health`)).json()).resolves.toEqual({
+        ok: true,
+        authRequired: true,
+      });
+      expect((await app.request(`${origin}/auth/login`)).status).toBe(200);
+      const cookie = await signIn(app);
+      const asset = await app.request(`${origin}/app.js`, { headers: { cookie } });
+      expect(await asset.text()).toBe("private app asset");
+      expect(asset.headers.get("cache-control")).toBe("no-store");
+    } finally {
+      await fs.rm(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("authenticates, protects writes by origin, expires sessions, and logs out", async () => {
+    let time = 1_000_000;
+    const service = {
+      listItems: () => [],
+      getMediaFile: async () => ({ bytes: Buffer.from("image"), mediaType: "image/png" }),
+    } as unknown as ShelfService;
+    const app = createApp(service, undefined, "/", { password, now: () => time });
+    const wrong = await app.request(`${origin}/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: "password=wrong",
+    });
+    expect(wrong.status).toBe(401);
+    expect(wrong.headers.get("set-cookie")).toBeNull();
+    const insecure = await app.request("http://shelf.example/auth/login", {
+      method: "POST",
+      headers: {
+        origin: "http://shelf.example",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: `password=${password}`,
+    });
+    expect(insecure.status).toBe(403);
+    const oversized = await app.request(`${origin}/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: `password=${"x".repeat(9000)}`,
+    });
+    expect(oversized.status).toBe(400);
+    const cookie = await signIn(app);
+    expect(
+      (
+        await createApp(service, undefined, "/", { password }).request(`${origin}/api/items`, {
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(401);
+    expect(cookie).toMatch(/^__Host-ushelf-session=/);
+    const login = await app.request(`${origin}/auth/login`, { headers: { cookie } });
+    expect(login.status).toBe(303);
+    const list = await app.request(`${origin}/api/items`, { headers: { cookie } });
+    expect(list.status).toBe(200);
+    await expect(list.json()).resolves.toEqual({ items: [] });
+    const media = await app.request(`${origin}/api/items/item-id/media/${"a".repeat(64)}.png`, {
+      headers: { cookie },
+    });
+    expect(media.status).toBe(200);
+    expect(media.headers.get("cache-control")).toBe("no-store");
+    const crossSite = await app.request(`${origin}/api/auth/logout`, {
+      method: "POST",
+      headers: { cookie, origin: "https://evil.example" },
+    });
+    expect(crossSite.status).toBe(403);
+    const logout = await app.request(`${origin}/api/auth/logout`, {
+      method: "POST",
+      headers: { cookie, origin },
+    });
+    expect(logout.status).toBe(200);
+    expect((await app.request(`${origin}/api/items`, { headers: { cookie } })).status).toBe(401);
+    const nextCookie = await signIn(app);
+    time += 12 * 60 * 60 * 1000 + 1;
+    expect(
+      (await app.request(`${origin}/api/items`, { headers: { cookie: nextCookie } })).status,
+    ).toBe(401);
+  });
+
+  it("rate limits failed sign-ins and keeps subpath redirects inside the mount", async () => {
+    const app = createApp({} as ShelfService, undefined, "/reader/", { password });
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const response = await app.request(`${origin}/reader/auth/login`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+        body: "password=wrong",
+      });
+      expect(response.status).toBe(401);
+    }
+    const limited = await app.request(`${origin}/reader/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: `password=${password}`,
+    });
+    expect(limited.status).toBe(429);
+    const fresh = createApp({} as ShelfService, undefined, "/reader/", { password });
+    const cookie = await signIn(fresh, "/reader");
+    expect((await fresh.request(`${origin}/reader/api/health`)).status).toBe(200);
+    expect((await fresh.request(`${origin}/api/items`, { headers: { cookie } })).status).toBe(404);
+    const response = await fresh.request(
+      `${origin}/reader/auth/login?next=${encodeURIComponent("//evil.example")}`,
+      { headers: { cookie } },
+    );
+    expect(response.headers.get("location")).toBe("/reader/");
+  });
+});

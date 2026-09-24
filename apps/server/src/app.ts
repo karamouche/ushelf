@@ -10,15 +10,24 @@ import {
 } from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { installWebAuth, type WebAuthOptions } from "./web-auth.js";
 
-export function createApp(service: ShelfService, webRoot?: string, basePath = "/") {
+export function createApp(
+  service: ShelfService,
+  webRoot?: string,
+  basePath = "/",
+  auth: WebAuthOptions = {},
+) {
   const app = new Hono();
   const normalizedBasePath = normalizeBasePath(basePath);
   const prefix = normalizedBasePath === "/" ? "" : normalizedBasePath.replace(/\/$/, "");
   const route = (path: string) => `${prefix}${path}`;
+  installWebAuth(app, prefix, auth);
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
-  app.get(route("/api/health"), (c) => c.json({ ok: true }));
+  app.get(route("/api/health"), (c) =>
+    c.json(auth.password ? { ok: true, authRequired: true } : { ok: true }),
+  );
   app.get(route("/api/kindle/status"), async (c) =>
     c.json(await service.kindleStatus(c.req.raw.signal)),
   );
@@ -46,7 +55,7 @@ export function createApp(service: ShelfService, webRoot?: string, basePath = "/
     const file = await service.getMediaFile(c.req.param("id")!, c.req.param("filename")!);
     return c.body(new Uint8Array(file.bytes), 200, {
       "content-type": file.mediaType,
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": auth.password ? "no-store" : "public, max-age=31536000, immutable",
       "content-security-policy": "default-src 'none'; sandbox",
       "x-content-type-options": "nosniff",
     });
