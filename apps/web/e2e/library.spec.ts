@@ -512,6 +512,7 @@ function progressItem(
 }
 
 async function scrollToProgress(page: import("@playwright/test").Page, progress: number) {
+  await expect(page.locator(".article > h1")).toBeVisible();
   await page.waitForTimeout(180);
   await page.evaluate((nextProgress) => {
     const maximum = document.documentElement.scrollHeight - window.innerHeight;
