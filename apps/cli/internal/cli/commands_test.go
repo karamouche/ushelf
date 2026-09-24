@@ -42,10 +42,11 @@ func TestConfigHelpListsKeysAndExamples(t *testing.T) {
 	output := stdout.String()
 	for _, expected := range []string{
 		"Configurable keys:",
-		"host       Address published by Docker",
-		"port       HTTP port",
-		"base-path  Web app and API URL prefix",
-		"image      Runtime Docker image",
+		"host          Address published by Docker",
+		"port          HTTP port",
+		"base-path     Web app and API URL prefix",
+		"image         Runtime Docker image",
+		"web-password  HTTP reader password",
 		"ushelf config set base-path /reader/",
 		"show",
 		"path",

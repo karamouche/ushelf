@@ -18,9 +18,9 @@ The CLI owns `~/.ushelf` by default:
 config.json  library/  recipes/  state/  assets/  secrets/
 ```
 
-Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
+Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, `image`, and `web-password`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
 
-Set `USHELF_WEB_PASSWORD` in the environment when running `ushelf start` to require a password for the HTTP reader and API. Keep it set for subsequent starts; an unset value removes the protection. The password is not a persistent `config set` key and is not printed by `config show`.
+Run `ushelf config set web-password` to enter and confirm the password without echoing it. It is stored in `~/.ushelf/secrets/web-password` with owner-only access and mounted read-only into the server container. Run `ushelf start` to apply it; later starts retain protection. `ushelf config show` displays only whether a password is configured. Run `ushelf config unset web-password` followed by `ushelf start` to remove protection. A nonempty `USHELF_WEB_PASSWORD` environment value takes precedence over the saved password for that start.
 
 ## Command output
 

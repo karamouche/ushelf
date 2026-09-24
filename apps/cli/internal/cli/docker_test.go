@@ -73,6 +73,15 @@ func testDocker(t *testing.T, runner Runner, stdout, stderr io.Writer) Docker {
 	}
 }
 
+func mustConfigHash(t *testing.T, docker Docker) string {
+	t.Helper()
+	hash, err := docker.configHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hash
+}
+
 func TestStartUsesHardenedPortableMounts(t *testing.T) {
 	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
 	var stdout, stderr bytes.Buffer
@@ -104,7 +113,7 @@ func TestStartPassesWebPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
 	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
 	var stdout, stderr bytes.Buffer
 	docker := testDocker(t, runner, &stdout, &stderr)
-	withPassword := docker.configHash()
+	withPassword := mustConfigHash(t, docker)
 	if err := docker.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -118,13 +127,40 @@ func TestStartPassesWebPasswordWithoutPuttingItsValueInArguments(t *testing.T) {
 		}
 	}
 	t.Setenv("USHELF_WEB_PASSWORD", "different-secret")
-	if withPassword == docker.configHash() {
+	if withPassword == mustConfigHash(t, docker) {
 		t.Fatal("password change should recreate the managed container")
 	}
 	t.Setenv("USHELF_WEB_PASSWORD", "")
-	if withPassword == docker.configHash() {
+	if withPassword == mustConfigHash(t, docker) {
 		t.Fatal("removing the password should change the managed container configuration")
 	}
+}
+
+func TestStartUsesSavedWebPasswordWithoutEnvironmentValue(t *testing.T) {
+	t.Setenv("USHELF_WEB_PASSWORD", "")
+	runner := &fakeRunner{outputs: []fakeResult{{output: "image"}, {output: ""}, {output: "healthy"}}}
+	var stdout, stderr bytes.Buffer
+	docker := testDocker(t, runner, &stdout, &stderr)
+	if err := writeWebPassword(docker.Settings.Home, "saved-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := docker.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range runner.calls {
+		if len(call.args) == 0 || call.args[0] != "run" {
+			continue
+		}
+		joined := strings.Join(call.args, " ")
+		if strings.Contains(joined, "saved-secret") || strings.Contains(joined, "-e USHELF_WEB_PASSWORD") {
+			t.Fatalf("saved password leaked into Docker arguments: %s", joined)
+		}
+		if !strings.Contains(joined, docker.secretsDir()+":/data/secrets:ro") {
+			t.Fatalf("saved password not mounted: %s", joined)
+		}
+		return
+	}
+	t.Fatal("Docker run was not called")
 }
 
 func TestStopRefusesUnmanagedContainer(t *testing.T) {
@@ -213,7 +249,7 @@ func TestStartReportsExistingContainerState(t *testing.T) {
 				{output: "image"},
 				{output: containerName},
 				{output: "true"},
-				{output: docker.configHash()},
+				{output: mustConfigHash(t, docker)},
 				{output: test.running},
 				{output: "healthy"},
 			}}
