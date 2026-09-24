@@ -18,8 +18,10 @@ import {
   listItems,
   listKindleDevices,
   localMediaUrl,
+  logout,
   originalFileUrl,
   sendToKindle,
+  webAuthRequired,
   type ItemSummary,
   type Citation,
   type KindleDevice,
@@ -68,6 +70,20 @@ function Brand() {
   );
 }
 
+function LogoutButton() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    void webAuthRequired()
+      .then(setEnabled)
+      .catch(() => {});
+  }, []);
+  return enabled ? (
+    <button className="logout-button" type="button" onClick={() => void logout()}>
+      Sign out
+    </button>
+  ) : null;
+}
+
 function Library() {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<ItemSummary[]>([]);
@@ -99,6 +115,7 @@ function Library() {
       <header className="topbar">
         <Brand />
         <span className="quiet">A quiet place for unfinished reading.</span>
+        <LogoutButton />
       </header>
       <main>
         <section className="library-head">
@@ -256,6 +273,7 @@ function Reader() {
           ←
         </button>
         <Brand />
+        <LogoutButton />
         <select
           aria-label="Reading status"
           value={item.reading.status}

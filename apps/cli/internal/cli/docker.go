@@ -84,7 +84,10 @@ func (d Docker) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	hash := d.configHash()
+	hash, err := d.configHash()
+	if err != nil {
+		return err
+	}
 	if exists {
 		existingHash, inspectErr := d.inspect(ctx, `{{index .Config.Labels "io.ushelf.config"}}`)
 		if inspectErr != nil {
@@ -126,7 +129,11 @@ func (d Docker) Start(ctx context.Context) error {
 		"-e", "USHELF_WEB_BASE_PATH=" + d.Settings.BasePath,
 		"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Settings.Port)), d.Settings.Port),
 		"-v", d.libraryDir() + ":/data/library", "-v", d.recipesDir() + ":/data/recipes:ro",
-		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro", d.Settings.Image}
+		"-v", d.stateDir() + ":/data/state", "-v", d.secretsDir() + ":/data/secrets:ro"}
+	if os.Getenv("USHELF_APP_PASSWORD") != "" {
+		args = append(args, "-e", "USHELF_APP_PASSWORD")
+	}
+	args = append(args, d.Settings.Image)
 	if err := d.runQuiet(ctx, "docker", args...); err != nil {
 		return err
 	}
@@ -411,10 +418,18 @@ func (d Docker) managedContainerExists(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (d Docker) configHash() string {
-	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath}, "\x00")
+func (d Docker) configHash() (string, error) {
+	password := os.Getenv("USHELF_APP_PASSWORD")
+	if password == "" {
+		var err error
+		password, err = readAppPassword(d.Settings.Home)
+		if err != nil {
+			return "", err
+		}
+	}
+	value := strings.Join([]string{d.Settings.Image, d.Settings.Home, d.Settings.Host, strconv.Itoa(d.Settings.Port), d.Settings.BasePath, password}, "\x00")
 	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (d Docker) CheckPort() error {

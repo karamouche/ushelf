@@ -18,7 +18,9 @@ The CLI owns `~/.ushelf` by default:
 config.json  library/  recipes/  state/  assets/  secrets/
 ```
 
-Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, and `image`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
+Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, `image`, and `app-password`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
+
+Run `ushelf config set app-password` to enter and confirm the password without echoing it. It is stored in `~/.ushelf/secrets/app-password` with owner-only access and mounted read-only into the server container. Run `ushelf start` to apply it; later starts retain protection. `ushelf config show` displays only whether a password is configured. Run `ushelf config unset app-password` followed by `ushelf start` to remove protection. A nonempty `USHELF_APP_PASSWORD` environment value takes precedence over the saved password for that start.
 
 ## Command output
 

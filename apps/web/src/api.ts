@@ -113,8 +113,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { "content-type": "application/json", ...options?.headers },
   });
   const value = (await response.json()) as T & { error?: string };
+  if (response.status === 401) {
+    const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.assign(`${BASE_PATH}/auth/login?next=${encodeURIComponent(next)}`);
+    throw new Error("Sign in required");
+  }
   if (!response.ok) throw new Error(value.error ?? `Request failed (${response.status})`);
   return value;
+}
+
+export async function webAuthRequired(): Promise<boolean> {
+  const response = await fetch(apiUrl("/api/health"));
+  if (!response.ok) return false;
+  return Boolean(((await response.json()) as { authRequired?: boolean }).authRequired);
+}
+
+export async function logout(): Promise<void> {
+  await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+  window.location.assign(`${BASE_PATH}/auth/login`);
 }
 
 export async function getKindleStatus(): Promise<KindleStatus> {
