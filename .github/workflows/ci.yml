@@ -49,5 +49,9 @@ jobs:
           cache-dependency-path: apps/cli/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - run: pnpm build:runtime
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm test:e2e
       - name: Build runtime image
         run: docker build --build-arg USHELF_VERSION=ci --tag ushelf:ci .
