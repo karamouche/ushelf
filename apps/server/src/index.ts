@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
+import { resolveWebPassword } from "./web-password.js";
 
 const service = new ShelfService();
 await service.initialize();
@@ -17,7 +18,7 @@ const basePath = process.env.USHELF_WEB_BASE_PATH?.trim() || "/";
 serve(
   {
     fetch: createApp(service, webRoot, basePath, {
-      password: process.env.USHELF_WEB_PASSWORD,
+      password: resolveWebPassword(),
       secureCookie: process.env.NODE_ENV !== "development",
     }).fetch,
     port,
