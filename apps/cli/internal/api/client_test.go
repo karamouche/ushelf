@@ -11,8 +11,8 @@ import (
 
 func TestParseBaseURLEnforcesTransportPolicy(t *testing.T) {
 	for value, want := range map[string]string{
-		"https://shelf.example":         "https://shelf.example/",
-		"https://shelf.example/reader":  "https://shelf.example/reader/",
+		"https://ushelf.example":        "https://ushelf.example/",
+		"https://ushelf.example/reader": "https://ushelf.example/reader/",
 		"http://127.0.0.1:43110/":       "http://127.0.0.1:43110/",
 		"http://localhost:43110/reader": "http://localhost:43110/reader/",
 	} {
@@ -25,8 +25,8 @@ func TestParseBaseURLEnforcesTransportPolicy(t *testing.T) {
 		}
 	}
 	for _, value := range []string{
-		"http://shelf.example", "ftp://shelf.example", "https://user:pass@shelf.example",
-		"https://shelf.example/?q=1", "shelf.example", "",
+		"http://ushelf.example", "ftp://ushelf.example", "https://user:pass@ushelf.example",
+		"https://ushelf.example/?q=1", "ushelf.example", "",
 	} {
 		if _, err := ParseBaseURL(value); err == nil {
 			t.Errorf("%q should be rejected", value)

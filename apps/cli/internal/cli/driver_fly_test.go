@@ -13,7 +13,7 @@ func testFly(t *testing.T, runner *scriptRunner) FlyDeployment {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	return FlyDeployment{
-		Context: Context{Name: "shelf", Spec: ContextSpec{Driver: DriverFly, App: "my-shelf", Region: "cdg"},
+		Context: Context{Name: "ushelf", Spec: ContextSpec{Driver: DriverFly, App: "my-ushelf", Region: "cdg"},
 			Credentials: Credentials{APIToken: testToken, AppPassword: "reader password"}, Home: t.TempDir(), Version: "1.2.3"},
 		Runner: runner, Stdout: &stdout, Stderr: &stderr, Actions: newActionReporter(&stderr, &stdout),
 	}
@@ -67,7 +67,7 @@ func TestFlyApplyCreatesTheAppVolumeAndSecretsBeforeDeploying(t *testing.T) {
 	if !strings.Contains(deploy, "--image ghcr.io/karamouche/ushelf:1.2.3") || !strings.Contains(deploy, "--ha=false") {
 		t.Fatalf("deploy = %s", deploy)
 	}
-	for _, expected := range []string{`app = "my-shelf"`, `primary_region = "cdg"`, `source = "ushelf_data"`, `destination = "/data"`, "force_https = true", `path = "/api/health"`} {
+	for _, expected := range []string{`app = "my-ushelf"`, `primary_region = "cdg"`, `source = "ushelf_data"`, `destination = "/data"`, "force_https = true", `path = "/api/health"`} {
 		if !strings.Contains(flyConfig, expected) {
 			t.Errorf("fly.toml missing %q:\n%s", expected, flyConfig)
 		}
@@ -111,7 +111,7 @@ func TestFlyStateAndStop(t *testing.T) {
 	if err := fly.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if last := runner.calls[len(runner.calls)-1]; last.joined() != "scale count 0 --app my-shelf --yes" {
+	if last := runner.calls[len(runner.calls)-1]; last.joined() != "scale count 0 --app my-ushelf --yes" {
 		t.Fatalf("stop = %s", last.joined())
 	}
 }

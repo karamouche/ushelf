@@ -27,7 +27,9 @@
     "kindle:build": "go -C apps/cli build -o dist/ushelf-kindle-bridge ./cmd/ushelf-kindle-bridge",
     "cli:test": "go -C apps/cli test ./...",
     "test:installer": "sh scripts/test-install.sh",
-    "validate:skills": "node scripts/validate-skills.mjs"
+    "validate:skills": "node scripts/validate-skills.mjs",
+    "docs:dev": "pnpm --filter @ushelf/docs dev",
+    "docs:build": "pnpm --filter @ushelf/docs build"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
