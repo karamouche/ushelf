@@ -68,6 +68,7 @@ ENV USHELF_WEB_BASE_PATH=$USHELF_WEB_BASE_PATH
 ENV USHELF_VERSION=$USHELF_VERSION
 ENV USHELF_KINDLE_BRIDGE=/app/bin/ushelf-kindle-bridge
 ENV USHELF_BUNDLED_RECIPES_DIR=/opt/ushelf/recipes
+ENV USHELF_BUNDLED_SKILLS_DIR=/opt/ushelf/skills
 
 WORKDIR /app
 
@@ -80,6 +81,7 @@ COPY --from=production-dependencies /app/node_modules node_modules
 COPY --from=production-dependencies /app/apps/mcp/node_modules apps/mcp/node_modules
 COPY --from=production-dependencies /app/apps/server/node_modules apps/server/node_modules
 COPY --from=production-dependencies /app/packages/core/node_modules packages/core/node_modules
+COPY --chmod=0755 scripts/docker-entrypoint.sh /usr/local/bin/ushelf-entrypoint
 COPY --from=build /app/apps/mcp/package.json apps/mcp/package.json
 COPY --from=build /app/apps/mcp/dist apps/mcp/dist
 COPY --from=build /app/apps/server/package.json apps/server/package.json
@@ -96,13 +98,15 @@ COPY --from=build --chown=node:node /app/skills /opt/ushelf/skills
 COPY --from=build --chown=node:node /app/recipes /data/recipes
 
 RUN mkdir -p /data/library/items /data/library/history /data/state /data/secrets \
+  && chmod 700 /data/secrets \
   && chown -R node:node /data
 
-USER node
+# Docker drivers pass an explicit non-root --user; a root start drops to node in the entrypoint.
 
 EXPOSE $USHELF_PORT
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["node", "-e", "const configured = process.env.USHELF_WEB_BASE_PATH; const base = configured === '/' ? '' : configured.endsWith('/') ? configured.slice(0, -1) : configured; const port = process.env.USHELF_PORT; fetch(`http://127.0.0.1:${port}${base}/api/health`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 
+ENTRYPOINT ["/usr/local/bin/ushelf-entrypoint"]
 CMD ["node", "apps/server/dist/index.js"]
