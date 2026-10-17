@@ -1,0 +1,37 @@
+---
+title: uShelf
+description: A local, agent-native library for the writing worth keeping.
+template: splash
+hero:
+  tagline: Capture deterministically. Enrich with your agent. Keep everything as readable Markdown, on a server you choose.
+  image:
+    file: ../../assets/ushelf-hero.svg
+  actions:
+    - text: Quick start
+      link: getting-started/quick-start/
+      icon: right-arrow
+    - text: Deploy anywhere
+      link: deploy/overview/
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+<CardGrid>
+  <Card title="Your files are the product" icon="document">
+    Every completed item lives as portable, readable Markdown. The search index is disposable and
+    rebuilds from it.
+  </Card>
+  <Card title="Your agent does the thinking" icon="puzzle">
+    uShelf exposes MCP tools and versioned recipes. It ships no model SDK, API key, embeddings
+    store, or autonomous LLM process.
+  </Card>
+  <Card title="Deploy where you like" icon="rocket">
+    Run the server on your laptop, any Docker host over SSH, Fly.io, or your own platform. The CLI
+    and MCP bridge stay on your machine.
+  </Card>
+  <Card title="Reading is first-class" icon="open-book">
+    The web reader tracks inbox, reading, read, and archived states with scroll progress, and can
+    send items to a Kindle.
+  </Card>
+</CardGrid>
