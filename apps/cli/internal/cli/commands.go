@@ -68,6 +68,7 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 		state.logsCommand(), state.openCommand(), state.mcpCommand(), state.setupCommand(),
 		state.doctorCommand(), state.versionCommand(), state.updateCommand(), state.rebuildCommand(),
 		state.importCommand(), state.contextCommand(), state.configCommand(), state.kindleCommand(),
+		state.connectorsCommand(),
 	)
 	return root
 }

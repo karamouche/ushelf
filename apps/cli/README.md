@@ -52,6 +52,10 @@ Done: uShelf 1.2.3 is ready at http://127.0.0.1:43110/ (context local)
 
 If a Docker deployment becomes unhealthy or times out, the CLI includes a short recent log excerpt and points to `ushelf logs --tail 200` and `ushelf doctor`. `ushelf mcp` reserves stdout exclusively for protocol messages and answers any request it cannot relay with a JSON-RPC error.
 
+## Connectors
+
+Hosted AI apps such as Claude (web, desktop, mobile) and ChatGPT cannot run `ushelf mcp`. They connect to the server's `/mcp` endpoint directly and sign in with OAuth, and the owner approves each one with the app password. `ushelf connectors` prints the URL to add as a custom connector and lists the authorized connectors through the server's token-only API. `ushelf connectors revoke CLIENT_ID` (or `--all`) disconnects them immediately.
+
 ## Kindle setup
 
 `ushelf kindle setup` performs Amazon sign-in locally, then uploads the device credential to the current context's server through its token-only API. If the upload fails, the new Amazon registration is deregistered. `ushelf kindle status` and `ushelf kindle disconnect` also go through the server; `--skip-deregister --yes` removes a credential that Amazon has already invalidated.
