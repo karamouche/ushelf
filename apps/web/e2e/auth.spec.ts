@@ -73,3 +73,38 @@ test("sign-in protects the reader and API, and sign-out removes access", async (
   await page.reload();
   await expect(page).toHaveURL(/\/auth\/login/);
 });
+
+test("connector consent sends the browser back to the app with a code", async ({ page }) => {
+  const callback = "http://localhost:5555/callback";
+  const registration = await fetch(`${baseUrl}/oauth/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: "Browser connector",
+      redirect_uris: [callback],
+      token_endpoint_auth_method: "none",
+    }),
+  });
+  const { client_id: clientId } = (await registration.json()) as { client_id: string };
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: callback,
+    response_type: "code",
+    code_challenge: "A".repeat(43),
+    code_challenge_method: "S256",
+    state: "browser-state",
+  });
+  await page.goto(`${baseUrl}/oauth/authorize?${params}`);
+  await expect(page.getByText("Browser connector")).toBeVisible();
+  await page.getByLabel("uShelf password").fill(password);
+  // The approval POST relies on the browser's real Origin header; a policy that makes it
+  // `null` leaves the user on an error page instead of returning to the app.
+  const [returning] = await Promise.all([
+    page.waitForRequest((request) => request.url().startsWith(`${callback}?`)),
+    page.getByRole("button", { name: "Allow access" }).click(),
+  ]);
+  const returned = new URL(returning.url());
+  expect(returned.searchParams.get("code")).toBeTruthy();
+  expect(returned.searchParams.get("state")).toBe("browser-state");
+});

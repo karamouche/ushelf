@@ -223,9 +223,10 @@ describe("connector OAuth", () => {
     const html = await consent.text();
     expect(html).toContain("localhost:3118");
     expect(html).toContain("Continue only if you started this connection yourself");
-    expect(consent.headers.get("content-security-policy")).toContain(
-      "form-action 'self' http://localhost:3118",
-    );
+    // `no-referrer` would make browsers send `Origin: null` on the approval POST, which the
+    // same-origin check rejects; `form-action` would block redirect hops after the callback.
+    expect(consent.headers.get("referrer-policy")).toBe("same-origin");
+    expect(consent.headers.get("content-security-policy")).not.toContain("form-action");
 
     const approval = await context.request(
       "/oauth/authorize",
