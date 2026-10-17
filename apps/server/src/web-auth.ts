@@ -50,6 +50,7 @@ export function installWebAuth(
   prefix: string,
   gate: PasswordGate | undefined,
   options: WebAuthOptions = {},
+  isPublicPath: (pathname: string) => boolean = () => false,
 ): void {
   if (!gate) return;
 
@@ -84,7 +85,13 @@ export function installWebAuth(
         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
       );
     }
-    if (c.get("apiClient") || pathname === healthPath || pathname === loginPath) {
+    if (
+      c.get("apiClient") ||
+      c.get("connectorClientId") ||
+      pathname === healthPath ||
+      pathname === loginPath ||
+      isPublicPath(pathname)
+    ) {
       await next();
       return;
     }
