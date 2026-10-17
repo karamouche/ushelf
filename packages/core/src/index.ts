@@ -35,3 +35,12 @@ export type {
 } from "./domain/kindle.js";
 export type { KindleGateway } from "./kindle/kindle-bridge.js";
 export type { AgentSkill, AgentSkillFile } from "./agent/agent-skills.js";
+export { ConnectorAuthorization, OAuthError } from "./connectors/connector-authorization.js";
+export type {
+  Connector,
+  ConnectorAuthMethod,
+  ConnectorClient,
+  ConnectorRegistration,
+  ConnectorTokens,
+  OAuthErrorCode,
+} from "./connectors/connector-authorization.js";
