@@ -5,9 +5,33 @@ description: How the CLI, MCP bridge, server, and storage fit together.
 
 uShelf separates what runs on your machine from where your library lives.
 
-```text
-Agent ──stdio──> ushelf mcp (local) ──HTTPS + API token──> uShelf server ──> Markdown + SQLite
-Browser ─────────────────────────────HTTPS + password────────┘
+```mermaid
+flowchart TB
+  subgraph machine["Your machine"]
+    agent["Agent<br/>Claude Code, Codex"]
+    bridge["ushelf mcp<br/>stdio bridge"]
+    cli["ushelf CLI<br/>deploys and operates"]
+    browser["Browser"]
+  end
+
+  subgraph server["uShelf server: local Docker, SSH host, Fly.io, or self-hosted"]
+    mcp["MCP endpoint<br/>/mcp"]
+    api["HTTP API<br/>/api"]
+    web["Web reader"]
+    core["Core<br/>ShelfService"]
+    md[("Markdown<br/>source of truth")]
+    db[("SQLite FTS5<br/>disposable index")]
+  end
+
+  agent -- stdio --> bridge
+  bridge -- "HTTPS, API token" --> mcp
+  cli -.-> api
+  browser -- "HTTPS, password" --> web
+  web --> api
+  mcp --> core
+  api --> core
+  core --> md
+  core -. "rebuilt from Markdown" .-> db
 ```
 
 - **The server** is one container. It owns the library and serves the web reader, the HTTP API, and the MCP endpoint at `/mcp`. Exactly one server process writes a given library.

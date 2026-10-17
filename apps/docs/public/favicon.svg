@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#111111"/>
-  <path d="M8 9v9a8 8 0 0 0 16 0V9" fill="none" stroke="#f7f6f2" stroke-width="3.2" stroke-linecap="round"/>
-  <path d="M6 25h20" stroke="#f7f6f2" stroke-width="2.4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>uShelf</title>
+  <text
+    x="32"
+    y="49"
+    fill="#111"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="56"
+    font-style="italic"
+    text-anchor="middle"
+  >u</text>
 </svg>
