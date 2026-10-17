@@ -20,6 +20,16 @@ class FakeKindleGateway implements KindleGateway {
   sent?: { bytes: Uint8Array; title: string; author?: string; targetSerial: string };
   sendError?: Error;
   sendResult: Promise<string> = Promise.resolve("sku-123");
+  connected?: string;
+  disconnected?: { deregister: boolean };
+
+  async connect(credential: string) {
+    this.connected = credential;
+    return { accountName: "Reader", homeRegion: "NA", serial: "INSTALLATION" };
+  }
+  async disconnect(options: { deregister: boolean }) {
+    this.disconnected = options;
+  }
 
   async status() {
     return { accountName: "Reader", homeRegion: "NA", serial: "INSTALLATION" };
@@ -191,5 +201,32 @@ describe("ShelfService Kindle delivery", () => {
     );
     finish("sku-123");
     await first;
+  });
+});
+
+describe("ShelfService Kindle connection", () => {
+  it("forwards an uploaded credential and reports the connected account", async () => {
+    const { service, gateway } = await fixture();
+    await expect(service.connectKindle('{"credential":true}')).resolves.toEqual({
+      configured: true,
+      accountName: "Reader",
+      homeRegion: "NA",
+    });
+    expect(gateway.connected).toBe('{"credential":true}');
+  });
+
+  it("rejects empty and oversized credential uploads before reaching the bridge", async () => {
+    const { service, gateway } = await fixture();
+    await expect(service.connectKindle("  ")).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(service.connectKindle("x".repeat(64 * 1024 + 1))).rejects.toMatchObject({
+      code: "invalid_request",
+    });
+    expect(gateway.connected).toBeUndefined();
+  });
+
+  it("forwards the deregistration choice on disconnect", async () => {
+    const { service, gateway } = await fixture();
+    await service.disconnectKindle({ deregister: false });
+    expect(gateway.disconnected).toEqual({ deregister: false });
   });
 });

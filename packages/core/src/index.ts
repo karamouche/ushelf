@@ -34,3 +34,4 @@ export type {
   KindleStatus,
 } from "./domain/kindle.js";
 export type { KindleGateway } from "./kindle/kindle-bridge.js";
+export type { AgentSkill, AgentSkillFile } from "./agent/agent-skills.js";

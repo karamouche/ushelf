@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { UshelfConfig } from "../configuration/ushelf-config.js";
 import { resolveConfig } from "../configuration/ushelf-config.js";
+import { readAgentSkills, type AgentSkill } from "../agent/agent-skills.js";
 import { ingestionState } from "../domain/ingestion-state.js";
 import type {
   Citation,
@@ -48,6 +49,7 @@ export interface ShelfServiceDependencies {
 }
 
 const KINDLE_DELIVERY_CLAIM_TTL_MS = 5 * 60_000;
+const KINDLE_CREDENTIAL_MAX_BYTES = 64 * 1024;
 
 export class ShelfService {
   private readonly config: UshelfConfig;
@@ -392,6 +394,23 @@ export class ShelfService {
     }
   }
 
+  /** Store a Kindle credential that was registered with Amazon outside this process. */
+  async connectKindle(credential: string, signal?: AbortSignal): Promise<KindleStatus> {
+    if (!credential.trim() || Buffer.byteLength(credential) > KINDLE_CREDENTIAL_MAX_BYTES) {
+      throw new KindleError("invalid_request", "The Kindle credential upload is invalid.");
+    }
+    const status = await this.kindleGateway.connect(credential, signal);
+    return {
+      configured: true,
+      ...(status.accountName ? { accountName: status.accountName } : {}),
+      ...(status.homeRegion ? { homeRegion: status.homeRegion } : {}),
+    };
+  }
+
+  async disconnectKindle(options: { deregister: boolean }, signal?: AbortSignal): Promise<void> {
+    await this.kindleGateway.disconnect(options, signal);
+  }
+
   async kindleStatus(signal?: AbortSignal): Promise<KindleStatus> {
     try {
       const status = await this.kindleGateway.status(signal);
@@ -507,6 +526,10 @@ export class ShelfService {
 
   listItems(query: LibraryListQuery = {}) {
     return this.database.list(query);
+  }
+
+  agentSkills(): Promise<AgentSkill[]> {
+    return readAgentSkills(this.config.bundledSkillsDir);
   }
 
   async listRecipes(): Promise<Recipe[]> {

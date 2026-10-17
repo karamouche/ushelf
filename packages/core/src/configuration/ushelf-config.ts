@@ -6,6 +6,7 @@ const developmentKindleBridgePath = fileURLToPath(
   new URL("../../../../apps/cli/dist/ushelf-kindle-bridge", import.meta.url),
 );
 const developmentBundledRecipesDir = fileURLToPath(new URL("../../../../recipes", import.meta.url));
+const developmentBundledSkillsDir = fileURLToPath(new URL("../../../../skills", import.meta.url));
 
 export interface UshelfConfig {
   root: string;
@@ -15,6 +16,7 @@ export interface UshelfConfig {
   filesDir: string;
   recipesDir: string;
   bundledRecipesDir: string;
+  bundledSkillsDir: string;
   stateDir: string;
   databasePath: string;
   secretsDir: string;
@@ -43,6 +45,9 @@ export function resolveConfig(root?: string): UshelfConfig {
     recipesDir: path.join(resolvedRoot, "recipes"),
     bundledRecipesDir: path.resolve(
       process.env.USHELF_BUNDLED_RECIPES_DIR || developmentBundledRecipesDir,
+    ),
+    bundledSkillsDir: path.resolve(
+      process.env.USHELF_BUNDLED_SKILLS_DIR || developmentBundledSkillsDir,
     ),
     stateDir,
     databasePath: path.join(stateDir, "ushelf.db"),
