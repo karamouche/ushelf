@@ -19,6 +19,8 @@ services:
       USHELF_PORT: ${USHELF_PORT:-43110}
       USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
       USHELF_APP_PASSWORD: ${USHELF_APP_PASSWORD:-}
+      # Required for the MCP endpoint and CLI access: `ushelf context add NAME --url URL`.
+      USHELF_API_TOKEN: ${USHELF_API_TOKEN:-}
     ports:
       - "${USHELF_HOST:-127.0.0.1}:${USHELF_PORT:-43110}:${USHELF_PORT:-43110}"
     volumes:
@@ -35,7 +37,6 @@ services:
       - type: bind
         source: ${USHELF_ROOT:-${HOME}/.ushelf}/secrets
         target: /data/secrets
-        read_only: true
     read_only: true
     tmpfs:
       - /tmp
