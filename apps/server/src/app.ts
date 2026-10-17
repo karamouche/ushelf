@@ -14,7 +14,7 @@ import {
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { installApiTokenAuth, requireApiToken, type AppEnv } from "./api-auth.js";
-import { installWebAuth, type WebAuthOptions } from "./web-auth.js";
+import { installWebAuth, PasswordGate, type WebAuthOptions } from "./web-auth.js";
 
 // Attached PDFs are limited to 10 MiB before base64 encoding inside a JSON-RPC envelope.
 const MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -37,7 +37,10 @@ export function createApp(
   const route = (path: string) => `${prefix}${path}`;
   const version = options.version ?? "dev";
   installApiTokenAuth(app, options.apiToken);
-  installWebAuth(app, prefix, options);
+  const passwordGate = options.password
+    ? new PasswordGate(options.password, options.now)
+    : undefined;
+  installWebAuth(app, prefix, passwordGate, options);
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
   // Each request gets a fresh stateless MCP server; all state lives in ShelfService.
