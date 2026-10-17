@@ -1,6 +1,7 @@
 // @ts-check
 import starlight from "@astrojs/starlight";
 import { defineConfig, passthroughImageService } from "astro/config";
+import mermaid from "astro-mermaid";
 
 const repository = "https://github.com/karamouche/ushelf";
 
@@ -11,9 +12,19 @@ export default defineConfig({
   // The site only ships SVGs, which need no raster optimization.
   image: { service: passthroughImageService() },
   integrations: [
+    // Must precede Starlight so mermaid blocks are rendered as diagrams, not highlighted code.
+    // Diagram colors come from the site theme in src/styles/theme.css.
+    mermaid({
+      theme: "base",
+      autoTheme: false,
+      enableLog: false,
+      mermaidConfig: { themeVariables: { fontSize: "15px" } },
+    }),
     starlight({
       title: "uShelf",
       description: "A local, agent-native library for the writing worth keeping.",
+      customCss: ["./src/styles/theme.css"],
+      components: { SiteTitle: "./src/components/SiteTitle.astro" },
       social: [{ icon: "github", label: "GitHub", href: repository }],
       editLink: { baseUrl: `${repository}/edit/main/apps/docs/` },
       lastUpdated: true,
