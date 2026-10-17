@@ -24,6 +24,7 @@ Most read-later tools own the database and bolt AI onto the side. uShelf takes t
 - **Capture stays deterministic.** Web sources are extracted, sanitized, normalized, and checked before enrichment begins.
 - **The index is disposable.** SQLite FTS5 makes the library fast to search and can always be rebuilt from Markdown.
 - **Deploy where you like.** Run the server locally, on any Docker host over SSH, on Fly.io, or on your own platform; the CLI and MCP bridge stay on your machine.
+- **Bring any agent.** Local agents use the MCP bridge; Claude (web, desktop, mobile) and ChatGPT connect to a deployed server as [OAuth connectors](https://karamouche.github.io/ushelf/agents/claude-and-chatgpt/).
 
 > uShelf includes no model SDK, AI API key, embeddings store, or autonomous LLM process.
 

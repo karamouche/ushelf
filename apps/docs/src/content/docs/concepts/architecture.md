@@ -14,6 +14,8 @@ flowchart TB
     browser["Browser"]
   end
 
+  hosted["Claude and ChatGPT apps<br/>vendor cloud"]
+
   subgraph server["uShelf server: local Docker, SSH host, Fly.io, or self-hosted"]
     mcp["MCP endpoint<br/>/mcp"]
     api["HTTP API<br/>/api"]
@@ -25,6 +27,7 @@ flowchart TB
 
   agent -- stdio --> bridge
   bridge -- "HTTPS, API token" --> mcp
+  hosted -- "HTTPS, OAuth" --> mcp
   cli -.-> api
   browser -- "HTTPS, password" --> web
   web --> api
@@ -37,6 +40,7 @@ flowchart TB
 - **The server** is one container. It owns the library and serves the web reader, the HTTP API, and the MCP endpoint at `/mcp`. Exactly one server process writes a given library.
 - **The CLI** (`ushelf`) deploys and operates servers, stores their connection details as [contexts](../../deploy/overview/#contexts), and configures agent clients.
 - **The MCP bridge** (`ushelf mcp`) is a small local process that agents launch over stdio. It relays each MCP message to the server over HTTPS with the context's API token. Agents can also [connect over HTTP directly](../../agents/connect/#direct-http).
+- **Hosted AI apps** such as Claude (web, desktop, mobile) and ChatGPT connect to `/mcp` from their own cloud and sign in with [OAuth](../../agents/claude-and-chatgpt/), approved once with the app password.
 
 ## Components
 

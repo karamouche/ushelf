@@ -9,14 +9,14 @@ Markdown is the source of truth. SQLite is only a search index that can be rebui
 
 A local deployment keeps this layout under `~/.ushelf`. Remote deployments keep the same layout inside their data volume, mounted at `/data`.
 
-| Path               | Purpose                                               |
-| ------------------ | ----------------------------------------------------- |
-| `library/items/`   | Canonical current Markdown documents                  |
-| `library/history/` | Archived enrichment revisions                         |
-| `library/files/`   | Original PDFs and content-addressed item media        |
-| `recipes/`         | Editable, hash-versioned agent instructions           |
-| `state/ushelf.db`  | Rebuildable search index and transient workflow state |
-| `secrets/`         | Owner-readable optional integration credentials       |
+| Path               | Purpose                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `library/items/`   | Canonical current Markdown documents                                                    |
+| `library/history/` | Archived enrichment revisions                                                           |
+| `library/files/`   | Original PDFs and content-addressed item media                                          |
+| `recipes/`         | Editable, hash-versioned agent instructions                                             |
+| `state/ushelf.db`  | Rebuildable search index and transient workflow state, including connector OAuth grants |
+| `secrets/`         | Owner-readable optional integration credentials                                         |
 
 The server creates the directories it needs and seeds the bundled default recipe when it is missing. It never overwrites a local recipe.
 

@@ -32,6 +32,8 @@ Run `ushelf --help` or `ushelf COMMAND --help` for the same information in your 
 | `ushelf rebuild-index`                    | Rebuild the search index from Markdown (local and SSH)                 |
 | `ushelf import FILE`                      | Import a validated Markdown item (local and SSH)                       |
 | `ushelf kindle setup\|status\|disconnect` | Connect, inspect, or disconnect Send to Kindle                         |
+| `ushelf connectors`                       | Print the connector URL and list OAuth connectors (Claude, ChatGPT)    |
+| `ushelf connectors revoke ID\|--all`      | Disconnect one connector, or every connector                           |
 | `ushelf version`                          | Show the CLI build and the current context's image                     |
 
 ## deploy
@@ -114,6 +116,13 @@ Registers a server deployed outside the CLI. The token is read from `USHELF_API_
 | ------------------- | ----------------------------------------------------------------- |
 | `--yes`             | Confirm without prompting                                         |
 | `--skip-deregister` | Remove the credential without deregistering it (requires `--yes`) |
+
+## connectors revoke
+
+| Flag    | Purpose                           |
+| ------- | --------------------------------- |
+| `--all` | Revoke every connector            |
+| `--yes` | Confirm `--all` without prompting |
 
 ## update
 

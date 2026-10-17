@@ -60,6 +60,7 @@ export default defineConfig({
           label: "Agents",
           items: [
             { label: "Connect an agent", slug: "agents/connect" },
+            { label: "Claude and ChatGPT apps", slug: "agents/claude-and-chatgpt" },
             { label: "Skills and recipes", slug: "agents/skills-and-recipes" },
           ],
         },

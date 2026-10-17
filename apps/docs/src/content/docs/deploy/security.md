@@ -3,17 +3,18 @@ title: Security model
 description: How uShelf authenticates the CLI, agents, and browsers.
 ---
 
-uShelf has two kinds of clients and a credential for each.
+uShelf has three kinds of clients and a credential for each.
 
-| Credential       | Used by                         | How it is presented                       |
-| ---------------- | ------------------------------- | ----------------------------------------- |
-| **API token**    | The CLI, the MCP bridge, agents | `Authorization: Bearer …` on each request |
-| **App password** | People using the web reader     | A sign-in form that sets a session cookie |
+| Credential                 | Used by                                   | How it is presented                                         |
+| -------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| **API token**              | The CLI, the MCP bridge, local agents     | `Authorization: Bearer …` on each request                   |
+| **App password**           | People using the web reader               | A sign-in form that sets a session cookie                   |
+| **Connector access token** | Hosted AI apps such as Claude and ChatGPT | `Authorization: Bearer …` on `/mcp`, obtained through OAuth |
 
 ## API token
 
 - `ushelf deploy` generates a 256-bit random token per context. Self-hosted servers set `USHELF_API_TOKEN` themselves; the server rejects tokens shorter than 32 characters.
-- The MCP endpoint (`/mcp`) and administrative routes (server info, agent skills, Kindle credentials) accept only the token, never a browser session.
+- The MCP endpoint (`/mcp`) and administrative routes (server info, agent skills, Kindle credentials, connectors) never accept a browser session. Administrative routes accept only the API token; `/mcp` also accepts connector access tokens.
 - Token requests skip the browser session and same-origin checks, because a bearer header is not sent automatically by browsers. A present but invalid token is always rejected.
 - The CLI sends the token only over HTTPS, except to loopback addresses.
 
@@ -22,6 +23,14 @@ uShelf has two kinds of clients and a credential for each.
 - Remote deployments made by the CLI always require one. Locally it is optional because the server listens on loopback.
 - It covers the API, PDFs, media, and reader for browser sessions. Sign-in and the content-free health check remain public.
 - Sign-in uses a `Secure`, `SameSite=Strict` cookie that expires after 12 hours, on server restart, or on password change. Failed sign-ins are rate-limited.
+
+## OAuth connectors
+
+- The server is its own OAuth 2.1 authorization server, enabled only when an app password is set. You approve each connector by entering the password on a consent page that names the address the app returns to. Approval attempts share the sign-in rate limit.
+- Only the authorization-code flow with S256 PKCE is accepted. Redirect addresses must be HTTPS (or HTTP on loopback) and match the registration exactly.
+- Access tokens last one hour and work only on `/mcp`. They never unlock the reader, the HTTP API, or administrative routes. Refresh tokens last 30 days and rotate on every use, and replaying an old one revokes the connection.
+- Only SHA-256 digests of client secrets, codes, and tokens are stored, in the SQLite state.
+- Changing the app password does not revoke connectors. Use `ushelf connectors revoke` to disconnect one app, or `--all` for every app. See [Claude and ChatGPT apps](../../agents/claude-and-chatgpt/).
 
 ## Where secrets live
 

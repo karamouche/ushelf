@@ -2,13 +2,35 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import BetterSqlite3 from "better-sqlite3";
-import { and, count, desc, eq, getTableColumns, lte, lt, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  isNotNull,
+  lte,
+  lt,
+  max,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { ingestionState } from "../../domain/ingestion-state.js";
 import type { ItemSummary, LibraryListQuery, ShelfItem } from "../../domain/library-item.js";
 import { itemSearch } from "./item-search.js";
-import { deleteTokens, items, kindleDeliveryClaims, kindlePreferences } from "./schema.js";
+import {
+  deleteTokens,
+  items,
+  kindleDeliveryClaims,
+  kindlePreferences,
+  oauthAuthorizationCodes,
+  oauthClients,
+  oauthGrants,
+} from "./schema.js";
 import * as schema from "./schema.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../../drizzle", import.meta.url));
@@ -255,6 +277,166 @@ export class ShelfDatabase {
         ),
       )
       .run();
+  }
+
+  insertOAuthClient(client: typeof oauthClients.$inferInsert): void {
+    this.database.insert(oauthClients).values(client).run();
+  }
+
+  oauthClient(clientId: string): typeof oauthClients.$inferSelect | undefined {
+    return this.database
+      .select()
+      .from(oauthClients)
+      .where(eq(oauthClients.clientId, clientId))
+      .get();
+  }
+
+  oauthClientCount(): number {
+    return this.database.select({ value: count() }).from(oauthClients).get()?.value ?? 0;
+  }
+
+  /** Drops expired codes and grants, then registrations that never completed a grant. */
+  purgeOAuth(now: number, abandonedBefore: number): void {
+    this.database.transaction((transaction) => {
+      transaction
+        .delete(oauthAuthorizationCodes)
+        .where(lte(oauthAuthorizationCodes.expiresAt, now))
+        .run();
+      transaction.delete(oauthGrants).where(lte(oauthGrants.refreshExpiresAt, now)).run();
+      transaction
+        .delete(oauthClients)
+        .where(
+          and(
+            lt(oauthClients.createdAt, abandonedBefore),
+            notExists(
+              transaction
+                .select({ id: oauthGrants.id })
+                .from(oauthGrants)
+                .where(eq(oauthGrants.clientId, oauthClients.clientId)),
+            ),
+            notExists(
+              transaction
+                .select({ codeHash: oauthAuthorizationCodes.codeHash })
+                .from(oauthAuthorizationCodes)
+                .where(eq(oauthAuthorizationCodes.clientId, oauthClients.clientId)),
+            ),
+          ),
+        )
+        .run();
+    });
+  }
+
+  insertAuthorizationCode(code: typeof oauthAuthorizationCodes.$inferInsert): void {
+    this.database.insert(oauthAuthorizationCodes).values(code).run();
+  }
+
+  /** Authorization codes are single-use: reading one always deletes it. */
+  consumeAuthorizationCode(
+    codeHash: string,
+  ): typeof oauthAuthorizationCodes.$inferSelect | undefined {
+    return this.database
+      .delete(oauthAuthorizationCodes)
+      .where(eq(oauthAuthorizationCodes.codeHash, codeHash))
+      .returning()
+      .get();
+  }
+
+  insertOAuthGrant(grant: typeof oauthGrants.$inferInsert): void {
+    this.database.insert(oauthGrants).values(grant).run();
+  }
+
+  oauthGrantByAccessToken(accessTokenHash: string): typeof oauthGrants.$inferSelect | undefined {
+    return this.database
+      .select()
+      .from(oauthGrants)
+      .where(eq(oauthGrants.accessTokenHash, accessTokenHash))
+      .get();
+  }
+
+  /** Finds a grant by its current or most recently rotated-out refresh token. */
+  oauthGrantByRefreshToken(
+    refreshTokenHash: string,
+  ): (typeof oauthGrants.$inferSelect & { replayed: boolean }) | undefined {
+    const grant = this.database
+      .select()
+      .from(oauthGrants)
+      .where(
+        or(
+          eq(oauthGrants.refreshTokenHash, refreshTokenHash),
+          and(
+            isNotNull(oauthGrants.previousRefreshTokenHash),
+            eq(oauthGrants.previousRefreshTokenHash, refreshTokenHash),
+          ),
+        ),
+      )
+      .get();
+    return grant && { ...grant, replayed: grant.refreshTokenHash !== refreshTokenHash };
+  }
+
+  /** Rotates tokens only if the grant still holds the refresh token the caller presented. */
+  rotateOAuthGrant(
+    id: string,
+    presentedRefreshTokenHash: string,
+    next: Pick<
+      typeof oauthGrants.$inferInsert,
+      "accessTokenHash" | "accessExpiresAt" | "refreshTokenHash" | "refreshExpiresAt" | "lastUsedAt"
+    >,
+  ): boolean {
+    const updated = this.database
+      .update(oauthGrants)
+      .set({ ...next, previousRefreshTokenHash: presentedRefreshTokenHash })
+      .where(
+        and(eq(oauthGrants.id, id), eq(oauthGrants.refreshTokenHash, presentedRefreshTokenHash)),
+      )
+      .returning({ id: oauthGrants.id })
+      .get();
+    return updated !== undefined;
+  }
+
+  touchOAuthGrant(id: string, lastUsedAt: number): void {
+    this.database.update(oauthGrants).set({ lastUsedAt }).where(eq(oauthGrants.id, id)).run();
+  }
+
+  deleteOAuthGrant(id: string): void {
+    this.database.delete(oauthGrants).where(eq(oauthGrants.id, id)).run();
+  }
+
+  /** Lists registered clients that currently hold at least one grant. */
+  oauthConnectors(): Array<{
+    clientId: string;
+    clientName: string | null;
+    redirectUris: string[];
+    connectedAt: number;
+    lastUsedAt: number;
+  }> {
+    return this.database
+      .select({
+        clientId: oauthClients.clientId,
+        clientName: oauthClients.clientName,
+        redirectUris: oauthClients.redirectUris,
+        connectedAt: sql<number>`min(${oauthGrants.createdAt})`.mapWith(Number),
+        lastUsedAt: max(oauthGrants.lastUsedAt).mapWith(Number),
+      })
+      .from(oauthClients)
+      .innerJoin(oauthGrants, eq(oauthGrants.clientId, oauthClients.clientId))
+      .groupBy(oauthClients.clientId)
+      .orderBy(desc(max(oauthGrants.lastUsedAt)))
+      .all();
+  }
+
+  deleteOAuthClient(clientId: string): boolean {
+    return (
+      this.database
+        .delete(oauthClients)
+        .where(eq(oauthClients.clientId, clientId))
+        .returning({ clientId: oauthClients.clientId })
+        .get() !== undefined
+    );
+  }
+
+  deleteAllOAuthClients(): number {
+    return this.database.delete(oauthClients).returning({ clientId: oauthClients.clientId }).all()
+      .length;
   }
 
   private encodeFilePath(filePath: string): string {
