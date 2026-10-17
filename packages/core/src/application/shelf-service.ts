@@ -33,6 +33,7 @@ import {
 } from "../domain/kindle.js";
 import { exportKindleEpub } from "../kindle/epub-exporter.js";
 import { KindleBridgeGateway, type KindleGateway } from "../kindle/kindle-bridge.js";
+import { ConnectorAuthorization } from "../connectors/connector-authorization.js";
 import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
 import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
@@ -56,12 +57,15 @@ export class ShelfService {
   private readonly repository: MarkdownRepository;
   private readonly database: ShelfDatabase;
   private readonly kindleGateway: KindleGateway;
+  /** OAuth grants for remote MCP connectors, kept in the disposable SQLite state. */
+  readonly connectors: ConnectorAuthorization;
 
   constructor(config = resolveConfig(), dependencies: ShelfServiceDependencies = {}) {
     this.config = config;
     this.repository = new MarkdownRepository(config);
     this.database = new ShelfDatabase(config.databasePath, config.itemsDir);
     this.kindleGateway = dependencies.kindleGateway ?? new KindleBridgeGateway(config);
+    this.connectors = new ConnectorAuthorization(this.database);
   }
 
   async initialize(): Promise<void> {

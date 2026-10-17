@@ -49,3 +49,35 @@ export const kindleDeliveryClaims = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.itemId, table.targetSerial] })],
 );
+
+export const oauthClients = sqliteTable("oauth_clients", {
+  clientId: text("client_id").primaryKey(),
+  clientSecretHash: text("client_secret_hash"),
+  clientName: text("client_name"),
+  redirectUris: text("redirect_uris_json", { mode: "json" }).$type<string[]>().notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const oauthAuthorizationCodes = sqliteTable("oauth_authorization_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.clientId, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});
+
+export const oauthGrants = sqliteTable("oauth_grants", {
+  id: text("id").primaryKey(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.clientId, { onDelete: "cascade" }),
+  accessTokenHash: text("access_token_hash").notNull().unique(),
+  accessExpiresAt: integer("access_expires_at").notNull(),
+  refreshTokenHash: text("refresh_token_hash").notNull().unique(),
+  previousRefreshTokenHash: text("previous_refresh_token_hash").unique(),
+  refreshExpiresAt: integer("refresh_expires_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+  lastUsedAt: integer("last_used_at").notNull(),
+});
