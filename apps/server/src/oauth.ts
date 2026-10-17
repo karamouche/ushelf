@@ -447,15 +447,19 @@ function oauthError(c: Context<AppEnv>, error: string, description: string) {
   return c.json({ error, error_description: description }, status);
 }
 
-function consentHeaders(c: Context<AppEnv>, redirectUri?: string) {
-  // Browsers apply form-action to the redirect that follows the approval POST.
-  const redirectOrigin = redirectUri ? ` ${new URL(redirectUri).origin}` : "";
+/**
+ * The approval POST must keep a real Origin header for the same-origin check, so the policy
+ * cannot be `no-referrer` (browsers then send `Origin: null`). `same-origin` still keeps the
+ * consent URL out of the Referer sent to the app. There is no `form-action` directive because
+ * Chrome applies it to every hop of the post-approval redirect, which the app may extend.
+ */
+function consentHeaders(c: Context<AppEnv>) {
   c.header(
     "Content-Security-Policy",
-    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${redirectOrigin}; frame-ancestors 'none'`,
+    "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
   );
   c.header("X-Frame-Options", "DENY");
-  c.header("Referrer-Policy", "no-referrer");
+  c.header("Referrer-Policy", "same-origin");
 }
 
 function consentError(c: Context<AppEnv>, message: string, status: 400 | 403 = 400) {
@@ -476,7 +480,7 @@ function consentPage(
   error?: string,
   status: 200 | 401 | 429 = 200,
 ) {
-  consentHeaders(c, request.redirectUri);
+  consentHeaders(c);
   const redirect = new URL(request.redirectUri);
   const loopback = LOOPBACK_HOSTS.has(redirect.hostname);
   const name = request.client.clientName ?? "An unnamed app";
