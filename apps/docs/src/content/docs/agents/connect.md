@@ -1,14 +1,15 @@
 ---
 title: Connect an agent
-description: Connect Claude Code, Codex, or another MCP client to your uShelf server.
+description: Connect Claude Code, Codex, Claude and ChatGPT apps, or another MCP client to your uShelf server.
 ---
 
-The MCP endpoint lives on the server at `<server URL>/mcp` and speaks Streamable HTTP, authenticated with the context's API token. Agents reach it in one of two ways.
+The MCP endpoint lives on the server at `<server URL>/mcp` and speaks Streamable HTTP. Agents reach it in one of three ways.
 
-| Path                       | Clients                                                              | Server must be reachable from | Token stored in                   |
-| -------------------------- | -------------------------------------------------------------------- | ----------------------------- | --------------------------------- |
-| **Stdio bridge** (default) | Claude Code, Codex, Claude Desktop, any stdio client on your machine | Your machine                  | `~/.ushelf/credentials.json` only |
-| **Direct HTTP**            | MCP clients that accept a URL and a bearer header, on any machine    | The client's machine          | The client's own configuration    |
+| Path                                          | Clients                                                              | Server must be reachable from | Authenticates with                                            |
+| --------------------------------------------- | -------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------- |
+| **Stdio bridge** (default)                    | Claude Code, Codex, Claude Desktop, any stdio client on your machine | Your machine                  | API token, stored in `~/.ushelf/credentials.json` only        |
+| **Direct HTTP**                               | MCP clients that accept a URL and a bearer header, on any machine    | The client's machine          | API token, stored in the client's own configuration           |
+| **[OAuth connector](../claude-and-chatgpt/)** | Claude on the web, desktop, and mobile; ChatGPT                      | The public internet           | OAuth, approved once with the app password, revocable per app |
 
 ## Stdio bridge
 
@@ -45,9 +46,9 @@ codex mcp add ushelf --url "$URL" --bearer-token-env-var USHELF_API_TOKEN
 
 Skills are not installed on this path. Install them separately where the client supports skills, for example from the `~/.ushelf/assets/skills/` directory created by `ushelf setup` on a machine with the CLI.
 
-## Claude mobile and web apps
+## Claude and ChatGPT apps
 
-The Claude mobile and web apps add remote MCP servers as custom connectors. Anthropic's cloud reaches those over the public internet, and they do not accept a static bearer header. uShelf does not support them yet; that requires OAuth on the server.
+Claude on the web, desktop, and mobile, and ChatGPT add remote MCP servers as custom connectors. Their clouds reach the server over the public internet, and they sign in with OAuth instead of a static bearer header. See [Claude and ChatGPT apps](../claude-and-chatgpt/) for setup.
 
 ## Try it
 

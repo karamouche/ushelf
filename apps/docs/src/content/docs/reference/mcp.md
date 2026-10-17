@@ -3,7 +3,7 @@ title: MCP tools
 description: The tools and resources uShelf exposes to agents.
 ---
 
-The server exposes these tools and resources at `/mcp`. Inputs are validated, and mutating tools accept item revisions to reject stale writes. Agents normally use them through the [skills](../../agents/skills-and-recipes/).
+The server exposes these tools and resources at `/mcp`, to the API token and to [OAuth connectors](../../agents/claude-and-chatgpt/) alike. Inputs are validated, and mutating tools accept item revisions to reject stale writes. Agents normally use them through the [skills](../../agents/skills-and-recipes/).
 
 ## Ingestion
 
