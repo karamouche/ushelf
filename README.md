@@ -8,10 +8,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/karamouche/ushelf/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/karamouche/ushelf/ci.yml?branch=main&style=flat-square&label=CI" /></a>
-  <a href="https://github.com/karamouche/ushelf/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/karamouche/ushelf?style=flat-square&color=111111" /></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/karamouche/ushelf?style=flat-square&color=111111" /></a>
-  <a href="package.json"><img alt="Node.js version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fkaramouche%2Fushelf%2Fmain%2Fpackage.json&query=%24.engines.node&label=node&style=flat-square&color=111111" /></a>
+  <a href="https://github.com/karamouche/ushelf/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/karamouche/ushelf/ci.yml?branch=main&label=CI" /></a>
+  <a href="https://github.com/karamouche/ushelf/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/karamouche/ushelf?color=blue" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/karamouche/ushelf?color=blue" /></a>
+  <a href="package.json"><img alt="Node.js version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fkaramouche%2Fushelf%2Fmain%2Fpackage.json&query=%24.engines.node&label=node&color=brightgreen&logo=nodedotjs&logoColor=white" /></a>
 </p>
 
 ## Why uShelf?
