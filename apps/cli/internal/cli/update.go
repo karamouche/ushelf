@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -83,37 +82,7 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 		return err
 	}
 
-	updatedSettings := s.settings
-	updatedSettings.Version = targetVersion
-	updatedSettings.Image = defaultImage(targetVersion)
-	if s.settings.Image != defaultImage(current) || os.Getenv("USHELF_IMAGE") != "" || s.flags.Changed != nil && s.flags.Changed("image") {
-		updatedSettings.Image = s.settings.Image
-	}
-	updatedDocker := Docker{
-		Settings: updatedSettings,
-		Runner:   s.deps.Runner,
-		Stdin:    s.deps.Stdin,
-		Stdout:   s.deps.Stdout,
-		Stderr:   s.deps.Stderr,
-		Actions:  actions,
-	}
-	actions.Step("Preparing uShelf %s runtime assets...", targetVersion)
-	if err := updatedDocker.EnsureImage(ctx); err != nil {
-		return err
-	}
-	skillsRoot, err := updatedDocker.ExtractSkills(ctx)
-	if err != nil {
-		return err
-	}
-	if err := refreshManagedSkillLinks(skillsRoot, s.docker().assetsDir()); err != nil {
-		return err
-	}
-
 	executable, err := executablePath()
-	if err != nil {
-		return err
-	}
-	wasRunning, err := s.docker().IsRunning(ctx)
 	if err != nil {
 		return err
 	}
@@ -121,25 +90,43 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err := atomicWrite(executable, binary, 0o755); err != nil {
 		return fmt.Errorf("replace %s: %w", executable, err)
 	}
-	if wasRunning {
-		actions.Step("Restarting uShelf with the updated CLI...")
-		if err := s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, executable, restartArgs(updatedSettings)...); err != nil {
-			return fmt.Errorf("CLI updated, but restarting uShelf failed: %w", err)
-		}
-	}
-	actions.Done("Updated uShelf to %s", targetVersion)
-	return nil
+	actions.Done("Updated the uShelf CLI to %s", targetVersion)
+	return s.rollOutUpdate(ctx, executable, targetVersion)
 }
 
-func restartArgs(settings Settings) []string {
-	return []string{
-		"--home", settings.Home,
-		"--host", settings.Host,
-		"--port", strconv.Itoa(settings.Port),
-		"--base-path", settings.BasePath,
-		"--image", settings.Image,
-		"start",
+// rollOutUpdate redeploys the current context with the new CLI when it runs the
+// release-matched image, then refreshes skill links that point at managed assets.
+func (s *commandState) rollOutUpdate(ctx context.Context, executable, version string) error {
+	current, err := s.currentContext()
+	if err != nil || !current.Managed() {
+		return nil
 	}
+	if current.Spec.Image != "" {
+		fmt.Fprintf(s.deps.Stdout, "Context %s pins image %s; update it with `ushelf config set image` and run `ushelf start`.\n", current.Name, current.Spec.Image)
+		return nil
+	}
+	actions := s.actions()
+	actions.Step("Rolling context %s out to uShelf %s...", current.Name, version)
+	if err := s.deps.Runner.Run(ctx, nil, s.deps.Stdout, s.deps.Stderr, executable, restartArgs(s.store.Home, current.Name)...); err != nil {
+		return fmt.Errorf("CLI updated, but redeploying context %s failed: %w", current.Name, err)
+	}
+	client, err := current.Client()
+	if err != nil {
+		return err
+	}
+	bundle, err := client.Skills(ctx)
+	if err != nil {
+		return fmt.Errorf("refresh agent skills: %w", err)
+	}
+	skillsRoot, err := installSkills(s.assetsDir(), bundle)
+	if err != nil {
+		return err
+	}
+	return refreshManagedSkillLinks(skillsRoot, s.assetsDir())
+}
+
+func restartArgs(home, contextName string) []string {
+	return []string{"--home", home, "--context", contextName, "start"}
 }
 
 func fetchRelease(ctx context.Context) (release, error) {

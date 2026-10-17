@@ -48,21 +48,9 @@ func TestExtractBinary(t *testing.T) {
 	}
 }
 
-func TestRestartArgsPreserveEffectiveSettings(t *testing.T) {
-	for _, settings := range []Settings{
-		{Home: "/Users/test/.ushelf", Host: "127.0.0.1", Port: 43110, BasePath: "/", Image: "ghcr.io/karamouche/ushelf:1.2.3"},
-		{Home: "/srv/ushelf", Host: "0.0.0.0", Port: 44000, BasePath: "/reader/", Image: "example/custom:test"},
-	} {
-		want := []string{
-			"--home", settings.Home,
-			"--host", settings.Host,
-			"--port", fmt.Sprintf("%d", settings.Port),
-			"--base-path", settings.BasePath,
-			"--image", settings.Image,
-			"start",
-		}
-		if actual := restartArgs(settings); !slices.Equal(actual, want) {
-			t.Fatalf("restartArgs(%+v) = %#v, want %#v", settings, actual, want)
-		}
+func TestRestartArgsTargetTheUpdatedContext(t *testing.T) {
+	want := []string{"--home", "/srv/ushelf", "--context", "vps", "start"}
+	if actual := restartArgs("/srv/ushelf", "vps"); !slices.Equal(actual, want) {
+		t.Fatalf("restartArgs = %#v, want %#v", actual, want)
 	}
 }
