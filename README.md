@@ -116,7 +116,16 @@ Redeploying a context keeps its saved settings and secrets unless flags override
 
 ## Connect your agent
 
-Configure Codex, Claude Code, or both. Setup registers `ushelf mcp` at user scope, pinned to the current context so later context switches never silently retarget the agent, and links the skills published by that server into the client's personal skill directory.
+The MCP endpoint lives on the server at `<server URL>/mcp` and speaks Streamable HTTP with the context's API token. Agents reach it in one of two ways.
+
+| Path                       | Clients                                                              | Server must be reachable from | Token stored in                   |
+| -------------------------- | -------------------------------------------------------------------- | ----------------------------- | --------------------------------- |
+| **Stdio bridge** (default) | Claude Code, Codex, Claude Desktop, any stdio client on your machine | Your machine                  | `~/.ushelf/credentials.json` only |
+| **Direct HTTP**            | MCP clients that accept a URL and a bearer header, on any machine    | The client's machine          | The client's own configuration    |
+
+### Stdio bridge (default)
+
+`ushelf setup` registers `ushelf mcp` at user scope. The agent launches it as a local stdio server, and it relays each request to the server over HTTPS with the context's token. The registration is pinned to the current context, so later context switches never silently retarget the agent. Setup also links the skills published by that server into the client's personal skill directory.
 
 ```sh
 ushelf setup codex
@@ -124,9 +133,30 @@ ushelf setup claude
 # or: ushelf setup all
 ```
 
-Use `ushelf setup <client> --print` to inspect the exact registration command without making changes. To point an agent at another deployment, switch contexts and rerun setup with `--force`.
+Use `ushelf setup <client> --print` to inspect the exact registration command without making changes. To point an agent at another deployment, switch contexts and rerun setup with `--force`. If an existing `ushelf` MCP entry or skill path points somewhere else, setup stops without overwriting it; inspect the conflict first, then rerun with `--force` only when you intend to replace it.
 
-If an existing `ushelf` MCP entry or skill path points somewhere else, setup stops without overwriting it. Inspect the conflict first, then rerun with `--force` only when you intend to replace it.
+Prefer this path whenever the agent runs where the CLI is installed: the token never enters the agent's configuration, and redeploying, rotating the token, or moving the server to another target requires no change on the agent side.
+
+### Direct HTTP
+
+Use this path for a client on another machine, or one that does not launch local commands. It requires a remote context (`ssh` or `fly`, or a server you registered), because a local deployment listens only on loopback. The client stores the token itself, so treat its configuration as a secret and rerun these steps after a token rotation or URL change.
+
+```sh
+# The MCP endpoint and token of the current context.
+URL="$(ushelf context show | jq -r .url)mcp"
+TOKEN="$(jq -r --arg name "$(ushelf context show | jq -r .name)" '.[$name].apiToken' ~/.ushelf/credentials.json)"
+
+# Claude Code
+claude mcp add --scope user --transport http ushelf "$URL" --header "Authorization: Bearer $TOKEN"
+
+# Codex reads the token from an environment variable at launch.
+export USHELF_API_TOKEN="$TOKEN"
+codex mcp add ushelf --url "$URL" --bearer-token-env-var USHELF_API_TOKEN
+```
+
+Skills are not installed on this path. Install them separately where the client supports skills, for example from the `assets/skills/` directory created by `ushelf setup` on a machine with the CLI.
+
+The Claude mobile and web apps add remote MCP servers as custom connectors, which Anthropic's cloud reaches over the public internet and which do not accept a static bearer header. uShelf does not yet support them; that requires OAuth on the server.
 
 Then try:
 
