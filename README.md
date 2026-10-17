@@ -72,7 +72,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-See [Contributing](https://karamouche.github.io/ushelf/development/contributing/) for the checks, the agent setup against a dev server, and the [release process](https://karamouche.github.io/ushelf/development/releasing/). The repository's [`AGENTS.md`](AGENTS.md) describes the engineering rules, and each package has its own README. Contribution license terms are in [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the checks, the agent setup against a dev server, and the contribution license terms. The repository's [`AGENTS.md`](AGENTS.md) describes the engineering rules, and each package has its own README.
 
 ## License
 

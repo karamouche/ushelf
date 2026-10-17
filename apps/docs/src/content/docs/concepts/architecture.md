@@ -64,4 +64,4 @@ recipes         Versioned enrichment instructions
 skills          Agent ingestion and library workflows
 ```
 
-Each package has a README with its runtime details. See [Contributing](../../development/contributing/) to work on the code.
+Each package has a README with its runtime details. See [CONTRIBUTING.md](https://github.com/karamouche/ushelf/blob/main/CONTRIBUTING.md) to work on the code.
