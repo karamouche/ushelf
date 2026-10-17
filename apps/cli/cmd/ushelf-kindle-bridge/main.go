@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,12 @@ import (
 	"github.com/karamouche/ushelf/apps/cli/internal/kindle"
 )
 
-const defaultSecretsDir = "/data/secrets"
+const (
+	defaultSecretsDir  = "/data/secrets"
+	maxCredentialBytes = 64 * 1024
+)
+
+var errAlreadyConfigured = errors.New("kindle is already configured")
 
 type envelope struct {
 	OK     bool         `json:"ok"`
@@ -25,6 +31,10 @@ type envelope struct {
 type bridgeError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+type disconnectInput struct {
+	Deregister bool `json:"deregister"`
 }
 
 type sendInput struct {
@@ -58,20 +68,23 @@ func run(args []string, input io.Reader, provider kindle.Provider) (any, error) 
 		secretsDir = defaultSecretsDir
 	}
 	credentialPath := filepath.Join(secretsDir, kindle.CredentialFilename)
-	client, err := kindle.LoadCredential(provider, credentialPath)
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), kindle.OperationTimeout)
 	defer cancel()
 
 	switch args[0] {
+	case "connect":
+		return connect(credentialPath, input, provider)
+	case "disconnect":
+		return disconnect(ctx, credentialPath, input, provider)
+	}
+
+	client, err := kindle.LoadCredential(provider, credentialPath)
+	if err != nil {
+		return nil, err
+	}
+	switch args[0] {
 	case "status":
-		return map[string]string{
-			"accountName": client.AccountName(),
-			"homeRegion":  client.HomeRegion(),
-			"serial":      client.Serial(),
-		}, nil
+		return statusOf(client), nil
 	case "devices":
 		return listDevices(ctx, client)
 	case "send":
@@ -120,6 +133,57 @@ func run(args []string, input io.Reader, provider kindle.Provider) (any, error) 
 	}
 }
 
+// connect stores a credential registered elsewhere, such as by the CLI on the user's machine.
+func connect(credentialPath string, input io.Reader, provider kindle.Provider) (any, error) {
+	if _, err := os.Stat(credentialPath); err == nil {
+		return nil, errAlreadyConfigured
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(input, maxCredentialBytes+1))
+	if err != nil || len(raw) == 0 || len(raw) > maxCredentialBytes {
+		return nil, errors.New("invalid credential upload")
+	}
+	client, err := provider.Load(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("load uploaded credential: %w", err)
+	}
+	if err := kindle.SaveCredential(credentialPath, client); err != nil {
+		return nil, err
+	}
+	return statusOf(client), nil
+}
+
+func disconnect(ctx context.Context, credentialPath string, input io.Reader, provider kindle.Provider) (any, error) {
+	var request disconnectInput
+	decoder := json.NewDecoder(io.LimitReader(input, 1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return nil, errors.New("invalid disconnect request")
+	}
+	client, err := kindle.LoadCredential(provider, credentialPath)
+	if errors.Is(err, os.ErrNotExist) || err != nil && request.Deregister {
+		return nil, err
+	}
+	if request.Deregister {
+		if err := client.Deregister(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := os.Remove(credentialPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return map[string]bool{"disconnected": true}, nil
+}
+
+func statusOf(client kindle.Client) map[string]string {
+	return map[string]string{
+		"accountName": client.AccountName(),
+		"homeRegion":  client.HomeRegion(),
+		"serial":      client.Serial(),
+	}
+}
+
 func listDevices(ctx context.Context, client kindle.Client) (any, error) {
 	devices, err := client.Devices(ctx)
 	if err != nil {
@@ -129,6 +193,9 @@ func listDevices(ctx context.Context, client kindle.Client) (any, error) {
 }
 
 func mapError(err error) bridgeError {
+	if errors.Is(err, errAlreadyConfigured) {
+		return bridgeError{Code: "already_configured", Message: "Kindle is already connected. Disconnect it before connecting another account."}
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return bridgeError{Code: "not_configured", Message: "Run `ushelf kindle setup` to connect Kindle."}
 	}
