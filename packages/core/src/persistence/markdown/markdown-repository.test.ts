@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveConfig } from "../../configuration/ushelf-config.js";
 import type { ItemFrontmatter } from "../../domain/library-item.js";
-import { renderItemMarkdown } from "./item-markdown.js";
+import { parseItemMarkdown, parseRecipe, renderItemMarkdown, sha256 } from "./item-markdown.js";
 import { MarkdownRepository } from "./markdown-repository.js";
 
 const roots: string[] = [];
@@ -14,6 +14,53 @@ afterEach(async () =>
 );
 
 describe("MarkdownRepository", () => {
+  it("round-trips YAML metadata and preserves source and insight sections", () => {
+    const frontmatter = articleFrontmatter();
+    frontmatter.title = "Quotes: 'single', \"double\", and Unicode café";
+    frontmatter.tags = ["yes", "2026-10-17", "topic: detail"];
+    frontmatter.enrichment = {
+      status: "complete",
+      recipe: "default",
+      summary: "A multiline summary.\nWith another line.",
+      keyPoints: ["One point"],
+      citations: [{ label: "Original", url: frontmatter.originalUrl }],
+    };
+    const raw = renderItemMarkdown(
+      frontmatter,
+      "Custom insights.",
+      "Source.\n\n---\n\nMore source.",
+    );
+    const parsed = parseItemMarkdown(raw, "/item.md");
+    expect(parsed).toMatchObject(frontmatter);
+    expect(parsed.insightMarkdown).toBe("Custom insights.");
+    expect(parsed.sourceMarkdown).toBe("Source.\n\n---\n\nMore source.");
+    expect(parsed.revision).toBe(sha256(raw));
+  });
+
+  it("parses BOM and CRLF recipe frontmatter without changing its hash", () => {
+    const raw =
+      '\uFEFF---\r\nname: default\r\ndescription: "A recipe: details"\r\n---\r\n\r\nInstructions.\r\n';
+    expect(parseRecipe(raw, "/recipe.md")).toEqual({
+      name: "default",
+      description: "A recipe: details",
+      instructions: "Instructions.",
+      hash: sha256(raw),
+      filePath: "/recipe.md",
+    });
+  });
+
+  it.each([
+    "No frontmatter",
+    "Body before\n---\nname: default\n---\nInstructions",
+    "---\nname: default\nInstructions",
+    "---\n- default\n---\nInstructions",
+    "---\nnull\n---\nInstructions",
+    "---\nname: !!js/function 'function () {}'\n---\nInstructions",
+  ])("rejects malformed or executable frontmatter: %s", (raw) => {
+    expect(() => parseRecipe(raw, "/recipe.md")).toThrow();
+    expect(() => parseItemMarkdown(raw, "/item.md")).toThrow();
+  });
+
   it("seeds the bundled default recipe without overwriting local edits", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-repository-test-"));
     roots.push(root);
@@ -99,7 +146,7 @@ describe("MarkdownRepository", () => {
   });
 });
 
-function articleFrontmatter(): ItemFrontmatter {
+function articleFrontmatter(): Extract<ItemFrontmatter, { sourceType: "article" | "x" }> {
   return {
     id: "6aa8a9fb-a12b-4590-b626-e31d1b5fc4ef",
     originalUrl: "https://example.com/imported",

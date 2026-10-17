@@ -15,7 +15,7 @@ test("Mermaid source renders as a diagram and falls back when invalid", async ({
     const id = segments.at(-1) === "reading" ? (segments.at(-2) ?? "") : (segments.at(-1) ?? "");
     const sourceMarkdown =
       id === "valid-mermaid"
-        ? "```mermaid\nflowchart LR\n  Capture --> Read\n```"
+        ? '```mermaid\nflowchart LR\n  Capture --> Math["$$x^2$$"] --> Read\n```'
         : "```mermaid\nthis is not valid Mermaid syntax\n```";
     await route.fulfill({
       contentType: "application/json",
@@ -28,6 +28,7 @@ test("Mermaid source renders as a diagram and falls back when invalid", async ({
     timeout: 15_000,
   });
   await expect(page.locator("code.language-mermaid")).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Mermaid diagram" }).locator("math")).toBeVisible();
 
   await page.goto("/items/invalid-mermaid");
   await expect(page.getByRole("alert")).toContainText("Diagram could not be rendered");
