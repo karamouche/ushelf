@@ -10,6 +10,7 @@ The main flow is:
 
 ```text
 Agent -stdio-> ushelf mcp (CLI) -HTTPS + token-> server /mcp -> Core -> Markdown + SQLite
+Claude / ChatGPT apps ------HTTPS + OAuth token-> server /mcp ---^
                                                            ^
 Browser -----------------HTTPS + password-> server /api ---+
 ```
@@ -90,6 +91,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Use Drizzle's typed query API for ordinary SQLite operations. Keep raw SQL narrowly limited to SQLite features Drizzle cannot model, currently FTS5 virtual-table creation and `MATCH` expressions.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
 - Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
+- Connector OAuth (for hosted Claude and ChatGPT apps) is enabled only with an app password and authorizes `/mcp` only. Keep PKCE mandatory and redirect URIs exact, and store only token digests.
 - Keep secrets out of process arguments, logs, and `config.json`. API tokens travel only over HTTPS outside loopback; remote deployments always require both an API token and an app password.
 - Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
 - Keep deterministic extraction separate from LLM enrichment. Avoid introducing token-consuming work into capture, search, or reading-state updates.
