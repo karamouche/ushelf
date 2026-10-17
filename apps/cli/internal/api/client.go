@@ -176,6 +176,37 @@ func (c *Client) KindleDisconnect(ctx context.Context, deregister bool) error {
 	return c.do(ctx, http.MethodDelete, path, nil, "", true, nil)
 }
 
+// Connector is a remote MCP client, such as Claude or ChatGPT, authorized through OAuth.
+type Connector struct {
+	ClientID     string    `json:"clientId"`
+	ClientName   string    `json:"clientName"`
+	RedirectURIs []string  `json:"redirectUris"`
+	ConnectedAt  time.Time `json:"connectedAt"`
+	LastUsedAt   time.Time `json:"lastUsedAt"`
+}
+
+func (c *Client) Connectors(ctx context.Context) ([]Connector, error) {
+	var result struct {
+		Connectors []Connector `json:"connectors"`
+	}
+	err := c.do(ctx, http.MethodGet, "api/connectors", nil, "", true, &result)
+	return result.Connectors, err
+}
+
+// RevokeConnector deletes one connector's registration and tokens.
+func (c *Client) RevokeConnector(ctx context.Context, clientID string) error {
+	return c.do(ctx, http.MethodDelete, "api/connectors/"+url.PathEscape(clientID), nil, "", true, nil)
+}
+
+// RevokeAllConnectors deletes every connector and returns how many were connected.
+func (c *Client) RevokeAllConnectors(ctx context.Context) (int, error) {
+	var result struct {
+		Revoked int `json:"revoked"`
+	}
+	err := c.do(ctx, http.MethodDelete, "api/connectors", nil, "", true, &result)
+	return result.Revoked, err
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader, contentType string, authenticated bool, target any) error {
 	reference, err := url.Parse(path)
 	if err != nil {
