@@ -209,6 +209,21 @@ function escapeHtml(value: string): string {
   });
 }
 
+// Mirrors the web app's palette and wordmark (apps/web/src/styles.css `.brand`).
+const LOGIN_STYLES = [
+  ":root{color:#111;background:#fff;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-synthesis:none}",
+  "body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fff}",
+  "main{width:min(360px,calc(100% - 40px))}",
+  "h1{margin:0 0 12px;font-size:48px;font-weight:650;letter-spacing:-0.05em}",
+  "h1 span{font-family:Georgia,serif;font-style:italic;font-weight:400}",
+  "p{margin:0;color:#777}",
+  "label{display:block;margin:32px 0 8px;font-size:14px}",
+  "input{width:100%;box-sizing:border-box;padding:12px;font:inherit;border:1px solid #ccc;background:#fff;color:inherit}",
+  "input:focus{outline:none;border-color:#111;box-shadow:0 0 0 1px #111}",
+  "button{width:100%;padding:12px;margin-top:16px;border:0;background:#111;color:#fff;font:inherit;cursor:pointer}",
+  ".error{margin-top:16px;color:#9c1717}",
+].join("");
+
 function loginHtml(action: string, nextPath: string, error?: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · uShelf</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f6f2;color:#111;font:16px system-ui,sans-serif}main{width:min(360px,calc(100% - 40px))}h1{font:normal 48px Georgia,serif;margin:0 0 12px}p{color:#555}label{display:block;margin:32px 0 8px}input{width:100%;box-sizing:border-box;padding:13px;font:inherit;border:1px solid #aaa;background:white}button{width:100%;padding:13px;margin-top:16px;border:0;background:#111;color:white;font:inherit;cursor:pointer}.error{color:#a00}</style></head><body><main><h1>uShelf</h1><p>Enter your password to open your library.</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<form method="post" action="${escapeHtml(action)}"><input type="hidden" name="next" value="${escapeHtml(nextPath)}"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus><button type="submit">Sign in</button></form></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · uShelf</title><style>${LOGIN_STYLES}</style></head><body><main><h1><span>u</span>Shelf</h1><p>Enter your password to open your library.</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<form method="post" action="${escapeHtml(action)}"><input type="hidden" name="next" value="${escapeHtml(nextPath)}"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus><button type="submit">Sign in</button></form></main></body></html>`;
 }
