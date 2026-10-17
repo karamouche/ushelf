@@ -12,6 +12,7 @@ const manifests = [
   "apps/mcp/package.json",
   "apps/server/package.json",
   "apps/web/package.json",
+  "apps/docs/package.json",
 ];
 
 for (const manifest of manifests) {
