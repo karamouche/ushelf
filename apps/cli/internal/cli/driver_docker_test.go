@@ -79,7 +79,7 @@ func TestSSHApplyWithDomainRunsServerBehindManagedHTTPSProxy(t *testing.T) {
 		}
 		return freshDocker(call)
 	}}
-	deployment, _, _ := testDeployment(t, runner, ContextSpec{Driver: DriverSSH, SSH: "me@vps.example.com", Domain: "shelf.example.com"},
+	deployment, _, _ := testDeployment(t, runner, ContextSpec{Driver: DriverSSH, SSH: "me@vps.example.com", Domain: "ushelf.example.com"},
 		Credentials{APIToken: testToken, AppPassword: "pw"})
 	if err := deployment.Apply(context.Background()); err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestSSHApplyWithDomainRunsServerBehindManagedHTTPSProxy(t *testing.T) {
 	if len(proxy) != 1 {
 		t.Fatal("expected the Caddy proxy to be created")
 	}
-	for _, expected := range []string{"-p 80:80", "-p 443:443", "--cap-drop ALL", proxyImage, "reverse-proxy --from shelf.example.com --to ushelf:43110"} {
+	for _, expected := range []string{"-p 80:80", "-p 443:443", "--cap-drop ALL", proxyImage, "reverse-proxy --from ushelf.example.com --to ushelf:43110"} {
 		if !strings.Contains(proxy[0].joined(), expected) {
 			t.Errorf("proxy run missing %q: %s", expected, proxy[0].joined())
 		}
@@ -196,7 +196,7 @@ func TestStopRefusesUnmanagedContainer(t *testing.T) {
 }
 
 func TestMaintenanceNeverReceivesIntegrationSecrets(t *testing.T) {
-	for _, spec := range []ContextSpec{{Driver: DriverLocal}, {Driver: DriverSSH, SSH: "me@vps", Domain: "shelf.example.com"}} {
+	for _, spec := range []ContextSpec{{Driver: DriverLocal}, {Driver: DriverSSH, SSH: "me@vps", Domain: "ushelf.example.com"}} {
 		runner := &scriptRunner{handler: freshDocker}
 		deployment, _, _ := testDeployment(t, runner, spec, Credentials{APIToken: testToken, AppPassword: "pw"})
 		if err := deployment.RebuildIndex(context.Background()); err != nil {
@@ -221,7 +221,7 @@ func TestMaintenanceNeverReceivesIntegrationSecrets(t *testing.T) {
 
 func TestImportStreamsTheFileSoRemoteDaemonsCanReadIt(t *testing.T) {
 	runner := &scriptRunner{handler: freshDocker}
-	deployment, _, _ := testDeployment(t, runner, ContextSpec{Driver: DriverSSH, SSH: "me@vps", Domain: "shelf.example.com"}, Credentials{APIToken: testToken})
+	deployment, _, _ := testDeployment(t, runner, ContextSpec{Driver: DriverSSH, SSH: "me@vps", Domain: "ushelf.example.com"}, Credentials{APIToken: testToken})
 	source := filepath.Join(t.TempDir(), "item.md")
 	if err := os.WriteFile(source, []byte("---\ntitle: x\n---\n"), 0o600); err != nil {
 		t.Fatal(err)

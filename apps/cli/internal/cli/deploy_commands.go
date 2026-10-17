@@ -22,9 +22,9 @@ func (s *commandState) deployCommand() *cobra.Command {
 			"require a reader password, read from USHELF_APP_PASSWORD or prompted without echo.\n" +
 			"Redeploying an existing context keeps its saved settings unless flags override them.",
 		Example: `  ushelf deploy local
-  ushelf deploy ssh me@vps.example.com --domain shelf.example.com
+  ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
   ushelf deploy ssh me@nas.local --url https://nas.tailnet.ts.net --host 127.0.0.1
-  ushelf deploy fly --app my-shelf --region cdg`,
+  ushelf deploy fly --app my-ushelf --region cdg`,
 	}
 	command.AddCommand(s.deployLocalCommand(), s.deploySSHCommand(), s.deployFlyCommand())
 	return command

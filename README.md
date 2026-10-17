@@ -46,8 +46,8 @@ Open the reader with `ushelf open`, then ask your agent to save a URL or an atta
 To keep the server always on, deploy it elsewhere instead:
 
 ```sh
-ushelf deploy ssh me@vps.example.com --domain shelf.example.com
-ushelf deploy fly --app my-shelf --region cdg
+ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
+ushelf deploy fly --app my-ushelf --region cdg
 ```
 
 ## Documentation

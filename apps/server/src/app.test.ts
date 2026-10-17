@@ -155,7 +155,7 @@ describe("createApp base path", () => {
 });
 
 describe("optional app password", () => {
-  const origin = "https://shelf.example";
+  const origin = "https://ushelf.example";
   const password = "example-secret";
 
   async function signIn(app: ReturnType<typeof createApp>, base = "") {
@@ -242,10 +242,10 @@ describe("optional app password", () => {
     });
     expect(wrong.status).toBe(401);
     expect(wrong.headers.get("set-cookie")).toBeNull();
-    const insecure = await app.request("http://shelf.example/auth/login", {
+    const insecure = await app.request("http://ushelf.example/auth/login", {
       method: "POST",
       headers: {
-        origin: "http://shelf.example",
+        origin: "http://ushelf.example",
         "content-type": "application/x-www-form-urlencoded",
       },
       body: `password=${password}`,

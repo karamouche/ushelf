@@ -12,7 +12,7 @@ The `fly` driver runs the server as a single Fly.io Machine with a persistent vo
 ## Deploy
 
 ```sh
-ushelf deploy fly --app my-shelf --region cdg
+ushelf deploy fly --app my-ushelf --region cdg
 ```
 
 The app name must be globally unique on Fly.io. Use `--org` to create the app in an organization other than your personal one.
@@ -42,6 +42,6 @@ ushelf start    # redeploys and starts a Machine
 The CLI never deletes data. To delete the app and its volume, use flyctl directly:
 
 ```sh
-fly apps destroy my-shelf
-ushelf context remove my-shelf
+fly apps destroy my-ushelf
+ushelf context remove my-ushelf
 ```

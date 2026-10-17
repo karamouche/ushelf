@@ -88,12 +88,12 @@ describe("API token authentication", () => {
       password: "correct horse battery staple",
       version: "1.2.3",
     });
-    expect((await app.request("https://shelf.example/api/items")).status).toBe(401);
-    const items = await app.request("https://shelf.example/api/items", { headers: bearer });
+    expect((await app.request("https://ushelf.example/api/items")).status).toBe(401);
+    const items = await app.request("https://ushelf.example/api/items", { headers: bearer });
     expect(items.status).toBe(200);
     expect(listed).toBe(true);
     await expect(
-      (await app.request("https://shelf.example/api/server", { headers: bearer })).json(),
+      (await app.request("https://ushelf.example/api/server", { headers: bearer })).json(),
     ).resolves.toEqual({ version: "1.2.3" });
   });
 
