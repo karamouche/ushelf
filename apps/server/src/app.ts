@@ -1,6 +1,9 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { createMcpServer } from "@ushelf/mcp";
 import {
   KindleError,
   kindleTargetSchema,
@@ -10,24 +13,75 @@ import {
 } from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { installApiTokenAuth, requireApiToken, type AppEnv } from "./api-auth.js";
 import { installWebAuth, type WebAuthOptions } from "./web-auth.js";
+
+// Attached PDFs are limited to 10 MiB before base64 encoding inside a JSON-RPC envelope.
+const MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+const KINDLE_CREDENTIAL_MAX_BYTES = 64 * 1024;
+
+export interface AppOptions extends WebAuthOptions {
+  apiToken?: string | undefined;
+  version?: string;
+}
 
 export function createApp(
   service: ShelfService,
   webRoot?: string,
   basePath = "/",
-  auth: WebAuthOptions = {},
+  options: AppOptions = {},
 ) {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   const normalizedBasePath = normalizeBasePath(basePath);
   const prefix = normalizedBasePath === "/" ? "" : normalizedBasePath.replace(/\/$/, "");
   const route = (path: string) => `${prefix}${path}`;
-  installWebAuth(app, prefix, auth);
+  const version = options.version ?? "dev";
+  installApiTokenAuth(app, options.apiToken);
+  installWebAuth(app, prefix, options);
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
 
-  app.get(route("/api/health"), (c) =>
-    c.json(auth.password ? { ok: true, authRequired: true } : { ok: true }),
+  // Each request gets a fresh stateless MCP server; all state lives in ShelfService.
+  app.post(route("/mcp"), requireApiToken, async (c) => {
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      enableJsonResponse: true,
+      maxRequestBodySize: MCP_MAX_REQUEST_BYTES,
+    });
+    const server = createMcpServer(service, version);
+    await server.connect(transport);
+    try {
+      return await transport.handleRequest(c.req.raw);
+    } finally {
+      await server.close();
+    }
+  });
+  app.on(["GET", "DELETE"], route("/mcp"), requireApiToken, (c) =>
+    c.json({ error: "Method not allowed" }, 405, { Allow: "POST" }),
   );
+
+  app.get(route("/api/health"), (c) =>
+    c.json(options.password ? { ok: true, authRequired: true } : { ok: true }),
+  );
+  app.get(route("/api/server"), requireApiToken, (c) => c.json({ version }));
+  app.get(route("/api/agent/skills"), requireApiToken, async (c) =>
+    c.json({ version, skills: await service.agentSkills() }),
+  );
+  app.put(
+    route("/api/kindle/credential"),
+    requireApiToken,
+    bodyLimit({
+      maxSize: KINDLE_CREDENTIAL_MAX_BYTES,
+      onError: (c) => c.json({ error: "Kindle credential is too large" }, 413),
+    }),
+    async (c) => c.json(await service.connectKindle(await c.req.text(), c.req.raw.signal)),
+  );
+  app.delete(route("/api/kindle/credential"), requireApiToken, async (c) => {
+    const deregister = c.req.query("deregister");
+    if (deregister !== "true" && deregister !== "false") {
+      return c.json({ error: "deregister must be true or false" }, 400);
+    }
+    await service.disconnectKindle({ deregister: deregister === "true" }, c.req.raw.signal);
+    return c.json({ disconnected: true });
+  });
   app.get(route("/api/kindle/status"), async (c) =>
     c.json(await service.kindleStatus(c.req.raw.signal)),
   );
@@ -92,6 +146,7 @@ export function createApp(
       const body = { error: error.message, code: error.code };
       switch (error.code) {
         case "not_configured":
+        case "already_configured":
         case "credential_invalid":
         case "delivery_in_progress":
           return c.json(body, 409);

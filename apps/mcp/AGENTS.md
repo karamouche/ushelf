@@ -4,14 +4,14 @@ This guide applies to `apps/mcp`. Read the repository `AGENTS.md`, root `README.
 
 ## Purpose and boundary
 
-This package is a thin local stdio MCP adapter over `ShelfService`. It translates MCP tools and resources into Core calls; it does not own ingestion policy, persistence, domain transitions, or enrichment logic.
+This package defines the MCP tool and resource surface over `ShelfService`, exported as `createMcpServer`. The server hosts it over Streamable HTTP at `/mcp`; the CLI's `ushelf mcp` bridge relays stdio to it. It translates MCP tools and resources into Core calls; it does not own ingestion policy, persistence, domain transitions, transport, or authentication.
 
 The connected agent performs recipe-driven reasoning. Do not add a model SDK, model API key, autonomous background loop, or hidden enrichment call here.
 
 ## Transport rules
 
-- `stdout` is exclusively MCP protocol traffic. Send diagnostics to `stderr` and never add ordinary `console.log` calls.
-- Initialize `ShelfService` before accepting requests and allow `USHELF_ROOT` to select the data root.
+- `createMcpServer` must stay free of transport and process concerns. The server creates one instance per stateless request, so do not keep per-session state here; durable state belongs in Core.
+- Never add ordinary `console.log` calls; diagnostics belong to the hosting process.
 - Keep tools focused and composable. Validate every tool input with Zod before it crosses into Core.
 - Return machine-readable `structuredContent` and equivalent text content through the shared JSON response shape unless a tool genuinely needs another MCP content type.
 - MCP resources are read-only views. Use tools, not resources, for mutations.
@@ -28,7 +28,7 @@ The connected agent performs recipe-driven reasoning. Do not add a model SDK, mo
 
 ## Testing and verification
 
-There are currently no MCP-specific tests. Add focused tests when introducing handler logic or a regression-prone contract; keep most behavioral coverage in Core.
+Kindle tool behavior is covered in `src/kindle-tools.test.ts`, and the HTTP-hosted contract in `apps/server/src/api-auth.test.ts`. Add focused tests when introducing handler logic or a regression-prone contract; keep most behavioral coverage in Core.
 
 ```sh
 pnpm --filter @ushelf/core build

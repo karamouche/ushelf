@@ -1,20 +1,48 @@
 package cli
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/karamouche/ushelf/apps/cli/internal/api"
+	"github.com/spf13/cobra"
 )
 
+var skillName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+func (s *commandState) setupCommand() *cobra.Command {
+	var printOnly, force bool
+	command := &cobra.Command{
+		Use:   "setup codex|claude|all",
+		Short: "Connect an agent client to the current context and install uShelf skills",
+		Long: "Register `ushelf mcp` with Codex, Claude Code, or both, pinned to the current\n" +
+			"context, and link the skills published by that context's server.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			client := strings.ToLower(args[0])
+			if client != "codex" && client != "claude" && client != "all" {
+				return fmt.Errorf("client must be codex, claude, or all")
+			}
+			return s.setupClients(command.Context(), client, printOnly, force)
+		},
+	}
+	command.Flags().BoolVar(&printOnly, "print", false, "print setup commands without making changes")
+	command.Flags().BoolVar(&force, "force", false, "replace conflicting uShelf entries and skill links")
+	return command
+}
+
 func (s *commandState) setupClients(ctx context.Context, client string, printOnly, force bool) error {
+	current, err := s.currentContext()
+	if err != nil {
+		return err
+	}
 	executable, err := executablePath()
 	if err != nil {
 		return fmt.Errorf("resolve ushelf executable: %w", err)
@@ -23,46 +51,68 @@ func (s *commandState) setupClients(ctx context.Context, client string, printOnl
 	if client == "all" {
 		clients = []string{"codex", "claude"}
 	}
+	registration := mcpRegistration{Executable: executable, Home: s.store.Home, Context: current.Name}
 	if printOnly {
 		for _, current := range clients {
-			fmt.Fprintln(s.deps.Stdout, setupCommandLine(current, executable, s.settings.Home))
+			fmt.Fprintln(s.deps.Stdout, registration.commandLine(current))
 		}
 		return nil
 	}
 	actions := s.actions()
-	actions.Step("Preparing uShelf agent assets...")
-	docker := s.docker()
-	if err := docker.EnsureDirectories(); err != nil {
-		return err
-	}
-	if err := docker.EnsureImage(ctx); err != nil {
-		return err
-	}
-	skillsRoot, err := docker.ExtractSkills(ctx)
+	actions.Step("Fetching agent skills from %s...", current.URL())
+	apiClient, err := current.Client()
 	if err != nil {
 		return err
 	}
-	for _, current := range clients {
-		actions.Step("Configuring %s...", current)
-		if err := s.configureClient(ctx, current, executable, force); err != nil {
+	bundle, err := apiClient.Skills(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch agent skills: %w", err)
+	}
+	skillsRoot, err := installSkills(s.assetsDir(), bundle)
+	if err != nil {
+		return err
+	}
+	for _, name := range clients {
+		actions.Step("Configuring %s...", name)
+		if err := s.configureClient(ctx, name, registration, force); err != nil {
 			return err
 		}
-		if err := linkSkills(current, skillsRoot, force); err != nil {
+		if err := linkSkills(name, skillsRoot, force); err != nil {
 			return err
 		}
-		actions.Done("Configured %s for uShelf", current)
+		actions.Done("Configured %s for uShelf context %s", name, current.Name)
 	}
 	return nil
 }
 
-func (s *commandState) configureClient(ctx context.Context, client, executable string, force bool) error {
+func (s *commandState) assetsDir() string { return filepath.Join(s.store.Home, "assets") }
+
+// mcpRegistration is the exact command agent clients run; it pins the context so
+// switching the current context never silently retargets a configured agent.
+type mcpRegistration struct {
+	Executable, Home, Context string
+}
+
+func (r mcpRegistration) args() []string {
+	return []string{"--home", r.Home, "--context", r.Context, "mcp"}
+}
+
+func (r mcpRegistration) commandLine(client string) string {
+	prefix := client + " mcp add"
+	if client == "claude" {
+		prefix += " --scope user"
+	}
+	return fmt.Sprintf("%s ushelf -- %q --home %q --context %q mcp", prefix, r.Executable, r.Home, r.Context)
+}
+
+func (s *commandState) configureClient(ctx context.Context, client string, registration mcpRegistration, force bool) error {
 	getArgs := []string{"mcp", "get", "ushelf"}
 	if client == "codex" {
 		getArgs = append(getArgs, "--json")
 	}
 	existing, getErr := s.deps.Runner.Output(ctx, client, getArgs...)
 	if getErr == nil {
-		matches, matchErr := clientConfigurationMatches(client, existing, executable, s.settings.Home)
+		matches, matchErr := clientConfigurationMatches(client, existing, registration)
 		if matchErr != nil && !force {
 			return fmt.Errorf("inspect existing %s uShelf MCP entry: %w", client, matchErr)
 		}
@@ -80,12 +130,13 @@ func (s *commandState) configureClient(ctx context.Context, client, executable s
 	if client == "claude" {
 		args = append(args, "--scope", "user")
 	}
-	args = append(args, "ushelf", "--", executable, "--home", s.settings.Home, "mcp")
+	args = append(args, "ushelf", "--", registration.Executable)
+	args = append(args, registration.args()...)
 	return runQuiet(ctx, s.deps.Runner, client, args...)
 }
 
-func clientConfigurationMatches(client, output, executable, home string) (bool, error) {
-	expectedArgs := []string{"--home", home, "mcp"}
+func clientConfigurationMatches(client, output string, registration mcpRegistration) (bool, error) {
+	executable, expectedArgs := registration.Executable, registration.args()
 	if client == "codex" {
 		var config struct {
 			Transport struct {
@@ -126,85 +177,50 @@ func parseClaudeMCPConfiguration(output string) (string, string, error) {
 	return command, args, nil
 }
 
-func setupCommandLine(client, executable, home string) string {
-	prefix := client + " mcp add"
-	if client == "claude" {
-		prefix += " --scope user"
+// installSkills writes a server's skill bundle under the CLI assets directory and
+// returns the directory that holds one subdirectory per skill.
+func installSkills(assetsRoot string, bundle api.SkillBundle) (string, error) {
+	version := strings.TrimPrefix(bundle.Version, "v")
+	if version == "" || strings.ContainsAny(version, `/\`) || version == "." || version == ".." {
+		return "", fmt.Errorf("server reported an invalid version %q", bundle.Version)
 	}
-	return fmt.Sprintf("%s ushelf -- %q --home %q mcp", prefix, executable, home)
-}
-
-func (d Docker) ExtractSkills(ctx context.Context) (string, error) {
-	version := strings.TrimPrefix(d.Settings.Version, "v")
-	if version == "" {
-		version = "dev"
+	target := filepath.Join(assetsRoot, "skills", version)
+	temporary, err := os.MkdirTemp(filepath.Dir(target), ".skills-*")
+	if errors.Is(err, os.ErrNotExist) {
+		if err = os.MkdirAll(filepath.Dir(target), 0o700); err == nil {
+			temporary, err = os.MkdirTemp(filepath.Dir(target), ".skills-*")
+		}
 	}
-	target := filepath.Join(d.assetsDir(), version, "skills")
-	if _, err := os.Stat(target); err == nil {
-		return target, nil
-	}
-	d.step("Extracting bundled agent skills...")
-	archive, err := d.Runner.Output(ctx, "docker", "run", "--rm", "--entrypoint", "tar", d.Settings.Image, "-C", "/opt/ushelf/skills", "-cf", "-", ".")
 	if err != nil {
-		return "", fmt.Errorf("extract skills from image: %w", err)
-	}
-	temporary := target + ".tmp"
-	_ = os.RemoveAll(temporary)
-	if err := os.MkdirAll(temporary, 0o700); err != nil {
 		return "", err
 	}
-	if err := untarSkills([]byte(archive), temporary); err != nil {
-		_ = os.RemoveAll(temporary)
-		return "", err
+	defer os.RemoveAll(temporary)
+	for _, skill := range bundle.Skills {
+		if !skillName.MatchString(skill.Name) {
+			return "", fmt.Errorf("server returned an invalid skill name %q", skill.Name)
+		}
+		for _, file := range skill.Files {
+			relative := filepath.FromSlash(file.Path)
+			if file.Path == "" || filepath.IsAbs(relative) || !filepath.IsLocal(relative) {
+				return "", fmt.Errorf("server returned an unsafe skill path %q", file.Path)
+			}
+			path := filepath.Join(temporary, skill.Name, relative)
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(path, []byte(file.Content), 0o600); err != nil {
+				return "", err
+			}
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+	// Replace the whole version directory so files removed upstream disappear locally.
+	if err := os.RemoveAll(target); err != nil {
 		return "", err
 	}
 	if err := os.Rename(temporary, target); err != nil {
 		return "", err
 	}
 	return target, nil
-}
-
-func untarSkills(archive []byte, target string) error {
-	reader := tar.NewReader(bytes.NewReader(archive))
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read skills archive: %w", err)
-		}
-		name := filepath.Clean(strings.TrimPrefix(header.Name, "./"))
-		if name == "." {
-			continue
-		}
-		path := filepath.Join(target, name)
-		relative, err := filepath.Rel(target, path)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("unsafe path in skills archive: %s", header.Name)
-		}
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(path, 0o700); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-				return err
-			}
-			contents, err := io.ReadAll(reader)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(path, contents, 0o600); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported entry in skills archive: %s", header.Name)
-		}
-	}
 }
 
 func linkSkills(client, sourceRoot string, force bool) error {
@@ -222,7 +238,7 @@ func linkSkills(client, sourceRoot string, force bool) error {
 	for _, name := range []string{"ushelf-ingest", "ushelf-library"} {
 		source := filepath.Join(sourceRoot, name)
 		if info, err := os.Stat(source); err != nil || !info.IsDir() {
-			return fmt.Errorf("skill %s is missing from runtime image", name)
+			return fmt.Errorf("skill %s is missing from the server's skill bundle", name)
 		}
 		destination := filepath.Join(destinationRoot, name)
 		current, err := os.Readlink(destination)

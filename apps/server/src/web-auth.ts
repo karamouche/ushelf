@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { AppEnv } from "./api-auth.js";
 
 const COOKIE_NAME = "__Host-ushelf-session";
 const DEV_COOKIE_NAME = "ushelf-session";
@@ -14,7 +15,11 @@ export interface WebAuthOptions {
   now?: () => number;
 }
 
-export function installWebAuth(app: Hono, prefix: string, options: WebAuthOptions = {}): void {
+export function installWebAuth(
+  app: Hono<AppEnv>,
+  prefix: string,
+  options: WebAuthOptions = {},
+): void {
   const password = options.password ?? "";
   if (!password) return;
 
@@ -51,7 +56,7 @@ export function installWebAuth(app: Hono, prefix: string, options: WebAuthOption
         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
       );
     }
-    if (pathname === healthPath || pathname === loginPath) {
+    if (c.get("apiClient") || pathname === healthPath || pathname === loginPath) {
       await next();
       return;
     }
