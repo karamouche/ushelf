@@ -80,11 +80,9 @@ export default defineConfig({
           ],
         },
         {
-          label: "Development",
-          items: [
-            { label: "Contributing", slug: "development/contributing" },
-            { label: "Releasing", slug: "development/releasing" },
-          ],
+          label: "Contributing",
+          link: "https://github.com/karamouche/ushelf/blob/main/CONTRIBUTING.md",
+          attrs: { target: "_blank", rel: "noopener" },
         },
       ],
     }),
