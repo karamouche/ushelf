@@ -8,11 +8,10 @@
 </p>
 
 <p align="center">
-  <img alt="Node.js 24+" src="https://img.shields.io/badge/Node.js-24%2B-111111?style=flat-square" />
-  <img alt="pnpm 11" src="https://img.shields.io/badge/pnpm-11-111111?style=flat-square" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-111111?style=flat-square" />
-  <img alt="Model Context Protocol" src="https://img.shields.io/badge/MCP-native-111111?style=flat-square" />
-  <img alt="Local first" src="https://img.shields.io/badge/storage-local--first-111111?style=flat-square" />
+  <a href="https://github.com/karamouche/ushelf/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/karamouche/ushelf/ci.yml?branch=main&style=flat-square&label=CI" /></a>
+  <a href="https://github.com/karamouche/ushelf/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/karamouche/ushelf?style=flat-square&color=111111" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/karamouche/ushelf?style=flat-square&color=111111" /></a>
+  <a href="package.json"><img alt="Node.js version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fkaramouche%2Fushelf%2Fmain%2Fpackage.json&query=%24.engines.node&label=node&style=flat-square&color=111111" /></a>
 </p>
 
 ## Why uShelf?
