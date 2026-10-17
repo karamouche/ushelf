@@ -18,3 +18,4 @@ library/history/
 library/files/
 !library/items/.gitkeep
 !library/history/.gitkeep
+.astro/
