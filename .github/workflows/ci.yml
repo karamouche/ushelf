@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -10,6 +12,7 @@ permissions:
 jobs:
   commitlint:
     name: Lint commit messages
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,6 +51,7 @@ jobs:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
       - run: pnpm test
       - run: pnpm build:runtime
       - name: Install Playwright browsers
