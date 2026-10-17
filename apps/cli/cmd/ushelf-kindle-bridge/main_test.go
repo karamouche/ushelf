@@ -76,3 +76,80 @@ func TestBridgeErrorsAreRedacted(t *testing.T) {
 		t.Fatalf("error was not redacted: %#v", mapped)
 	}
 }
+
+type marshalingClient struct{ bridgeClient }
+
+func (*marshalingClient) Marshal(writer io.Writer) error {
+	_, err := io.WriteString(writer, `{"stored":true}`)
+	return err
+}
+
+type deregisteringClient struct {
+	bridgeClient
+	deregistered bool
+}
+
+func (c *deregisteringClient) Deregister(context.Context) error {
+	c.deregistered = true
+	return nil
+}
+
+type clientProvider struct {
+	bridgeProvider
+	client kindle.Client
+}
+
+func (p clientProvider) Load(io.Reader) (kindle.Client, error) { return p.client, nil }
+
+func TestBridgeConnectStoresUploadedCredentialOnce(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("USHELF_SECRETS_DIR", directory)
+	provider := clientProvider{client: &marshalingClient{}}
+	result, err := run([]string{"connect"}, bytes.NewBufferString(`{"uploaded":true}`), provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(map[string]string)["accountName"] != "Reader" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	path := filepath.Join(directory, kindle.CredentialFilename)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("credential mode = %v", info.Mode().Perm())
+	}
+	if _, err := run([]string{"connect"}, bytes.NewBufferString(`{}`), provider); mapError(err).Code != "already_configured" {
+		t.Fatalf("second connect error = %v", err)
+	}
+}
+
+func TestBridgeConnectRejectsEmptyUpload(t *testing.T) {
+	t.Setenv("USHELF_SECRETS_DIR", t.TempDir())
+	if _, err := run([]string{"connect"}, bytes.NewBuffer(nil), bridgeProvider{client: &bridgeClient{}}); err == nil {
+		t.Fatal("expected empty upload to fail")
+	}
+}
+
+func TestBridgeDisconnectDeregistersAndRemovesCredential(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("USHELF_SECRETS_DIR", directory)
+	path := filepath.Join(directory, kindle.CredentialFilename)
+	if err := os.WriteFile(path, []byte("credential"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := &deregisteringClient{}
+	if _, err := run([]string{"disconnect"}, bytes.NewBufferString(`{"deregister":true}`), clientProvider{client: client}); err != nil {
+		t.Fatal(err)
+	}
+	if !client.deregistered {
+		t.Fatal("expected Amazon deregistration")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("credential still exists: %v", err)
+	}
+	if _, err := run([]string{"disconnect"}, bytes.NewBufferString(`{"deregister":false}`), clientProvider{client: client}); mapError(err).Code != "not_configured" {
+		t.Fatalf("disconnect without credential error = %v", err)
+	}
+}
