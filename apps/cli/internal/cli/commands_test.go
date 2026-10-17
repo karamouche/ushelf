@@ -76,7 +76,7 @@ func TestDeploySSHSavesContextAndWaitsForTheTokenToBeAccepted(t *testing.T) {
 	if config, _ := cli.store().Load(); config.Contexts["vps"].Port != 43120 || config.Contexts["vps"].URL == "" {
 		t.Fatalf("redeploy must merge flags into the saved spec: %#v", config.Contexts["vps"])
 	}
-	if err := cli.run("deploy", "fly", "--name", "vps", "--app", "my-shelf", "--region", "cdg"); err == nil || !strings.Contains(err.Error(), "already uses the ssh driver") {
+	if err := cli.run("deploy", "fly", "--name", "vps", "--app", "my-ushelf", "--region", "cdg"); err == nil || !strings.Contains(err.Error(), "already uses the ssh driver") {
 		t.Fatalf("expected driver conflict, got %v", err)
 	}
 }
@@ -97,7 +97,7 @@ func TestDeployRejectsTheServerWhenItRejectsTheToken(t *testing.T) {
 
 func TestRemoteDeployRequiresAnAppPassword(t *testing.T) {
 	cli := newTestCLI(t)
-	err := cli.run("deploy", "ssh", "me@vps", "--domain", "shelf.example.com")
+	err := cli.run("deploy", "ssh", "me@vps", "--domain", "ushelf.example.com")
 	if err == nil || !strings.Contains(err.Error(), "app password") {
 		t.Fatalf("expected missing password error, got %v", err)
 	}
@@ -111,9 +111,9 @@ func TestDeployValidatesTargetsBeforeTouchingDocker(t *testing.T) {
 	t.Setenv("USHELF_APP_PASSWORD", "pw")
 	for _, args := range [][]string{
 		{"deploy", "ssh", "me@vps"},
-		{"deploy", "ssh", "me@vps", "--url", "http://shelf.example.com"},
-		{"deploy", "ssh", "-oProxyCommand=evil", "--domain", "shelf.example.com"},
-		{"deploy", "fly", "--app", "my-shelf"},
+		{"deploy", "ssh", "me@vps", "--url", "http://ushelf.example.com"},
+		{"deploy", "ssh", "-oProxyCommand=evil", "--domain", "ushelf.example.com"},
+		{"deploy", "fly", "--app", "my-ushelf"},
 		{"deploy", "local", "--name", "Bad Name"},
 	} {
 		if err := cli.run(args...); err == nil {
@@ -167,7 +167,7 @@ func TestContextsCanBeAddedListedSwitchedAndRemoved(t *testing.T) {
 
 func TestConfigChangesTheCurrentContextOnly(t *testing.T) {
 	cli := newTestCLI(t)
-	cli.addContext(t, "fly", ContextSpec{Driver: DriverFly, App: "my-shelf", Region: "cdg"}, Credentials{APIToken: testToken, AppPassword: "pw"})
+	cli.addContext(t, "fly", ContextSpec{Driver: DriverFly, App: "my-ushelf", Region: "cdg"}, Credentials{APIToken: testToken, AppPassword: "pw"})
 	if err := cli.run("config", "set", "base-path", "reader"); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestConfigChangesTheCurrentContextOnly(t *testing.T) {
 	if err := json.Unmarshal(cli.stdout.Bytes(), &shown); err != nil {
 		t.Fatal(err)
 	}
-	if shown["url"] != "https://my-shelf.fly.dev/reader/" || shown["app-password"] != "configured" || shown["base-path"] != "/reader/" {
+	if shown["url"] != "https://my-ushelf.fly.dev/reader/" || shown["app-password"] != "configured" || shown["base-path"] != "/reader/" {
 		t.Fatalf("show = %#v", shown)
 	}
 	if strings.Contains(cli.stdout.String(), testToken) {
@@ -215,7 +215,7 @@ func TestMCPRelaysStdioToTheContextServer(t *testing.T) {
 
 func TestMaintenanceIsRefusedForPlatformsWithoutDockerAccess(t *testing.T) {
 	cli := newTestCLI(t)
-	cli.addContext(t, "fly", ContextSpec{Driver: DriverFly, App: "my-shelf", Region: "cdg"}, Credentials{APIToken: testToken})
+	cli.addContext(t, "fly", ContextSpec{Driver: DriverFly, App: "my-ushelf", Region: "cdg"}, Credentials{APIToken: testToken})
 	if err := cli.run("rebuild-index"); err == nil || !strings.Contains(err.Error(), "rebuilds its index from Markdown on startup") {
 		t.Fatalf("got %v", err)
 	}

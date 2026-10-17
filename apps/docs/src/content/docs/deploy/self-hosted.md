@@ -20,7 +20,7 @@ The container runs as an unprivileged user. If it starts as root, for example on
 ## Register it with the CLI
 
 ```sh
-ushelf context add homelab --url https://shelf.example.com
+ushelf context add homelab --url https://ushelf.example.com
 ```
 
 The CLI prompts for the token without echo (or reads `USHELF_API_TOKEN`), verifies it against the server, and makes the context current. Agent setup, Kindle, `status`, and `doctor` then work as usual. Lifecycle commands such as `start`, `stop`, and `logs` are left to the platform that runs it.

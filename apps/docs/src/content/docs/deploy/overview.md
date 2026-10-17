@@ -17,10 +17,10 @@ The uShelf server is one container image, released in lockstep with the CLI. You
 
 ```sh
 ushelf deploy local
-ushelf deploy ssh me@vps.example.com --domain shelf.example.com
+ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
 ushelf deploy ssh me@nas.local --url https://nas.tailnet.ts.net
-ushelf deploy fly --app my-shelf --region cdg
-ushelf context add homelab --url https://shelf.example.com
+ushelf deploy fly --app my-ushelf --region cdg
+ushelf context add homelab --url https://ushelf.example.com
 ```
 
 ## Contexts

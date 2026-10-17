@@ -14,13 +14,13 @@ The `ssh` driver drives the Docker daemon of a remote host through `docker --hos
 ## Managed HTTPS with a domain
 
 ```sh
-ushelf deploy ssh me@vps.example.com --domain shelf.example.com
+ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
 ```
 
 Point the domain's DNS at the host and open ports 80 and 443. The CLI runs two containers on a private `ushelf` network:
 
 - `ushelf`, the server, which publishes no ports.
-- `ushelf-caddy`, a Caddy reverse proxy that obtains and renews a Let's Encrypt certificate and serves `https://shelf.example.com`.
+- `ushelf-caddy`, a Caddy reverse proxy that obtains and renews a Let's Encrypt certificate and serves `https://ushelf.example.com`.
 
 ## Bring your own HTTPS
 
