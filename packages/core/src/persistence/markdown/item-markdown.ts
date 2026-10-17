@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import matter from "gray-matter";
+import { dump, load } from "js-yaml";
 import {
   itemFrontmatterSchema,
   type ItemFrontmatter,
@@ -13,6 +13,16 @@ const CUSTOM_INSIGHTS_START = "<!-- ushelf:custom-insights:start -->";
 const CUSTOM_INSIGHTS_END = "<!-- ushelf:custom-insights:end -->";
 const SOURCE_START = "<!-- ushelf:source:start -->";
 const SOURCE_END = "<!-- ushelf:source:end -->";
+
+function parseFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
+  const match = /^(?:\uFEFF)?---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m.exec(raw);
+  if (!match || match.index !== 0) throw new Error("Missing YAML frontmatter");
+  const data: unknown = load(match[1] ?? "");
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("YAML frontmatter must be an object");
+  }
+  return { data: data as Record<string, unknown>, content: raw.slice(match[0].length) };
+}
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -67,7 +77,7 @@ export function renderItemMarkdown(
     "",
   ].join("\n");
 
-  return matter.stringify(body, frontmatter);
+  return `---\n${dump(frontmatter)}---\n${body}`;
 }
 
 function renderCitation(
@@ -86,7 +96,7 @@ function section(body: string, start: string, end: string): string {
 }
 
 export function parseItemMarkdown(raw: string, filePath: string): ShelfItem {
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const frontmatter = itemFrontmatterSchema.parse(parsed.data);
   const renderedInsights = section(parsed.content, INSIGHTS_START, INSIGHTS_END);
   const sourceMarkdown = section(parsed.content, SOURCE_START, SOURCE_END);
@@ -112,7 +122,7 @@ function extractCustomInsight(rendered: string): string {
 }
 
 export function parseRecipe(raw: string, filePath: string): Recipe {
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const name = String(parsed.data.name ?? "").trim();
   const description = String(parsed.data.description ?? "").trim();
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`Invalid recipe name in ${filePath}`);
