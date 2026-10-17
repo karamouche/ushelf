@@ -1,6 +1,7 @@
 {
   "name": "ushelf",
   "version": "0.1.2",
+  "author": "Karamouche",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
