@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,135 +72,113 @@ func assertKindleDeadline(t *testing.T, deadline time.Time) {
 	}
 }
 
-func TestKindleSetupStoresOwnerReadableCredential(t *testing.T) {
-	home := t.TempDir()
-	stdout := &bytes.Buffer{}
+func kindleCLI(t *testing.T, client *fakeKindleClient, deadline *time.Time) (*testCLI, *fakeServer) {
+	t.Helper()
+	cli := newTestCLI(t)
+	cli.deps.Kindle = fakeKindleProvider{client: client, registerDeadline: deadline}
+	server := newFakeServer(t)
+	server.handle("GET /api/kindle/status", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"configured": false})
+	})
+	cli.addContext(t, "remote", ContextSpec{Driver: DriverExternal, URL: server.URL + "/"}, Credentials{APIToken: testToken})
+	return cli, server
+}
+
+func TestKindleSetupUploadsTheCredentialToTheServer(t *testing.T) {
 	client := &fakeKindleClient{}
 	var registerDeadline time.Time
-	root := NewRootCommand(
-		Dependencies{
-			Runner: &fakeRunner{},
-			Stdin:  strings.NewReader("yes\nhttps://www.amazon.com/gp/sendtokindle?openid.oa2.authorization_code=code\n"),
-			Stdout: stdout,
-			Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: client, registerDeadline: &registerDeadline},
-		},
-		BuildInfo{Version: "test"},
-	)
-	root.SetArgs([]string{"--home", home, "kindle", "setup"})
-	if err := root.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	credentialPath := kindle.CredentialPath(home)
-	info, err := os.Stat(credentialPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("credential mode = %04o, want 0600", info.Mode().Perm())
-	}
-	if !strings.Contains(stdout.String(), "Kindle connected") {
-		t.Fatalf("missing success output: %s", stdout.String())
+	cli, server := kindleCLI(t, client, &registerDeadline)
+	server.handle("PUT /api/kindle/credential", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"configured": true, "accountName": "Test Account"})
+	})
+	cli.stdin.WriteString("y\nhttps://www.amazon.com/gp/sendtokindle?openid.oa2.authorization_code=code\n")
+	if err := cli.run("kindle", "setup"); err != nil {
+		t.Fatalf("%v\n%s", err, cli.stderr)
 	}
 	assertKindleDeadline(t, registerDeadline)
-}
-
-func TestKindleSetupRejectsUnexpectedRedirect(t *testing.T) {
-	home := t.TempDir()
-	root := NewRootCommand(
-		Dependencies{
-			Runner: &fakeRunner{}, Stdin: strings.NewReader("yes\nhttps://example.com/?openid.oa2.authorization_code=code\n"),
-			Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Kindle: fakeKindleProvider{client: &fakeKindleClient{}},
-		},
-		BuildInfo{Version: "test"},
-	)
-	root.SetArgs([]string{"--home", home, "kindle", "setup"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "amazon.com") {
-		t.Fatalf("expected redirect validation error, got %v", err)
+	if server.bodies["PUT /api/kindle/credential"] != `{"version":1}` {
+		t.Fatalf("uploaded credential = %q", server.bodies["PUT /api/kindle/credential"])
 	}
-	if _, err := os.Stat(kindle.CredentialPath(home)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("credential was written after invalid redirect")
+	if server.tokens[len(server.tokens)-1] != testToken {
+		t.Fatal("credential upload must be authenticated")
+	}
+	if _, err := os.Stat(filepath.Join(cli.home, "secrets", "kindle.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the credential must not be kept on the client machine")
+	}
+	if !strings.Contains(cli.stdout.String(), `Kindle connected for "Test Account" (NA)`) {
+		t.Fatalf("stdout = %q", cli.stdout)
 	}
 }
 
-func TestKindleStatusMasksDeviceSerial(t *testing.T) {
-	home := t.TempDir()
-	credentialPath := kindle.CredentialPath(home)
-	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(credentialPath, []byte(`{"version":1}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	stdout := &bytes.Buffer{}
-	var deviceDeadline time.Time
-	root := NewRootCommand(
-		Dependencies{
-			Runner: &fakeRunner{}, Stdin: &bytes.Buffer{}, Stdout: stdout, Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: &fakeKindleClient{
-				devices: []kindle.Device{{Name: "Paperwhite", Serial: "ABCDEFGHIJKL"}}, deviceDeadline: &deviceDeadline,
-			}},
-		},
-		BuildInfo{Version: "test"},
-	)
-	root.SetArgs([]string{"--home", home, "kindle", "status"})
-	if err := root.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if output := stdout.String(); !strings.Contains(output, "••••IJKL") || strings.Contains(output, "ABCDEFGHIJKL") {
-		t.Fatalf("device serial was not masked: %s", output)
-	}
-	assertKindleDeadline(t, deviceDeadline)
-}
-
-func TestKindleDisconnectPreservesCredentialWhenDeregistrationFails(t *testing.T) {
-	home := t.TempDir()
-	credentialPath := kindle.CredentialPath(home)
-	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(credentialPath, []byte(`{"version":1}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestKindleSetupDeregistersWhenTheUploadFails(t *testing.T) {
 	var deregisterDeadline time.Time
-	root := NewRootCommand(
-		Dependencies{
-			Runner: &fakeRunner{}, Stdin: &bytes.Buffer{}, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: &fakeKindleClient{
-				deregisterErr: errors.New("Amazon unavailable"), deregisterDeadline: &deregisterDeadline,
-			}},
-		},
-		BuildInfo{Version: "test"},
-	)
-	root.SetArgs([]string{"--home", home, "kindle", "disconnect", "--yes"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected deregistration failure")
-	}
-	if _, err := os.Stat(credentialPath); err != nil {
-		t.Fatal("credential was removed after deregistration failure")
+	client := &fakeKindleClient{deregisterDeadline: &deregisterDeadline}
+	cli, server := kindleCLI(t, client, nil)
+	server.handle("PUT /api/kindle/credential", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		respondJSON(w, map[string]any{"error": "The Kindle integration is unavailable.", "code": "bridge_unavailable"})
+	})
+	cli.stdin.WriteString("y\nhttps://www.amazon.com/gp/sendtokindle?code=x\n")
+	err := cli.run("kindle", "setup")
+	if err == nil || !strings.Contains(err.Error(), "upload Kindle credential") {
+		t.Fatalf("expected upload failure, got %v", err)
 	}
 	assertKindleDeadline(t, deregisterDeadline)
 }
 
-func TestKindleDoctorUsesOperationDeadline(t *testing.T) {
-	home := t.TempDir()
-	credentialPath := kindle.CredentialPath(home)
-	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
+func TestKindleSetupRefusesWhenAlreadyConfigured(t *testing.T) {
+	cli, server := kindleCLI(t, &fakeKindleClient{}, nil)
+	server.handle("GET /api/kindle/status", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"configured": true})
+	})
+	if err := cli.run("kindle", "setup"); err == nil || !strings.Contains(err.Error(), "already configured") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestKindleSetupRejectsUnexpectedRedirect(t *testing.T) {
+	cli, server := kindleCLI(t, &fakeKindleClient{}, nil)
+	cli.stdin.WriteString("y\nhttps://evil.example/gp/sendtokindle\n")
+	if err := cli.run("kindle", "setup"); err == nil || !strings.Contains(err.Error(), "sendtokindle") {
+		t.Fatalf("expected redirect validation error, got %v", err)
+	}
+	if _, uploaded := server.bodies["PUT /api/kindle/credential"]; uploaded {
+		t.Fatal("nothing should be uploaded after a rejected redirect")
+	}
+}
+
+func TestKindleStatusMasksDeviceSerial(t *testing.T) {
+	cli, server := kindleCLI(t, &fakeKindleClient{}, nil)
+	server.handle("GET /api/kindle/status", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"configured": true, "accountName": "Test Account", "homeRegion": "NA"})
+	})
+	server.handle("GET /api/kindle/devices", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"devices": []map[string]string{{"name": "Paperwhite", "serial": "G000PAPERWHITE1234"}}})
+	})
+	if err := cli.run("kindle", "status"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(credentialPath, []byte(`{"version":1}`), 0o600); err != nil {
+	if !strings.Contains(cli.stdout.String(), "Paperwhite · ••••1234") || strings.Contains(cli.stdout.String(), "G000PAPERWHITE") {
+		t.Fatalf("stdout = %q", cli.stdout)
+	}
+}
+
+func TestKindleDisconnectChoosesDeregistration(t *testing.T) {
+	cli, server := kindleCLI(t, &fakeKindleClient{}, nil)
+	server.handle("DELETE /api/kindle/credential", func(w http.ResponseWriter, _ *http.Request) {
+		respondJSON(w, map[string]any{"disconnected": true})
+	})
+	if err := cli.run("kindle", "disconnect", "--skip-deregister"); err == nil || !strings.Contains(err.Error(), "requires --yes") {
+		t.Fatalf("got %v", err)
+	}
+	if err := cli.run("kindle", "disconnect", "--yes"); err != nil {
 		t.Fatal(err)
 	}
-	var deviceDeadline time.Time
-	state := commandState{
-		deps: Dependencies{
-			Stdout: &bytes.Buffer{},
-			Kindle: fakeKindleProvider{client: &fakeKindleClient{deviceDeadline: &deviceDeadline}},
-		},
-		settings: Settings{Home: home},
+	if err := cli.run("kindle", "disconnect", "--skip-deregister", "--yes"); err != nil {
+		t.Fatal(err)
 	}
-
-	state.reportKindleDoctor(context.Background())
-
-	assertKindleDeadline(t, deviceDeadline)
+	requests := strings.Join(server.requests, "\n")
+	if !strings.Contains(requests, "DELETE /api/kindle/credential?deregister=true") || !strings.Contains(requests, "DELETE /api/kindle/credential?deregister=false") {
+		t.Fatalf("requests:\n%s", requests)
+	}
 }

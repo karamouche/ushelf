@@ -101,10 +101,6 @@ func (c stkClient) Send(ctx context.Context, document Document) (string, error) 
 	})
 }
 
-func CredentialPath(home string) string {
-	return filepath.Join(home, "secrets", CredentialFilename)
-}
-
 func LoadCredential(provider Provider, path string) (Client, error) {
 	file, err := os.Open(path)
 	if err != nil {

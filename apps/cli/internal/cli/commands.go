@@ -1,20 +1,16 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 
 	"github.com/karamouche/ushelf/apps/cli/internal/kindle"
+	"github.com/karamouche/ushelf/apps/cli/internal/mcpbridge"
 	"github.com/spf13/cobra"
 )
 
@@ -30,10 +26,11 @@ type Dependencies struct {
 }
 
 type commandState struct {
-	deps     Dependencies
-	build    BuildInfo
-	flags    FlagValues
-	settings Settings
+	deps        Dependencies
+	build       BuildInfo
+	homeFlag    string
+	contextFlag string
+	store       Store
 }
 
 func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
@@ -42,359 +39,269 @@ func NewRootCommand(deps Dependencies, build BuildInfo) *cobra.Command {
 	}
 	state := &commandState{deps: deps, build: build}
 	root := &cobra.Command{
-		Use:           "ushelf",
-		Short:         "Run and manage your local uShelf library",
+		Use:   "ushelf",
+		Short: "Deploy uShelf anywhere and connect your agents to it",
+		Long: "Deploy uShelf anywhere and connect your agents to it.\n\n" +
+			"Each context names one uShelf server: a local Docker container, a Docker host\n" +
+			"reached over SSH, a Fly.io app, or a server you deployed yourself. Commands act\n" +
+			"on the current context unless --context selects another.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       build.Version,
-		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
-			state.flags.Changed = command.Flags().Changed
-			settings, err := ResolveSettings(state.flags, build.Version)
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			home, err := ResolveHome(state.homeFlag)
 			if err != nil {
 				return err
 			}
-			state.settings = settings
+			state.store = Store{Home: home}
 			return nil
 		},
 	}
 	root.SetIn(deps.Stdin)
 	root.SetOut(deps.Stdout)
 	root.SetErr(deps.Stderr)
-	root.PersistentFlags().StringVar(&state.flags.Home, "home", "", "uShelf home directory (default ~/.ushelf)")
-	root.PersistentFlags().StringVar(&state.flags.Host, "host", "", "host address published by Docker")
-	root.PersistentFlags().StringVar(&state.flags.Port, "port", "", "HTTP port")
-	root.PersistentFlags().StringVar(&state.flags.BasePath, "base-path", "", "reader URL base path")
-	root.PersistentFlags().StringVar(&state.flags.Image, "image", "", "runtime Docker image")
+	root.PersistentFlags().StringVar(&state.homeFlag, "home", "", "uShelf home directory (default ~/.ushelf)")
+	root.PersistentFlags().StringVar(&state.contextFlag, "context", "", "context to use (default: the current context)")
 
 	root.AddCommand(
-		state.startCommand(), state.stopCommand(), state.statusCommand(), state.logsCommand(),
-		state.openCommand(), state.mcpCommand(), state.setupCommand(), state.doctorCommand(),
-		state.versionCommand(), state.updateCommand(), state.rebuildCommand(), state.importCommand(),
-		state.configCommand(), state.kindleCommand(),
+		state.deployCommand(), state.startCommand(), state.stopCommand(), state.statusCommand(),
+		state.logsCommand(), state.openCommand(), state.mcpCommand(), state.setupCommand(),
+		state.doctorCommand(), state.versionCommand(), state.updateCommand(), state.rebuildCommand(),
+		state.importCommand(), state.contextCommand(), state.configCommand(), state.kindleCommand(),
 	)
 	return root
-}
-
-func (s *commandState) docker() Docker {
-	return Docker{
-		Settings: s.settings,
-		Runner:   s.deps.Runner,
-		Stdin:    s.deps.Stdin,
-		Stdout:   s.deps.Stdout,
-		Stderr:   s.deps.Stderr,
-		Actions:  s.actions(),
-	}
 }
 
 func (s *commandState) actions() *actionReporter {
 	return newActionReporter(s.deps.Stderr, s.deps.Stdout)
 }
 
+// selectedContextName applies --context, then USHELF_CONTEXT, then the saved current context.
+func (s *commandState) selectedContextName(config fileConfig) string {
+	if s.contextFlag != "" {
+		return s.contextFlag
+	}
+	if value := os.Getenv("USHELF_CONTEXT"); value != "" {
+		return value
+	}
+	return config.CurrentContext
+}
+
+func (s *commandState) currentContext() (Context, error) {
+	config, err := s.store.Load()
+	if err != nil {
+		return Context{}, err
+	}
+	name := s.selectedContextName(config)
+	if name == "" {
+		return Context{}, errors.New("no uShelf context is configured; run `ushelf start` or `ushelf deploy`")
+	}
+	return s.loadContext(config, name)
+}
+
+func (s *commandState) loadContext(config fileConfig, name string) (Context, error) {
+	spec, ok := config.Contexts[name]
+	if !ok {
+		return Context{}, fmt.Errorf("context %q does not exist; run `ushelf context list`", name)
+	}
+	credentials, err := s.store.LoadCredentials()
+	if err != nil {
+		return Context{}, err
+	}
+	return Context{Name: name, Spec: spec, Credentials: credentials[name], Home: s.store.Home, Version: s.build.Version}, nil
+}
+
+func (s *commandState) currentDeployment() (Context, Deployment, error) {
+	current, err := s.currentContext()
+	if err != nil {
+		return Context{}, nil, err
+	}
+	deployment, err := s.deploymentFor(current)
+	return current, deployment, err
+}
+
 func (s *commandState) startCommand() *cobra.Command {
-	return &cobra.Command{Use: "start", Short: "Start the uShelf reader and API", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().Start(command.Context())
-	}}
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Deploy or reconcile the current context (a local server when none exists)",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			config, err := s.store.Load()
+			if err != nil {
+				return err
+			}
+			name := s.selectedContextName(config)
+			if name == "" {
+				return s.deploy(command.Context(), "local", ContextSpec{Driver: DriverLocal})
+			}
+			if _, ok := config.Contexts[name]; !ok && name == "local" {
+				return s.deploy(command.Context(), "local", ContextSpec{Driver: DriverLocal})
+			}
+			current, err := s.loadContext(config, name)
+			if err != nil {
+				return err
+			}
+			return s.apply(command.Context(), current)
+		},
+	}
 }
 
 func (s *commandState) stopCommand() *cobra.Command {
-	return &cobra.Command{Use: "stop", Short: "Stop uShelf without deleting data", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().Stop(command.Context())
+	return &cobra.Command{Use: "stop", Short: "Stop the current context's server without deleting data", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		_, deployment, err := s.currentDeployment()
+		if err != nil {
+			return err
+		}
+		return deployment.Stop(command.Context())
 	}}
 }
 
 func (s *commandState) statusCommand() *cobra.Command {
-	return &cobra.Command{Use: "status", Short: "Show service status", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().Status(command.Context())
+	return &cobra.Command{Use: "status", Short: "Show the current context's deployment and server health", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		current, err := s.currentContext()
+		if err != nil {
+			return err
+		}
+		out := s.deps.Stdout
+		fmt.Fprintf(out, "Context: %s (%s)\nURL: %s\n", current.Name, current.Spec.Driver, current.URL())
+		if current.Managed() {
+			deployment, err := s.deploymentFor(current)
+			if err != nil {
+				return err
+			}
+			state, err := deployment.State(command.Context())
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Deployment: %s\nImage: %s\n", state, current.Image())
+		}
+		health, version := "unreachable", "unavailable"
+		if client, err := current.Client(); err == nil {
+			if result, err := client.Health(command.Context()); err == nil && result.OK {
+				health = "ok"
+			}
+			if info, err := client.Server(command.Context()); err == nil {
+				version = info.Version
+			} else if health == "ok" {
+				version = "unavailable: " + err.Error()
+			}
+		}
+		fmt.Fprintf(out, "Health: %s\nServer version: %s\nCLI version: %s\n", health, version, s.build.Version)
+		if current.Spec.Driver == DriverLocal {
+			fmt.Fprintf(out, "Home: %s\n", current.Home)
+		}
+		return nil
 	}}
 }
 
 func (s *commandState) logsCommand() *cobra.Command {
 	var follow bool
 	var tail int
-	command := &cobra.Command{Use: "logs", Short: "Show service logs", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().Logs(command.Context(), follow, tail)
+	command := &cobra.Command{Use: "logs", Short: "Show the current context's server logs", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		_, deployment, err := s.currentDeployment()
+		if err != nil {
+			return err
+		}
+		return deployment.Logs(command.Context(), follow, tail)
 	}}
 	command.Flags().BoolVarP(&follow, "follow", "f", false, "follow log output")
-	command.Flags().IntVar(&tail, "tail", 200, "number of lines to show")
+	command.Flags().IntVar(&tail, "tail", 200, "number of lines to show (Docker drivers)")
 	return command
 }
 
 func (s *commandState) openCommand() *cobra.Command {
-	return &cobra.Command{Use: "open", Short: "Open the reader in a browser", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		name := "xdg-open"
-		if runtime.GOOS == "darwin" {
-			name = "open"
+	return &cobra.Command{Use: "open", Short: "Open the current context's reader in a browser", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		current, err := s.currentContext()
+		if err != nil {
+			return err
 		}
 		actions := s.actions()
 		actions.Step("Opening the uShelf reader...")
-		if err := runQuiet(command.Context(), s.deps.Runner, name, s.settings.URL()); err != nil {
+		if err := runQuiet(command.Context(), s.deps.Runner, browserOpener(), current.URL()); err != nil {
 			return err
 		}
-		actions.Done("Opened %s", s.settings.URL())
+		actions.Done("Opened %s", current.URL())
 		return nil
 	}}
 }
 
 func (s *commandState) mcpCommand() *cobra.Command {
-	return &cobra.Command{Use: "mcp", Short: "Run the stdio MCP server", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().MCP(command.Context())
-	}}
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "Run a stdio MCP server that relays to the current context",
+		Long: "Run a stdio MCP server for agent clients. Messages are relayed to the context's\n" +
+			"server over HTTPS with its API token; stdout carries only MCP protocol traffic.",
+		Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			current, err := s.currentContext()
+			if err != nil {
+				return err
+			}
+			client, err := current.Client()
+			if err != nil {
+				return err
+			}
+			bridge := &mcpbridge.Bridge{Endpoint: client.Endpoint("mcp"), Token: client.Token(), Log: s.deps.Stderr}
+			return bridge.Run(command.Context(), s.deps.Stdin, s.deps.Stdout)
+		},
+	}
 }
 
 func (s *commandState) rebuildCommand() *cobra.Command {
-	return &cobra.Command{Use: "rebuild-index", Short: "Rebuild the disposable search index", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.docker().Maintenance(command.Context(), "rebuild-index")
+	return &cobra.Command{Use: "rebuild-index", Short: "Rebuild the disposable search index (Docker drivers)", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		maintainer, err := s.currentMaintainer()
+		if err != nil {
+			return err
+		}
+		return maintainer.RebuildIndex(command.Context())
 	}}
 }
 
 func (s *commandState) importCommand() *cobra.Command {
-	return &cobra.Command{Use: "import FILE", Short: "Import a compatible Markdown item", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
-		return s.docker().Import(command.Context(), args[0])
+	return &cobra.Command{Use: "import FILE", Short: "Import a compatible Markdown item (Docker drivers)", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
+		maintainer, err := s.currentMaintainer()
+		if err != nil {
+			return err
+		}
+		return maintainer.Import(command.Context(), args[0])
 	}}
+}
+
+func (s *commandState) currentMaintainer() (Maintainer, error) {
+	current, deployment, err := s.currentDeployment()
+	if err != nil {
+		return nil, err
+	}
+	maintainer, ok := deployment.(Maintainer)
+	if !ok {
+		return nil, fmt.Errorf("context %q uses the %s driver, which does not support offline maintenance; the server rebuilds its index from Markdown on startup", current.Name, current.Spec.Driver)
+	}
+	return maintainer, nil
 }
 
 func (s *commandState) versionCommand() *cobra.Command {
-	return &cobra.Command{Use: "version", Short: "Print version information", Args: cobra.NoArgs, Run: func(_ *cobra.Command, _ []string) {
-		fmt.Fprintf(s.deps.Stdout, "uShelf %s\ncommit: %s\nbuilt: %s\nimage: %s\n", s.build.Version, s.build.Commit, s.build.BuildDate, s.settings.Image)
+	return &cobra.Command{Use: "version", Short: "Print version information", Args: cobra.NoArgs, Run: func(*cobra.Command, []string) {
+		fmt.Fprintf(s.deps.Stdout, "uShelf %s\ncommit: %s\nbuilt: %s\n", s.build.Version, s.build.Commit, s.build.BuildDate)
+		if current, err := s.currentContext(); err == nil && current.Managed() {
+			fmt.Fprintf(s.deps.Stdout, "context: %s\nimage: %s\n", current.Name, current.Image())
+		}
 	}}
 }
 
-func (s *commandState) doctorCommand() *cobra.Command {
-	return &cobra.Command{Use: "doctor", Short: "Check the local uShelf installation", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		docker := s.docker()
-		failures := 0
-		check := func(name string, err error) {
-			if err != nil {
-				failures++
-				fmt.Fprintf(s.deps.Stdout, "FAIL %-16s %v\n", name, err)
-			} else {
-				fmt.Fprintf(s.deps.Stdout, "PASS %s\n", name)
-			}
-		}
-		check("platform", supportedPlatform())
-		_, err := s.deps.Runner.Output(command.Context(), "docker", "version", "--format", "{{.Server.Version}}")
-		check("docker daemon", err)
-		check("directories", docker.EnsureDirectories())
-		check("permissions", docker.CheckWritable())
-		check("port", docker.CheckPort())
-		check("runtime image", docker.EnsureImage(command.Context()))
-		check("image architecture", docker.CheckImageArchitecture(command.Context()))
-		check("default recipe", docker.SeedRecipe(command.Context()))
-		check("container health", docker.CheckManagedHealth(command.Context()))
-		for _, client := range []string{"codex", "claude"} {
-			if _, clientErr := s.deps.Runner.Output(command.Context(), client, "mcp", "get", "ushelf"); clientErr == nil {
-				fmt.Fprintf(s.deps.Stdout, "INFO %s MCP configured\n", client)
-			} else {
-				fmt.Fprintf(s.deps.Stdout, "INFO %s MCP not configured\n", client)
-			}
-		}
-		s.reportKindleDoctor(command.Context())
-		if failures > 0 {
-			return fmt.Errorf("doctor found %d problem(s)", failures)
-		}
-		fmt.Fprintf(s.deps.Stdout, "uShelf is ready to run from %s\n", s.settings.Home)
-		return nil
+func (s *commandState) updateCommand() *cobra.Command {
+	var check bool
+	command := &cobra.Command{Use: "update", Short: "Update the CLI and roll the current context to the matching image", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
+		return s.update(command.Context(), check)
 	}}
-}
-
-func (s *commandState) kindleCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "kindle",
-		Short: "Connect and manage Amazon Send to Kindle",
-		Long: "Connect and manage the unofficial Amazon Send to Kindle integration.\n\n" +
-			"Authentication is handled by Amazon in your browser; uShelf stores only a device credential.",
-	}
-	command.AddCommand(s.kindleSetupCommand(), s.kindleStatusCommand(), s.kindleDisconnectCommand())
+	command.Flags().BoolVar(&check, "check", false, "check for an update without installing it")
 	return command
 }
 
-func (s *commandState) kindleSetupCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "setup",
-		Short: "Connect uShelf to an Amazon Kindle account",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, _ []string) error {
-			credentialPath := kindle.CredentialPath(s.settings.Home)
-			if _, err := os.Stat(credentialPath); err == nil {
-				return errors.New("Kindle is already configured; run `ushelf kindle disconnect` first")
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("inspect Kindle credential: %w", err)
-			}
-
-			reader := bufio.NewReader(s.deps.Stdin)
-			fmt.Fprintln(s.deps.Stdout, "WARNING: This integration is unofficial and uses Amazon's undocumented Send to Kindle protocol.")
-			fmt.Fprintln(s.deps.Stdout, "Amazon may change or disable it without notice. Use it only with an account you own.")
-			fmt.Fprint(s.deps.Stdout, "Continue? [y/N] ")
-			answer, err := reader.ReadString('\n')
-			if err != nil && !errors.Is(err, io.EOF) {
-				return err
-			}
-			if normalized := strings.ToLower(strings.TrimSpace(answer)); normalized != "y" && normalized != "yes" {
-				return errors.New("Kindle setup cancelled")
-			}
-
-			verifier, err := s.deps.Kindle.NewVerifier()
-			if err != nil {
-				return fmt.Errorf("create Amazon verifier: %w", err)
-			}
-			signInURL := s.deps.Kindle.SignInURL(verifier)
-			fmt.Fprintf(s.deps.Stdout, "\nOpen this Amazon sign-in URL:\n\n%s\n\n", signInURL)
-			opener := "xdg-open"
-			if runtime.GOOS == "darwin" {
-				opener = "open"
-			}
-			_ = s.deps.Runner.Run(command.Context(), nil, io.Discard, io.Discard, opener, signInURL)
-			fmt.Fprint(s.deps.Stdout, "After Amazon finishes redirecting, paste the full URL from the address bar:\n> ")
-			redirect, err := reader.ReadString('\n')
-			if err != nil && !errors.Is(err, io.EOF) {
-				return err
-			}
-			redirect = strings.TrimSpace(redirect)
-			if err := validateKindleRedirect(redirect); err != nil {
-				return err
-			}
-			code, err := s.deps.Kindle.AuthorizationCode(redirect)
-			if err != nil {
-				return errors.New("Amazon sign-in did not provide an authorization code")
-			}
-			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
-			defer cancel()
-			actions := s.actions()
-			actions.Step("Connecting to Amazon Send to Kindle...")
-			client, err := s.deps.Kindle.Register(ctx, code, verifier)
-			if err != nil {
-				return fmt.Errorf("register Kindle connection: %w", err)
-			}
-			if err := kindle.SaveCredential(credentialPath, client); err != nil {
-				return err
-			}
-			actions.Done("Kindle connected for %q (%s)", client.AccountName(), client.HomeRegion())
-			return nil
-		},
+func browserOpener() string {
+	if runtime.GOOS == "darwin" {
+		return "open"
 	}
-}
-
-func (s *commandState) kindleStatusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Check the Kindle connection and list devices",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, _ []string) error {
-			client, err := kindle.LoadCredential(s.deps.Kindle, kindle.CredentialPath(s.settings.Home))
-			if errors.Is(err, os.ErrNotExist) {
-				return errors.New("Kindle is not configured; run `ushelf kindle setup`")
-			}
-			if err != nil {
-				return fmt.Errorf("load Kindle credential: %w", err)
-			}
-			ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
-			defer cancel()
-			devices, err := client.Devices(ctx)
-			if err != nil {
-				return fmt.Errorf("contact Amazon Send to Kindle: %w", err)
-			}
-			fmt.Fprintf(s.deps.Stdout, "Account: %s\nRegion: %s\nDevices: %d\n", client.AccountName(), client.HomeRegion(), len(devices))
-			for _, device := range devices {
-				fmt.Fprintf(s.deps.Stdout, "  %s · %s\n", device.Name, maskedSerial(device.Serial))
-			}
-			return nil
-		},
-	}
-}
-
-func (s *commandState) kindleDisconnectCommand() *cobra.Command {
-	var yes, localOnly bool
-	command := &cobra.Command{
-		Use:   "disconnect",
-		Short: "Deregister uShelf and remove the Kindle credential",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, _ []string) error {
-			credentialPath := kindle.CredentialPath(s.settings.Home)
-			client, err := kindle.LoadCredential(s.deps.Kindle, credentialPath)
-			if errors.Is(err, os.ErrNotExist) {
-				return errors.New("Kindle is not configured")
-			}
-			if err != nil && !localOnly {
-				return fmt.Errorf("load Kindle credential: %w; use --local-only --yes only if it cannot be recovered", err)
-			}
-			if localOnly && !yes {
-				return errors.New("--local-only requires --yes because the Amazon registration will remain active")
-			}
-			if !yes {
-				fmt.Fprint(s.deps.Stdout, "Deregister uShelf from this Amazon account? [y/N] ")
-				answer, readErr := bufio.NewReader(s.deps.Stdin).ReadString('\n')
-				if readErr != nil && !errors.Is(readErr, io.EOF) {
-					return readErr
-				}
-				if normalized := strings.ToLower(strings.TrimSpace(answer)); normalized != "y" && normalized != "yes" {
-					return errors.New("Kindle disconnect cancelled")
-				}
-			}
-			if !localOnly {
-				ctx, cancel := context.WithTimeout(command.Context(), kindle.OperationTimeout)
-				defer cancel()
-				s.actions().Step("Deregistering uShelf from Amazon...")
-				if err := client.Deregister(ctx); err != nil {
-					return fmt.Errorf("deregister Kindle connection: %w", err)
-				}
-			} else {
-				s.actions().Step("Removing the local Kindle credential...")
-			}
-			if err := os.Remove(credentialPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("remove Kindle credential: %w", err)
-			}
-			s.actions().Done("Kindle disconnected")
-			return nil
-		},
-	}
-	command.Flags().BoolVar(&yes, "yes", false, "confirm without prompting")
-	command.Flags().BoolVar(&localOnly, "local-only", false, "remove only the local credential")
-	return command
-}
-
-func (s *commandState) reportKindleDoctor(ctx context.Context) {
-	credentialPath := kindle.CredentialPath(s.settings.Home)
-	info, err := os.Stat(credentialPath)
-	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintln(s.deps.Stdout, "INFO Kindle not configured")
-		return
-	}
-	if err != nil {
-		fmt.Fprintf(s.deps.Stdout, "INFO Kindle credential unavailable: %v\n", err)
-		return
-	}
-	if info.Mode().Perm() != 0o600 {
-		fmt.Fprintf(s.deps.Stdout, "INFO Kindle credential permissions are %04o; expected 0600\n", info.Mode().Perm())
-		return
-	}
-	client, err := kindle.LoadCredential(s.deps.Kindle, credentialPath)
-	if err != nil {
-		fmt.Fprintln(s.deps.Stdout, "INFO Kindle credential is invalid; run `ushelf kindle setup`")
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, kindle.OperationTimeout)
-	defer cancel()
-	devices, err := client.Devices(ctx)
-	if err != nil {
-		fmt.Fprintf(s.deps.Stdout, "INFO Kindle configured, but Amazon connection is unavailable: %v\n", err)
-		return
-	}
-	fmt.Fprintf(s.deps.Stdout, "INFO Kindle connected (%d device(s))\n", len(devices))
-}
-
-func validateKindleRedirect(value string) error {
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Host != "www.amazon.com" || parsed.Path != "/gp/sendtokindle" {
-		return errors.New("paste the final https://www.amazon.com/gp/sendtokindle URL")
-	}
-	return nil
-}
-
-func maskedSerial(value string) string {
-	if len(value) <= 4 {
-		return value
-	}
-	return "••••" + value[len(value)-4:]
+	return "xdg-open"
 }
 
 func supportedPlatform() error {
@@ -405,194 +312,6 @@ func supportedPlatform() error {
 		return fmt.Errorf("unsupported architecture %s", runtime.GOARCH)
 	}
 	return nil
-}
-
-func (s *commandState) configCommand() *cobra.Command {
-	const keys = `Configurable keys:
-  host          Address published by Docker
-  port          HTTP port
-  base-path     Web app and API URL prefix
-  image         Runtime Docker image
-  app-password  HTTP reader password (prompted and stored privately)`
-
-	command := &cobra.Command{
-		Use:   "config",
-		Short: "Manage persistent CLI configuration",
-		Long:  "Manage persistent CLI configuration.\n\n" + keys,
-		Example: `  ushelf config show
-  ushelf config set base-path /reader/
-  ushelf config unset base-path`,
-	}
-	show := &cobra.Command{
-		Use:   "show",
-		Short: "Show effective configuration",
-		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			value := map[string]any{"home": s.settings.Home, "host": s.settings.Host, "port": s.settings.Port, "base-path": s.settings.BasePath, "image": s.settings.Image}
-			password := os.Getenv("USHELF_APP_PASSWORD")
-			if password == "" {
-				var err error
-				password, err = readAppPassword(s.settings.Home)
-				if err != nil {
-					return err
-				}
-			}
-			if password == "" {
-				value["app-password"] = "unset"
-			} else {
-				value["app-password"] = "configured"
-			}
-			encoded, _ := json.MarshalIndent(value, "", "  ")
-			fmt.Fprintln(s.deps.Stdout, string(encoded))
-			return nil
-		},
-	}
-	path := &cobra.Command{
-		Use:   "path",
-		Short: "Print the configuration file path",
-		Args:  cobra.NoArgs,
-		Run:   func(_ *cobra.Command, _ []string) { fmt.Fprintln(s.deps.Stdout, s.settings.ConfigPath) },
-	}
-	set := &cobra.Command{
-		Use:   "set KEY [VALUE]",
-		Short: "Set a persistent configuration value",
-		Long:  "Set a persistent configuration value.\n\n" + keys,
-		Args: func(command *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return nil
-			}
-			if args[0] == "app-password" {
-				if len(args) != 1 {
-					return fmt.Errorf("app-password is prompted; do not pass it as an argument")
-				}
-				return nil
-			}
-			return cobra.ExactArgs(2)(command, args)
-		},
-		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
-		Example: `  ushelf config set host 0.0.0.0
-  ushelf config set port 43120
-  ushelf config set base-path /reader/
-  ushelf config set image ghcr.io/karamouche/ushelf:latest
-  ushelf config set app-password`,
-		RunE: func(command *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return command.Help()
-			}
-			if args[0] == "app-password" {
-				password, err := promptAppPassword(s.deps.Stdin, s.deps.Stderr)
-				if err != nil {
-					return err
-				}
-				if err := writeAppPassword(s.settings.Home, password); err != nil {
-					return err
-				}
-				s.actions().Done("App password saved. Run ushelf start to apply it")
-				return nil
-			}
-			actions := s.actions()
-			actions.Step("Updating uShelf configuration...")
-			if err := setConfigValue(s.settings.ConfigPath, args[0], args[1], false); err != nil {
-				return err
-			}
-			actions.Done("Set %s to %s", args[0], args[1])
-			return nil
-		},
-	}
-	unset := &cobra.Command{
-		Use:       "unset KEY",
-		Short:     "Restore a configuration value to its default",
-		Long:      "Restore a configuration value to its default.\n\n" + keys,
-		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"host", "port", "base-path", "image", "app-password"},
-		Example:   "  ushelf config unset base-path\n  ushelf config unset app-password",
-		RunE: func(_ *cobra.Command, args []string) error {
-			if args[0] == "app-password" {
-				if err := unsetAppPassword(s.settings.Home); err != nil {
-					return err
-				}
-				s.actions().Done("App password removed. Run ushelf start to apply it")
-				return nil
-			}
-			actions := s.actions()
-			actions.Step("Updating uShelf configuration...")
-			if err := setConfigValue(s.settings.ConfigPath, args[0], "", true); err != nil {
-				return err
-			}
-			actions.Done("Restored %s to its default", args[0])
-			return nil
-		},
-	}
-	command.AddCommand(show, path, set, unset)
-	return command
-}
-
-func setConfigValue(path, key, value string, unset bool) error {
-	config, err := readFileConfig(path)
-	if err != nil {
-		return err
-	}
-	switch strings.ToLower(key) {
-	case "host":
-		if unset {
-			config.Host = ""
-		} else {
-			config.Host = value
-		}
-	case "port":
-		if unset {
-			config.Port = 0
-		} else {
-			port, parseErr := strconv.Atoi(value)
-			if parseErr != nil {
-				return fmt.Errorf("invalid port: %w", parseErr)
-			}
-			config.Port = port
-		}
-	case "base-path", "basepath":
-		if unset {
-			config.BasePath = ""
-		} else {
-			config.BasePath = normalizeBasePath(value)
-		}
-	case "image":
-		if unset {
-			config.Image = ""
-		} else {
-			config.Image = value
-		}
-	default:
-		return fmt.Errorf("unknown config key %q; use host, port, base-path, or image", key)
-	}
-	probe := Settings{Home: filepath.Dir(path), Host: firstNonEmpty(config.Host, defaultHost), Port: firstNonZero(config.Port, defaultPort), BasePath: firstNonEmpty(config.BasePath, defaultBasePath), Image: firstNonEmpty(config.Image, "ghcr.io/karamouche/ushelf:latest")}
-	probe.BasePath = normalizeBasePath(probe.BasePath)
-	if err := probe.Validate(); err != nil {
-		return err
-	}
-	return writeFileConfig(path, config)
-}
-
-func (s *commandState) setupCommand() *cobra.Command {
-	var printOnly, force bool
-	command := &cobra.Command{Use: "setup codex|claude|all", Short: "Configure an agent client and install uShelf skills", Args: cobra.ExactArgs(1), RunE: func(command *cobra.Command, args []string) error {
-		client := strings.ToLower(args[0])
-		if client != "codex" && client != "claude" && client != "all" {
-			return fmt.Errorf("client must be codex, claude, or all")
-		}
-		return s.setupClients(command.Context(), client, printOnly, force)
-	}}
-	command.Flags().BoolVar(&printOnly, "print", false, "print setup commands without making changes")
-	command.Flags().BoolVar(&force, "force", false, "replace conflicting uShelf entries and skill links")
-	return command
-}
-
-func (s *commandState) updateCommand() *cobra.Command {
-	var check bool
-	command := &cobra.Command{Use: "update", Short: "Update the CLI and matching runtime image", Args: cobra.NoArgs, RunE: func(command *cobra.Command, _ []string) error {
-		return s.update(command.Context(), check)
-	}}
-	command.Flags().BoolVar(&check, "check", false, "check for an update without installing it")
-	return command
 }
 
 func executablePath() (string, error) {
