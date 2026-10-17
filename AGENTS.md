@@ -1,6 +1,6 @@
 # uShelf Agent Guide
 
-Use this file as the starting context for work anywhere in the repository. Read the root `README.md`, then the package README and nearest package `AGENTS.md` before editing. Package guides add local rules; this root guide still applies when they are silent.
+Use this file as the starting context for work anywhere in the repository. Read the root `README.md` and the relevant pages of the documentation site in `apps/docs`, then the package README and nearest package `AGENTS.md` before editing. Package guides add local rules; this root guide still applies when they are silent.
 
 ## Project in one minute
 
@@ -25,6 +25,7 @@ There is deliberately no model SDK, API key, embeddings store, or autonomous LLM
 - `apps/mcp`: The MCP tool and resource surface over Core, exported as a library and hosted by the server.
 - `apps/cli`: Native Cobra CLI for deployment contexts and drivers (local Docker, SSH Docker hosts, Fly.io), maintenance, agent setup, and the stdio MCP bridge.
 - `apps/web`: React/Vite library and reader UI. It only communicates through `/api`.
+- `apps/docs`: Starlight documentation site, published to GitHub Pages. It is the home of user-facing documentation.
 - `recipes`: Versioned Markdown instructions used for agent enrichment.
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
 - `library/items`: Canonical saved documents, ignored by Git except for `.gitkeep`.
@@ -110,6 +111,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Installation, deployment targets, contexts, updates, the MCP bridge, or agent-client setup: `apps/cli`.
 - Reader behavior or presentation: `apps/web`; keep persistence behind the API.
 - Agent enrichment behavior: `recipes` for output instructions, `skills` for tool-use workflow.
+- User-facing documentation: `apps/docs/src/content/docs`.
 
 When changing shared behavior, inspect both adapters and the web client for contract impact.
 
@@ -150,4 +152,4 @@ Ushelf has not launched and has no production users or production data. Revisit 
 - Confirm package boundaries and storage invariants still hold.
 - Run relevant tests and report exactly what ran.
 - Mention any check that could not run and why.
-- Update the relevant README when setup, architecture, commands, or public behavior changes.
+- Update the relevant page under `apps/docs` when setup, architecture, commands, or public behavior changes, and run `pnpm docs:build`. Keep the root README to the pitch, quick start, and links into the docs.
