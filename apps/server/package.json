@@ -14,7 +14,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.1",
     "@ushelf/core": "workspace:*",
-    "hono": "^4.9.4"
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "tsx": "^4.20.5"
