@@ -104,7 +104,7 @@ describe("ShelfDatabase", () => {
     const sqlite = new BetterSqlite3(databasePath);
     const objects = sqlite
       .prepare(
-        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', 'kindle_delivery_claims', 'kindle_preferences', '__drizzle_migrations') ORDER BY name",
+        "SELECT name, type FROM sqlite_master WHERE name IN ('items', 'items_source_hash', 'item_search', 'delete_tokens', 'kindle_delivery_claims', 'kindle_preferences', 'oauth_clients', 'oauth_authorization_codes', 'oauth_grants', '__drizzle_migrations') ORDER BY name",
       )
       .all();
     const appliedBefore = sqlite
@@ -120,8 +120,11 @@ describe("ShelfDatabase", () => {
       { name: "items_source_hash", type: "index" },
       { name: "kindle_delivery_claims", type: "table" },
       { name: "kindle_preferences", type: "table" },
+      { name: "oauth_authorization_codes", type: "table" },
+      { name: "oauth_clients", type: "table" },
+      { name: "oauth_grants", type: "table" },
     ]);
-    expect(appliedBefore.count).toBe(4);
+    expect(appliedBefore.count).toBe(5);
 
     const reopened = new ShelfDatabase(databasePath, itemsDir);
     reopened.close();
@@ -130,7 +133,7 @@ describe("ShelfDatabase", () => {
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
       .get() as { count: number };
     verification.close();
-    expect(appliedAfter.count).toBe(4);
+    expect(appliedAfter.count).toBe(5);
   });
 
   it("provides typed CRUD, filtering, FTS, path, and delete-token behavior", async () => {

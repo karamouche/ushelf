@@ -13,8 +13,9 @@ import {
 } from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { installApiTokenAuth, requireApiToken, type AppEnv } from "./api-auth.js";
-import { installWebAuth, type WebAuthOptions } from "./web-auth.js";
+import { installApiTokenAuth, requireApiToken, requireMcpAccess, type AppEnv } from "./api-auth.js";
+import { createConnectorOAuth } from "./oauth.js";
+import { installWebAuth, PasswordGate, type WebAuthOptions } from "./web-auth.js";
 
 // Attached PDFs are limited to 10 MiB before base64 encoding inside a JSON-RPC envelope.
 const MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -36,12 +37,26 @@ export function createApp(
   const prefix = normalizedBasePath === "/" ? "" : normalizedBasePath.replace(/\/$/, "");
   const route = (path: string) => `${prefix}${path}`;
   const version = options.version ?? "dev";
-  installApiTokenAuth(app, options.apiToken);
-  installWebAuth(app, prefix, options);
+  const passwordGate = options.password
+    ? new PasswordGate(options.password, options.now)
+    : undefined;
+  // Connectors authenticate the owner with the app password, so OAuth needs one configured.
+  const connectorOAuth = passwordGate
+    ? createConnectorOAuth({
+        prefix,
+        connectors: service.connectors,
+        passwordGate,
+        secureCookie: options.secureCookie ?? true,
+      })
+    : undefined;
+  installApiTokenAuth(app, options.apiToken, connectorOAuth);
+  installWebAuth(app, prefix, passwordGate, options, connectorOAuth?.isPublicPath);
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
+  connectorOAuth?.install(app);
+  const requireMcp = requireMcpAccess(connectorOAuth);
 
   // Each request gets a fresh stateless MCP server; all state lives in ShelfService.
-  app.post(route("/mcp"), requireApiToken, async (c) => {
+  app.post(route("/mcp"), requireMcp, async (c) => {
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse: true,
       maxRequestBodySize: MCP_MAX_REQUEST_BYTES,
@@ -54,7 +69,7 @@ export function createApp(
       await server.close();
     }
   });
-  app.on(["GET", "DELETE"], route("/mcp"), requireApiToken, (c) =>
+  app.on(["GET", "DELETE"], route("/mcp"), requireMcp, (c) =>
     c.json({ error: "Method not allowed" }, 405, { Allow: "POST" }),
   );
 
@@ -82,6 +97,17 @@ export function createApp(
     await service.disconnectKindle({ deregister: deregister === "true" }, c.req.raw.signal);
     return c.json({ disconnected: true });
   });
+  app.get(route("/api/connectors"), requireApiToken, (c) =>
+    c.json({ connectors: service.connectors.list() }),
+  );
+  app.delete(route("/api/connectors"), requireApiToken, (c) =>
+    c.json({ revoked: service.connectors.revokeAll() }),
+  );
+  app.delete(route("/api/connectors/:clientId"), requireApiToken, (c) =>
+    service.connectors.revoke(c.req.param("clientId")!)
+      ? c.json({ revoked: 1 })
+      : c.json({ error: "Connector not found" }, 404),
+  );
   app.get(route("/api/kindle/status"), async (c) =>
     c.json(await service.kindleStatus(c.req.raw.signal)),
   );

@@ -9,7 +9,8 @@ This guide applies to `apps/server`. Read the repository `AGENTS.md`, root `READ
 ## Source responsibilities
 
 - `src/app.ts`: construct the injectable Hono app, API and MCP routes, adapter validation, CORS, error responses, configured base path, and production SPA/static routing.
-- `src/api-auth.ts`: bearer-token authentication for the CLI and agents; `src/web-auth.ts`: password sessions for browsers.
+- `src/api-auth.ts`: bearer-token authentication for the CLI and agents, plus connector access tokens on `/mcp`; `src/web-auth.ts`: password sessions for browsers and the shared `PasswordGate`.
+- `src/oauth.ts`: OAuth discovery metadata, dynamic client registration, the consent page, and the token and revocation endpoints for remote MCP connectors. Grant rules and persistence belong in Core's `ConnectorAuthorization`.
 - `src/index.ts`: initialize `ShelfService`, resolve runtime host/port/base-path settings, locate the built web app, and start Node's HTTP server.
 - `src/cli.ts`: thin `rebuild-index` and validated Markdown `import` commands.
 
@@ -23,6 +24,8 @@ Keep `createApp` testable with an injected service. Avoid module-level server st
 - Reading-state writes should forward the client's revision so stale updates can be rejected.
 - Preserve the development CORS allowlist unless development origins intentionally change. Keep the loopback host default; remote exposure requires HTTPS, `USHELF_APP_PASSWORD`, and `USHELF_API_TOKEN`.
 - Agent-only and administrative routes must use `requireApiToken`. Never let a browser cookie authorize them, and never return stored credentials.
+- Connector OAuth tokens authorize `/mcp` only. Never accept them on `/api` routes, and never let connectors reach token-only administrative routes.
+- OAuth stays tied to the app password: the owner approves every connector by entering it on the consent page, and attempts share the sign-in rate limit. Keep S256 PKCE mandatory, redirect URIs exact (loopback ports excepted), and never redirect to an unregistered URI.
 - The MCP route stays stateless: one `createMcpServer` instance per request, with all state in `ShelfService`.
 - Production hosting must serve built assets and fall back to `index.html` only within the configured base path. API errors must not be converted into SPA responses.
 
