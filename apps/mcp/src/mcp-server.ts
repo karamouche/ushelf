@@ -15,7 +15,12 @@ const json = (value: unknown) => ({
 
 /** Build the uShelf MCP tool and resource surface over an initialized service. */
 export function createMcpServer(service: ShelfService, version: string): McpServer {
-  const server = new McpServer({ name: "ushelf", version });
+  const server = new McpServer({
+    name: "ushelf",
+    title: "uShelf",
+    version,
+    websiteUrl: "https://github.com/karamouche/ushelf",
+  });
 
   registerKindleTools(server, service);
 

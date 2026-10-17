@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -14,6 +15,11 @@ const webRoot =
 const port = Number(process.env.USHELF_PORT ?? 43110);
 const hostname = process.env.USHELF_HOST ?? "127.0.0.1";
 const basePath = process.env.USHELF_WEB_BASE_PATH?.trim() || "/";
+// Release builds pin USHELF_VERSION; otherwise report the manifest version the release process sets.
+const packageVersion = (
+  JSON.parse(readFileSync(path.resolve(here, "../package.json"), "utf8")) as { version: string }
+).version;
+const version = process.env.USHELF_VERSION?.trim() || packageVersion;
 
 serve(
   {
@@ -21,7 +27,7 @@ serve(
       password: process.env.USHELF_APP_PASSWORD || undefined,
       apiToken: resolveApiToken(),
       secureCookie: process.env.NODE_ENV !== "development",
-      version: process.env.USHELF_VERSION ?? "dev",
+      version,
     }).fetch,
     port,
     hostname,
