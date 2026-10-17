@@ -18,6 +18,8 @@ interface BridgeStatus {
 }
 
 export interface KindleGateway {
+  connect(credential: string, signal?: AbortSignal): Promise<BridgeStatus>;
+  disconnect(options: { deregister: boolean }, signal?: AbortSignal): Promise<void>;
   status(signal?: AbortSignal): Promise<BridgeStatus>;
   devices(signal?: AbortSignal): Promise<KindleDevice[]>;
   send(
@@ -33,6 +35,14 @@ export interface KindleGateway {
 
 export class KindleBridgeGateway implements KindleGateway {
   constructor(private readonly config: UshelfConfig) {}
+
+  connect(credential: string, signal?: AbortSignal): Promise<BridgeStatus> {
+    return this.call<BridgeStatus>("connect", credential, signal);
+  }
+
+  async disconnect(options: { deregister: boolean }, signal?: AbortSignal): Promise<void> {
+    await this.call<{ disconnected: true }>("disconnect", options, signal);
+  }
 
   status(signal?: AbortSignal): Promise<BridgeStatus> {
     return this.call<BridgeStatus>("status", undefined, signal);
@@ -125,7 +135,8 @@ export class KindleBridgeGateway implements KindleGateway {
           resolve(envelope.result);
         },
       );
-      if (input !== undefined) child.stdin?.end(JSON.stringify(input));
+      if (typeof input === "string") child.stdin?.end(input);
+      else if (input !== undefined) child.stdin?.end(JSON.stringify(input));
       else child.stdin?.end();
     });
   }

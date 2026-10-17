@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
-import { resolveAppPassword } from "./app-password.js";
+import { resolveApiToken } from "./api-auth.js";
 
 const service = new ShelfService();
 await service.initialize();
@@ -18,8 +18,10 @@ const basePath = process.env.USHELF_WEB_BASE_PATH?.trim() || "/";
 serve(
   {
     fetch: createApp(service, webRoot, basePath, {
-      password: resolveAppPassword(),
+      password: process.env.USHELF_APP_PASSWORD || undefined,
+      apiToken: resolveApiToken(),
       secureCookie: process.env.NODE_ENV !== "development",
+      version: process.env.USHELF_VERSION ?? "dev",
     }).fetch,
     port,
     hostname,

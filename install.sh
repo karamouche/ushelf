@@ -124,4 +124,4 @@ elif [ "$install_dir_is_default" = true ] && [ "${USHELF_NO_MODIFY_PATH:-0}" != 
 else
   echo "Add ${install_dir} to PATH to run uShelf by command name."
 fi
-echo "Run now: ${install_dir}/ushelf doctor"
+echo "Run now: ${install_dir}/ushelf start (local) or ${install_dir}/ushelf deploy --help"

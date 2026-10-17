@@ -4,24 +4,26 @@ Use this file as the starting context for work anywhere in the repository. Read 
 
 ## Project in one minute
 
-uShelf is a local, agent-native read-later library for articles, PDF documents, and X sources. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index.
+uShelf is an agent-native read-later library for articles, PDF documents, and X sources. Deterministic code captures and normalizes sources; a connected agent performs recipe-driven enrichment. Markdown is the canonical record, while SQLite is a disposable search index. The server can run locally or be deployed anywhere; the CLI and its MCP bridge stay on the user's machine.
 
 The main flow is:
 
 ```text
-Agent -> MCP adapter -> Core -> Markdown + SQLite
-                              ^
-Browser -> HTTP server --------+
+Agent -stdio-> ushelf mcp (CLI) -HTTPS + token-> server /mcp -> Core -> Markdown + SQLite
+                                                           ^
+Browser -----------------HTTPS + password-> server /api ---+
 ```
+
+Exactly one server process owns a library. Never add a second process that writes the same Markdown or SQLite.
 
 There is deliberately no model SDK, API key, embeddings store, or autonomous LLM process in this repository. Preserve that boundary unless the task explicitly changes the product architecture.
 
 ## Workspace map
 
 - `packages/core`: Domain rules, schemas, extraction, URL safety, Markdown persistence, SQLite indexing, and `ShelfService`. Put shared behavior here.
-- `apps/server`: Thin Hono HTTP and CLI adapter around Core. It also serves the built web app in production.
-- `apps/mcp`: Thin stdio MCP adapter around Core. It exposes tools and resources to connected agents.
-- `apps/cli`: Native Cobra CLI for installation, Docker lifecycle, maintenance, and agent setup.
+- `apps/server`: Thin Hono HTTP and CLI adapter around Core. It hosts the MCP endpoint, authenticates API tokens and browser sessions, and serves the built web app in production.
+- `apps/mcp`: The MCP tool and resource surface over Core, exported as a library and hosted by the server.
+- `apps/cli`: Native Cobra CLI for deployment contexts and drivers (local Docker, SSH Docker hosts, Fly.io), maintenance, agent setup, and the stdio MCP bridge.
 - `apps/web`: React/Vite library and reader UI. It only communicates through `/api`.
 - `recipes`: Versioned Markdown instructions used for agent enrichment.
 - `skills`: Canonical source for the agent-facing ingestion and library-management workflows.
@@ -53,7 +55,7 @@ Development runs the API at `http://127.0.0.1:43110` and Vite at `http://127.0.0
 
 ### Agent setup
 
-Build the MCP server, configure it as described in the root README, and symlink the repository-owned skills into the user skill directory:
+Run `pnpm dev` with `USHELF_API_TOKEN` set in `.env`, register the dev server with `ushelf context add dev --url http://127.0.0.1:43110`, and register `ushelf mcp` with your agent (`ushelf setup claude --print` shows the command). Symlink the repository-owned skills into the user skill directory instead of letting setup download them:
 
 ```sh
 mkdir -p ~/.agents/skills
@@ -87,6 +89,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Use Drizzle's typed query API for ordinary SQLite operations. Keep raw SQL narrowly limited to SQLite features Drizzle cannot model, currently FTS5 virtual-table creation and `MATCH` expressions.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
 - Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
+- Keep secrets out of process arguments, logs, and `config.json`. API tokens travel only over HTTPS outside loopback; remote deployments always require both an API token and an app password.
 - Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
 - Keep deterministic extraction separate from LLM enrichment. Avoid introducing token-consuming work into capture, search, or reading-state updates.
 - Treat X fallback content as agent-supplied, not independently verified.
@@ -103,7 +106,8 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Ingestion, extraction, storage, search, SQLite schema/migrations, recipes, concurrency, or validation: `packages/core` first.
 - Browser-facing API contract or maintenance CLI: `apps/server`.
 - Agent tool/resource contract: `apps/mcp`, plus the relevant skill when workflow guidance changes.
-- Installation, Docker orchestration, updates, or agent-client setup: `apps/cli`.
+- MCP transport, authentication, or token-only administrative routes: `apps/server`.
+- Installation, deployment targets, contexts, updates, the MCP bridge, or agent-client setup: `apps/cli`.
 - Reader behavior or presentation: `apps/web`; keep persistence behind the API.
 - Agent enrichment behavior: `recipes` for output instructions, `skills` for tool-use workflow.
 

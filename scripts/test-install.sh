@@ -41,7 +41,7 @@ zsh_root="${test_root}/zsh"
 run_default_install "$zsh_root" /bin/zsh "${test_root}/zsh-first.out"
 grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "${zsh_root}/.zshrc"
 grep -qF 'source ~/.zshrc' "${test_root}/zsh-first.out"
-grep -qF "Run now: ${zsh_root}/.local/bin/ushelf doctor" "${test_root}/zsh-first.out"
+grep -qF "Run now: ${zsh_root}/.local/bin/ushelf start (local) or ${zsh_root}/.local/bin/ushelf deploy --help" "${test_root}/zsh-first.out"
 run_default_install "$zsh_root" /bin/zsh "${test_root}/zsh-second.out"
 test "$(grep -cF 'export PATH="$HOME/.local/bin:$PATH"' "${zsh_root}/.zshrc")" -eq 1
 
