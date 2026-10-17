@@ -24,7 +24,7 @@ The connected agent performs recipe-driven reasoning. Do not add a model SDK, mo
 - When changing ingestion or library-management workflows, update the relevant file under `skills/` and run `pnpm validate:skills`.
 - Keep destructive behavior obvious in tool names and descriptions. Permanent deletion must continue to require `request_delete` followed by `confirm_delete` with the short-lived token.
 - Preserve recipe hash, item revision, and source-grounding fields in the ingestion context/save flow.
-- Update `apps/mcp/README.md` and the root setup example for user-visible configuration or protocol changes.
+- Update `apps/mcp/README.md`, `apps/docs/src/content/docs/reference/mcp.md`, and `agents/connect.md` for user-visible configuration or protocol changes.
 
 ## Testing and verification
 

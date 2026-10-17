@@ -1,7 +1,7 @@
 # Contributing to uShelf
 
 Thank you for contributing to uShelf. Please open an issue before undertaking a
-large change and follow the development and verification guidance in `README.md`
+large change and follow the development and verification guidance in the [Contributing documentation](https://karamouche.github.io/ushelf/development/contributing/)
 and `AGENTS.md`.
 
 ## License of contributions
