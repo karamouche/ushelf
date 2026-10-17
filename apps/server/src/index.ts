@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
+import { resolveApiToken } from "./api-auth.js";
 import { resolveAppPassword } from "./app-password.js";
 
 const service = new ShelfService();
@@ -19,7 +20,9 @@ serve(
   {
     fetch: createApp(service, webRoot, basePath, {
       password: resolveAppPassword(),
+      apiToken: resolveApiToken(),
       secureCookie: process.env.NODE_ENV !== "development",
+      version: process.env.USHELF_VERSION ?? "dev",
     }).fetch,
     port,
     hostname,
