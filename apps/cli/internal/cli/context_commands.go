@@ -95,7 +95,7 @@ func (s *commandState) contextAddCommand() *cobra.Command {
 		Long: "Register a uShelf server deployed outside the CLI, such as with Docker Compose.\n\n" +
 			"The server must run with USHELF_API_TOKEN set. The CLI reads the same token from\n" +
 			"USHELF_API_TOKEN or prompts for it without echo, and verifies it before saving.",
-		Example: "  ushelf context add homelab --url https://shelf.example.com",
+		Example: "  ushelf context add homelab --url https://ushelf.example.com",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			name := args[0]

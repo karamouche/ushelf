@@ -1,0 +1,97 @@
+/* A black and white theme matching the uShelf reader: neutral grays and no hue accents. */
+
+:root {
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #ededed;
+  --sl-color-gray-2: #c4c4c4;
+  --sl-color-gray-3: #8f8f8f;
+  --sl-color-gray-4: #5c5c5c;
+  --sl-color-gray-5: #3a3a3a;
+  --sl-color-gray-6: #262626;
+  --sl-color-black: #171717;
+
+  --sl-color-accent-low: #2e2e2e;
+  --sl-color-accent: #d4d4d4;
+  --sl-color-accent-high: #ffffff;
+}
+
+:root[data-theme="light"] {
+  --sl-color-white: #111111;
+  --sl-color-gray-1: #262626;
+  --sl-color-gray-2: #3a3a3a;
+  --sl-color-gray-3: #5c5c5c;
+  --sl-color-gray-4: #8f8f8f;
+  --sl-color-gray-5: #c4c4c4;
+  --sl-color-gray-6: #ededed;
+  --sl-color-gray-7: #f6f6f6;
+  --sl-color-black: #ffffff;
+
+  --sl-color-accent-low: #ececec;
+  --sl-color-accent: #111111;
+  --sl-color-accent-high: #000000;
+}
+
+/* Callouts, cards, and badges use grayscale instead of their usual hues. */
+:root,
+:root[data-theme="light"] {
+  --sl-color-orange-low: var(--sl-color-gray-6);
+  --sl-color-orange: var(--sl-color-gray-3);
+  --sl-color-orange-high: var(--sl-color-white);
+  --sl-color-green-low: var(--sl-color-gray-6);
+  --sl-color-green: var(--sl-color-gray-3);
+  --sl-color-green-high: var(--sl-color-white);
+  --sl-color-blue-low: var(--sl-color-gray-6);
+  --sl-color-blue: var(--sl-color-gray-3);
+  --sl-color-blue-high: var(--sl-color-white);
+  --sl-color-purple-low: var(--sl-color-gray-6);
+  --sl-color-purple: var(--sl-color-gray-3);
+  --sl-color-purple-high: var(--sl-color-white);
+  --sl-color-red-low: var(--sl-color-gray-6);
+  --sl-color-red: var(--sl-color-gray-3);
+  --sl-color-red-high: var(--sl-color-white);
+}
+
+/* Headings echo the reader's serif titles. */
+.sl-markdown-content :is(h1, h2, h3),
+h1#_top,
+.hero h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content a {
+  text-underline-offset: 0.2em;
+}
+
+/* Mermaid diagrams follow the site palette in both modes. Mermaid inlines id-scoped styles,
+   so these overrides need !important. */
+pre.mermaid {
+  background: transparent !important;
+  border: 0;
+}
+pre.mermaid svg :is(.node, .cluster) :is(rect, polygon, circle, ellipse, path) {
+  fill: var(--sl-color-black) !important;
+  stroke: var(--sl-color-white) !important;
+}
+pre.mermaid svg .cluster rect {
+  fill: var(--sl-color-gray-7, var(--sl-color-gray-6)) !important;
+  stroke: var(--sl-color-gray-4) !important;
+  stroke-dasharray: 4 3;
+}
+pre.mermaid svg :is(.nodeLabel, .cluster-label, .edgeLabel, .label, text, span, p) {
+  color: var(--sl-color-white) !important;
+  fill: var(--sl-color-white) !important;
+  font-family: var(--sl-font) !important;
+}
+pre.mermaid svg :is(.flowchart-link, .edgePath path) {
+  stroke: var(--sl-color-gray-3) !important;
+}
+pre.mermaid svg :is(marker path, .arrowheadPath, .arrowMarkerPath) {
+  fill: var(--sl-color-gray-3) !important;
+  stroke: var(--sl-color-gray-3) !important;
+}
+pre.mermaid svg :is(.edgeLabel, .edgeLabel rect, .edgeLabel p, .labelBkg) {
+  background-color: var(--sl-color-bg) !important;
+  fill: var(--sl-color-bg) !important;
+}
