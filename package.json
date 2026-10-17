@@ -34,7 +34,7 @@
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.3.0",
     "concurrently": "^9.2.1",
-    "prettier": "^3.9.6",
+    "prettier": "3.9.10",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11"
   }
