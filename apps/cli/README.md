@@ -1,50 +1,70 @@
 # uShelf CLI
 
-The native `ushelf` command is the end-user entrypoint for the local reader, API, and MCP server. It is written in Go with Cobra and delegates product behavior to the existing TypeScript runtime image.
+The native `ushelf` command deploys uShelf servers, operates them, and connects agents to them. It is written in Go with Cobra. Product behavior lives in the TypeScript runtime image; the CLI orchestrates where that image runs and relays agent traffic to it.
 
-## Development
-
-```sh
-go -C apps/cli test ./...
-go -C apps/cli build -o dist/ushelf ./cmd/ushelf
-apps/cli/dist/ushelf --help
-```
-
-Development builds use `ghcr.io/karamouche/ushelf:latest` unless `--image` or `USHELF_IMAGE` selects a locally built image.
-
-The CLI owns `~/.ushelf` by default:
+## Architecture
 
 ```text
-config.json  library/  recipes/  state/  assets/  secrets/
+internal/cli        Cobra commands, the context store, and deployment drivers
+internal/api        HTTP client for a uShelf server (HTTPS-only outside loopback)
+internal/mcpbridge  stdio ↔ Streamable HTTP relay used by `ushelf mcp`
+internal/kindle     Amazon Send to Kindle sign-in and credential handling
+cmd/ushelf-kindle-bridge  Helper shipped in the runtime image for the server
 ```
 
-Configuration precedence is CLI flags, environment variables, `config.json`, then defaults. Supported persistent keys are `host`, `port`, `base-path`, `image`, and `app-password`; `USHELF_ROOT` changes the data root, while `--home` takes precedence over it.
+A **context** is a named server: its driver, deployment settings, URL, and credentials. Drivers implement the `Deployment` interface (`Apply`, `Stop`, `State`, `Logs`, `Diagnose`):
 
-Run `ushelf config set app-password` to enter and confirm the password without echoing it. It is stored in `~/.ushelf/secrets/app-password` with owner-only access and mounted read-only into the server container. Run `ushelf start` to apply it; later starts retain protection. `ushelf config show` displays only whether a password is configured. Run `ushelf config unset app-password` followed by `ushelf start` to remove protection. A nonempty `USHELF_APP_PASSWORD` environment value takes precedence over the saved password for that start.
+| Driver     | Implementation     | Notes                                                                     |
+| ---------- | ------------------ | ------------------------------------------------------------------------- |
+| `local`    | `DockerDeployment` | Local daemon, bind mounts under the uShelf home, publishes on loopback    |
+| `ssh`      | `DockerDeployment` | `docker --host ssh://…`, `ushelf-data` volume, optional Caddy HTTPS proxy |
+| `fly`      | `FlyDeployment`    | `flyctl`, one Machine, `ushelf_data` volume, secrets imported over stdin  |
+| `external` | none               | Registered with `context add`; only API-based commands apply              |
+
+Docker drivers also implement `Maintainer` for offline `rebuild-index` and `import`, which pause the service and run a one-shot container without integration secrets.
+
+## Files
+
+The CLI owns `~/.ushelf` by default (`--home` or `USHELF_ROOT` moves it):
+
+```text
+config.json       current context and each context's spec (no secrets)
+credentials.json  per-context API token and app password, mode 0600
+assets/skills/    skills downloaded from servers, linked by `ushelf setup`
+library/ recipes/ state/ secrets/   data of the local driver only
+```
+
+Context selection precedence is `--context`, then `USHELF_CONTEXT`, then the saved current context. `ushelf start` without any context deploys `local`.
+
+Secrets never appear in process arguments: Docker receives them through a temporary owner-only `--env-file` and Fly.io through `fly secrets import` on stdin. Remote contexts always require an app password, read from `USHELF_APP_PASSWORD` or prompted without echo.
 
 ## Command output
 
-Commands that change local state report each long-running step on stderr and write their final result to stdout. The output is plain text without terminal animation, so it remains readable when redirected or captured in CI:
+Commands that change state report each long-running step on stderr and write their final result to stdout as plain text:
 
 ```text
 ==> Preparing the uShelf home at /Users/you/.ushelf...
 ==> Creating the uShelf service...
 ==> Waiting for uShelf to become ready...
-Done: uShelf is ready at http://127.0.0.1:43110/
+==> Waiting for http://127.0.0.1:43110/ to accept requests...
+Done: uShelf 1.2.3 is ready at http://127.0.0.1:43110/ (context local)
 ```
 
-If startup becomes unhealthy or times out, the CLI includes a short recent service-log excerpt when available and points to `ushelf logs --tail 200` and `ushelf doctor`. Read-only commands retain their structured output, and `ushelf mcp` reserves stdout exclusively for protocol traffic.
+If a Docker deployment becomes unhealthy or times out, the CLI includes a short recent log excerpt and points to `ushelf logs --tail 200` and `ushelf doctor`. `ushelf mcp` reserves stdout exclusively for protocol messages and answers any request it cannot relay with a JSON-RPC error.
 
 ## Kindle setup
 
-The optional Kindle integration uses Amazon's unofficial Send to Kindle protocol. Connect it interactively, inspect the registered devices, or remove the credential with:
+`ushelf kindle setup` performs Amazon sign-in locally, then uploads the device credential to the current context's server through its token-only API. If the upload fails, the new Amazon registration is deregistered. `ushelf kindle status` and `ushelf kindle disconnect` also go through the server; `--skip-deregister --yes` removes a credential that Amazon has already invalidated.
+
+## Development
 
 ```sh
-ushelf kindle setup
-ushelf kindle status
-ushelf kindle disconnect
+go -C apps/cli test ./...
+go -C apps/cli vet ./...
+go -C apps/cli build -o dist/ushelf ./cmd/ushelf
+apps/cli/dist/ushelf --help
 ```
 
-The credential is stored owner-readable at `~/.ushelf/secrets/kindle.json`. It is mounted read-only into the reader and MCP containers so either the web UI or a connected agent can deliver saved items, but it is never mounted into maintenance containers or exposed by an MCP tool. If Amazon has already invalidated a credential, `ushelf kindle disconnect --local-only --yes` removes only the local copy.
+Development builds use `ghcr.io/karamouche/ushelf:latest` unless `deploy --image` or `ushelf config set image` selects another image, such as one built with `docker build -t ushelf:dev .`.
 
-Never direct tests at a real uShelf home. Use `--home` with a temporary directory and inject a fake `Runner` for unit tests.
+Never direct tests at a real uShelf home. Use `--home` with a temporary directory, inject a fake `Runner`, and serve the API from `httptest`.
