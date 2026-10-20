@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import BetterSqlite3 from "better-sqlite3";
@@ -176,7 +176,7 @@ describe("agent-driven workflow", () => {
     sqlite.exec("DELETE FROM item_search; DELETE FROM items;");
     sqlite.close();
     expect(service.listItems()).toHaveLength(0);
-    expect(await service.rebuildIndex()).toBe(1);
+    expect(await service.rebuildIndex()).toEqual({ indexed: 1, skipped: [] });
     expect(service.listItems()[0]).toMatchObject({
       title: "A useful thread",
       status: "read",
@@ -271,6 +271,27 @@ describe("agent-driven workflow", () => {
     await expect(service.importMarkdown(item.filePath)).rejects.toThrow(
       `An item with ID ${item.id} already exists`,
     );
+  });
+
+  it("starts without the item files it cannot index and reports them", async () => {
+    const { config, item } = await fixture();
+    const raw = await readFile(item.filePath, "utf8");
+    const invalidPath = path.join(path.dirname(item.filePath), "invalid.md");
+    const duplicatePath = path.join(path.dirname(item.filePath), "duplicate.md");
+    await writeFile(invalidPath, raw.replace("title: Pending thread", "title: ''"));
+    await writeFile(duplicatePath, raw.replace(item.id, "0c2f3c55-6a3e-4a8b-9d0f-6b1e2a7c4d91"));
+
+    const service = new ShelfService(config);
+    const report = await service.initialize();
+
+    expect(report.indexed).toBe(1);
+    expect(report.skipped).toHaveLength(2);
+    expect(report.skipped.map(({ filePath }) => filePath)).toContain(invalidPath);
+    expect(report.skipped.find(({ filePath }) => filePath !== invalidPath)?.error).toMatch(
+      /UNIQUE constraint failed: items\.canonical_url/,
+    );
+    expect(service.listItems()).toHaveLength(1);
+    await expect(service.rebuildIndex()).resolves.toMatchObject({ indexed: 1 });
   });
 
   it("shares portable index paths across different roots", async () => {
