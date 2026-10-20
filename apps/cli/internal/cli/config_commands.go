@@ -17,7 +17,7 @@ const configKeys = `Configurable keys for the current context:
   domain        HTTPS domain served by the managed proxy (ssh)
   url           Server URL (ssh with your own proxy, external)
   region        Fly.io region (fly)
-  app-password  HTTP reader password (prompted and stored privately)`
+  app-password  HTTP reader password, at least 12 characters (prompted and stored privately)`
 
 var configKeyNames = []string{"image", "base-path", "host", "port", "domain", "url", "region", "app-password"}
 
@@ -117,7 +117,7 @@ func (s *commandState) changeSetting(key string, values []string, unset bool) er
 			entry.AppPassword = ""
 		} else if current.Spec.Driver == DriverExternal {
 			return fmt.Errorf("context %q is managed outside uShelf; change the password where the server is deployed", current.Name)
-		} else if entry.AppPassword, err = promptSecret(s.deps.Stdin, s.deps.Stderr, "App password", true); err != nil {
+		} else if entry.AppPassword, err = promptAppPassword(s.deps.Stdin, s.deps.Stderr); err != nil {
 			return err
 		}
 		credentials[current.Name] = entry
