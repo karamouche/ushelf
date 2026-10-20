@@ -7,9 +7,34 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
+
+// minAppPasswordLength is the shortest app password the CLI will configure. The password is the
+// only credential guarding the remote reader and connector consent, so it must resist guessing.
+const minAppPasswordLength = 12
+
+// validateAppPassword rejects app passwords too short to withstand online guessing.
+func validateAppPassword(value string) error {
+	if utf8.RuneCountInString(value) < minAppPasswordLength {
+		return fmt.Errorf("app password must be at least %d characters", minAppPasswordLength)
+	}
+	return nil
+}
+
+// promptAppPassword prompts twice for a new app password and enforces the minimum length.
+func promptAppPassword(input io.Reader, output io.Writer) (string, error) {
+	value, err := promptSecret(input, output, "App password", true)
+	if err != nil {
+		return "", err
+	}
+	if err := validateAppPassword(value); err != nil {
+		return "", err
+	}
+	return value, nil
+}
 
 // promptSecret reads a secret without echo on a terminal, or line by line from piped input.
 func promptSecret(input io.Reader, output io.Writer, label string, confirm bool) (string, error) {

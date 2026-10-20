@@ -88,7 +88,7 @@ func TestDeployRejectsTheServerWhenItRejectsTheToken(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		respondJSON(w, map[string]string{"error": "Invalid API token"})
 	})
-	t.Setenv("USHELF_APP_PASSWORD", "pw")
+	t.Setenv("USHELF_APP_PASSWORD", "reader-password")
 	err := cli.run("deploy", "ssh", "me@vps", "--url", server.URL)
 	if err == nil || !strings.Contains(err.Error(), "rejected this context's API token") {
 		t.Fatalf("expected token rejection, got %v", err)
@@ -106,9 +106,24 @@ func TestRemoteDeployRequiresAnAppPassword(t *testing.T) {
 	}
 }
 
+func TestDeployRejectsShortAppPasswords(t *testing.T) {
+	cli := newTestCLI(t)
+	t.Setenv("USHELF_APP_PASSWORD", "too-short")
+	err := cli.run("deploy", "ssh", "me@vps", "--domain", "ushelf.example.com")
+	if err == nil || !strings.Contains(err.Error(), "at least 12 characters") {
+		t.Fatalf("expected short password error, got %v", err)
+	}
+	if len(cli.runner.calls) != 0 {
+		t.Fatal("nothing should be deployed with a short password")
+	}
+	if _, err := os.Stat(cli.store().ConfigPath()); err == nil {
+		t.Fatal("a rejected password must not save the context")
+	}
+}
+
 func TestDeployValidatesTargetsBeforeTouchingDocker(t *testing.T) {
 	cli := newTestCLI(t)
-	t.Setenv("USHELF_APP_PASSWORD", "pw")
+	t.Setenv("USHELF_APP_PASSWORD", "reader-password")
 	for _, args := range [][]string{
 		{"deploy", "ssh", "me@vps"},
 		{"deploy", "ssh", "me@vps", "--url", "http://ushelf.example.com"},
@@ -176,6 +191,20 @@ func TestConfigChangesTheCurrentContextOnly(t *testing.T) {
 	}
 	if err := cli.run("config", "unset", "app-password"); err == nil {
 		t.Fatal("remote contexts must keep an app password")
+	}
+	cli.stdin.WriteString("short\nshort\n")
+	if err := cli.run("config", "set", "app-password"); err == nil || !strings.Contains(err.Error(), "at least 12 characters") {
+		t.Fatalf("expected short password error, got %v", err)
+	}
+	if credentials, _ := cli.store().LoadCredentials(); credentials["fly"].AppPassword != "pw" {
+		t.Fatal("a rejected password must not replace the saved one")
+	}
+	cli.stdin.WriteString("a-longer-reader-password\na-longer-reader-password\n")
+	if err := cli.run("config", "set", "app-password"); err != nil {
+		t.Fatal(err)
+	}
+	if credentials, _ := cli.store().LoadCredentials(); credentials["fly"].AppPassword != "a-longer-reader-password" {
+		t.Fatal("config set app-password must save the new password")
 	}
 	cli.stdout.Reset()
 	if err := cli.run("config", "show"); err != nil {
