@@ -235,40 +235,132 @@ function canonicalLocalFilename(destination: string, itemId: string): string | u
   return isMediaFilename(filename) ? filename : undefined;
 }
 
+// CommonMark caps link labels at 999 characters.
+const MAX_REFERENCE_LABEL_LENGTH = 999;
+
+/**
+ * Finds inline and reference-style Markdown images in time linear in the
+ * input length. Every delimiter lookup reads from tables built in single
+ * passes, so hostile input such as `"![".repeat(n)` cannot trigger a forward
+ * rescan from each image opener.
+ */
 function findMarkdownImages(markdown: string): ImageReference[] {
   const references: ImageReference[] = [];
+  if (!markdown.includes("![")) return references;
   const definitions = markdownImageDefinitions(markdown);
+  const nextBracketClose = nextUnescapedIndex(markdown, "]");
+  const nextBracketOpen = nextUnescapedIndex(markdown, "[");
+  const nextParenthesisClose = nextUnescapedIndex(markdown, ")");
+  const nextAngleClose = nextUnescapedIndex(markdown, ">");
+  const balancedClose = balancedParentheses(markdown);
+  const labelDestinations = new Map<number, string>();
+
+  // Reference labels may not contain unescaped brackets, so the labels that
+  // are looked up never overlap and each one is normalized at most once.
+  function referenceDestination(labelStart: number, labelEnd: number): string {
+    if (!definitions.size || labelEnd - labelStart > MAX_REFERENCE_LABEL_LENGTH) return "";
+    const bracket = at(nextBracketOpen, labelStart);
+    if (bracket >= 0 && bracket < labelEnd) return "";
+    let destination = labelDestinations.get(labelStart);
+    if (destination === undefined) {
+      const label = normalizeReferenceLabel(markdown.slice(labelStart, labelEnd));
+      destination = definitions.get(label) ?? "";
+      labelDestinations.set(labelStart, destination);
+    }
+    return destination;
+  }
+
   for (let start = 0; start < markdown.length; start += 1) {
     if (markdown[start] !== "!" || markdown[start + 1] !== "[") continue;
-    const altEnd = findUnescaped(markdown, "]", start + 2);
-    if (altEnd < 0) continue;
-    const alt = markdown.slice(start + 2, altEnd);
+    const altEnd = at(nextBracketClose, start + 2);
+    if (altEnd < 0) break;
     let destination = "";
     let end = altEnd + 1;
     if (markdown[altEnd + 1] === "(") {
-      const destinationEnd = findClosingParenthesis(markdown, altEnd + 2);
+      const destinationEnd = inlineDestinationEnd(
+        markdown,
+        altEnd + 2,
+        balancedClose,
+        nextAngleClose,
+        nextParenthesisClose,
+      );
       if (destinationEnd < 0) continue;
       destination = markdownDestination(markdown.slice(altEnd + 2, destinationEnd).trim());
       end = destinationEnd + 1;
     } else if (markdown[altEnd + 1] === "[") {
-      const labelEnd = findUnescaped(markdown, "]", altEnd + 2);
+      const labelEnd = at(nextBracketClose, altEnd + 2);
       if (labelEnd < 0) continue;
-      const label = markdown.slice(altEnd + 2, labelEnd) || alt;
-      destination = definitions.get(normalizeReferenceLabel(label)) ?? "";
+      destination =
+        labelEnd > altEnd + 2
+          ? referenceDestination(altEnd + 2, labelEnd)
+          : referenceDestination(start + 2, altEnd);
       end = labelEnd + 1;
     } else {
-      destination = definitions.get(normalizeReferenceLabel(alt)) ?? "";
+      destination = referenceDestination(start + 2, altEnd);
     }
     if (!destination) continue;
     references.push({
       start,
       end,
-      alt,
+      alt: markdown.slice(start + 2, altEnd),
       destination,
     });
     start = end - 1;
   }
   return references;
+}
+
+/** Returns the index of the `)` that closes an inline image destination. */
+function inlineDestinationEnd(
+  markdown: string,
+  offset: number,
+  balancedClose: Int32Array,
+  nextAngleClose: Int32Array,
+  nextParenthesisClose: Int32Array,
+): number {
+  let index = offset;
+  while (markdown[index] === " " || markdown[index] === "\t") index += 1;
+  if (markdown[index] !== "<") return at(balancedClose, offset);
+  const angleEnd = at(nextAngleClose, index + 1);
+  return angleEnd < 0 ? -1 : at(nextParenthesisClose, angleEnd + 1);
+}
+
+/**
+ * Builds a table whose entry `i` is the first index at or after `i` holding
+ * `token` not preceded by a backslash, or -1.
+ */
+function nextUnescapedIndex(value: string, token: string): Int32Array {
+  const next = new Int32Array(value.length + 1);
+  next[value.length] = -1;
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    next[index] =
+      value[index] === token && value[index - 1] !== "\\" ? index : (next[index + 1] ?? -1);
+  }
+  return next;
+}
+
+/**
+ * Builds a table whose entry `i` is the index of the `)` balancing the `(` at
+ * `i - 1`, or -1 when that parenthesis is unbalanced. A backslash escapes the
+ * following character.
+ */
+function balancedParentheses(value: string): Int32Array {
+  const closing = new Int32Array(value.length + 1).fill(-1);
+  const open: number[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\") index += 1;
+    else if (character === "(") open.push(index);
+    else if (character === ")") {
+      const opening = open.pop();
+      if (opening !== undefined) closing[opening + 1] = index;
+    }
+  }
+  return closing;
+}
+
+function at(table: Int32Array, index: number): number {
+  return table[index] ?? -1;
 }
 
 function markdownImageDefinitions(markdown: string): Map<string, string> {
@@ -290,31 +382,4 @@ function markdownDestination(raw: string): string {
     return end >= 0 ? raw.slice(1, end) : raw;
   }
   return raw.match(/^\S+/)?.[0] ?? raw;
-}
-
-function findUnescaped(value: string, token: string, offset: number): number {
-  for (let index = offset; index < value.length; index += 1) {
-    if (value[index] === token && value[index - 1] !== "\\") return index;
-  }
-  return -1;
-}
-
-function findClosingParenthesis(value: string, offset: number): number {
-  let depth = 0;
-  let angle = false;
-  for (let index = offset; index < value.length; index += 1) {
-    const character = value[index];
-    if (character === "\\") {
-      index += 1;
-      continue;
-    }
-    if (character === "<") angle = true;
-    else if (character === ">") angle = false;
-    else if (!angle && character === "(") depth += 1;
-    else if (!angle && character === ")") {
-      if (depth === 0) return index;
-      depth -= 1;
-    }
-  }
-  return -1;
 }
