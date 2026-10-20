@@ -27,7 +27,7 @@ Served only when an app password is configured. See [Claude and ChatGPT apps](..
 
 ## Library
 
-Available to browser sessions and to token clients.
+Available to browser sessions and to token clients. Without an app password, browser requests must address the server as `localhost`, `127.0.0.1`, or `[::1]`; other host names get `421`. `PATCH /api/items/:id/reading` and `POST /api/items/:id/kindle-deliveries` require `Content-Type: application/json` (`415` otherwise) and bodies up to 16 KiB (`413`).
 
 | Route                                   | Purpose                                                                      |
 | --------------------------------------- | ---------------------------------------------------------------------------- |
