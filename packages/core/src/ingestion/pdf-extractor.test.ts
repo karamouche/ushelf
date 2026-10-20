@@ -77,6 +77,22 @@ describe("PDF ingestion", () => {
     expect(result.assets[0]).toMatchObject({ mediaType: "image/png" });
     expect(result.media).toEqual({ discovered: 1, localized: 1, omitted: 0, filtered: 0 });
   });
+
+  it("skips images above the pixel limit before PDF.js decodes them", async () => {
+    // 8000 x 8000 grayscale is 64 Mpx (61 MiB decoded) but deflates to well under 100 KiB.
+    const bytes = makePdfWithCompressedImage(8000);
+    expect(bytes.length).toBeLessThan(128 * 1024);
+    const peakBefore = process.resourceUsage().maxRSS;
+
+    const result = await extractPdf(bytes, "bomb.pdf", ITEM_ID);
+
+    expect(result.markdown).toContain("Text beside an oversized figure");
+    expect(result.markdown).not.toContain("![PDF figure");
+    expect(result.assets).toEqual([]);
+    expect(result.media.localized).toBe(0);
+    // maxRSS is in KiB. Decoding the image would add at least its 61 MiB raster.
+    expect(process.resourceUsage().maxRSS - peakBefore).toBeLessThan(32 * 1024);
+  });
 });
 
 const ITEM_ID = "e7cf9d0d-bba8-4b93-9503-ab8f15de9d2f";
@@ -153,6 +169,30 @@ function makePdfWithImage(): Buffer {
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf);
+}
+
+function makePdfWithCompressedImage(side: number): Buffer {
+  const content = Buffer.from(
+    textAt("F1", 12, 72, 720, "Text beside an oversized figure, long enough for extraction.") +
+      `\nq\n200 0 0 200 72 400 cm\n/Im1 Do\nQ`,
+  );
+  const image = deflateSync(Buffer.alloc(side * side, 0x7f), { level: 9 });
+  return buildPdf([
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    Buffer.from(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>",
+    ),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+    pdfStream(content),
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width ${side} /Height ${side} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`,
+      ),
+      image,
+      Buffer.from("\nendstream"),
+    ]),
+  ]);
 }
 
 function makeLayoutAwarePdf(): Buffer {
