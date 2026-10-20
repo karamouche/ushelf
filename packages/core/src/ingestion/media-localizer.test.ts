@@ -100,6 +100,34 @@ describe("Markdown media localization", () => {
     expect(result.markdown).toContain(`![A figure](../../files/${ITEM_ID}/media/`);
   });
 
+  it("scans unterminated image syntax in linear time", async () => {
+    const started = performance.now();
+    for (const unit of ["![", "![](", "![a]["]) {
+      const markdown = `${unit.repeat(500_000)}\n\n[b]: https://cdn.example.test/b.png`;
+      const result = await localizeMarkdownImages(markdown, ITEM_ID);
+      expect(result.assets).toEqual([]);
+      expect(result.stats.discovered).toBe(0);
+    }
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps balanced parentheses inside inline image destinations", () => {
+    expect(() =>
+      assertLocalMarkdownImages("![A](https://example.com/a_(1).png) (aside)", ITEM_ID),
+    ).toThrow(/non-local image/);
+  });
+
+  it("ends angle-bracketed destinations after their title", () => {
+    const filename = `${"b".repeat(64)}.png`;
+    expect(
+      assertLocalMarkdownImages(
+        `![A](<../../files/${ITEM_ID}/media/${filename}> "Title") (more)`,
+        ITEM_ID,
+      ),
+    ).toEqual([filename]);
+  });
+
   it("sanitizes active and externally loaded SVG content", () => {
     const result = validateImage(
       new TextEncoder().encode(

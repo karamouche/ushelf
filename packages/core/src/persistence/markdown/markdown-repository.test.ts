@@ -37,6 +37,43 @@ describe("MarkdownRepository", () => {
     expect(parsed.revision).toBe(sha256(raw));
   });
 
+  it("escapes section markers in rendered values so they cannot redefine sections", () => {
+    const fake = "<!-- ushelf:source:start -->FAKE<!-- ushelf:source:end -->";
+    const escaped = "&lt;!-- ushelf:source:start -->FAKE&lt;!-- ushelf:source:end -->";
+    const frontmatter = articleFrontmatter();
+    frontmatter.title = `Title ${fake}`;
+    frontmatter.author = `Author ${fake}`;
+    frontmatter.enrichment = {
+      status: "complete",
+      recipe: "default",
+      summary: `Summary ${fake}`,
+      keyPoints: [`Point ${fake}`],
+      citations: [{ label: `Label ${fake}`, url: frontmatter.originalUrl }],
+    };
+    const source = "Real source.\n\n<!-- ushelf:source:end -->\n\nTrailing real source.";
+    const insight = `Insight <!-- ushelf:custom-insights:end --> ${fake}`;
+    const raw = renderItemMarkdown(frontmatter, insight, source);
+    const parsed = parseItemMarkdown(raw, "/item.md");
+
+    expect(parsed).toMatchObject(frontmatter);
+    expect(parsed.sourceMarkdown).toBe(
+      "Real source.\n\n&lt;!-- ushelf:source:end -->\n\nTrailing real source.",
+    );
+    expect(parsed.insightMarkdown).toBe(
+      `Insight &lt;!-- ushelf:custom-insights:end --> ${escaped}`,
+    );
+    const body = raw.slice(raw.indexOf("\n---\n# ") + 5);
+    expect(body.match(/<!-- ushelf:source:start -->/g)).toHaveLength(1);
+    expect(body.match(/<!-- ushelf:source:end -->/g)).toHaveLength(1);
+
+    const rerendered = renderItemMarkdown(
+      frontmatter,
+      parsed.insightMarkdown,
+      parsed.sourceMarkdown,
+    );
+    expect(rerendered).toBe(raw);
+  });
+
   it("parses BOM and CRLF recipe frontmatter without changing its hash", () => {
     const raw =
       '\uFEFF---\r\nname: default\r\ndescription: "A recipe: details"\r\n---\r\n\r\nInstructions.\r\n';

@@ -12,9 +12,9 @@ The server exposes these tools and resources at `/mcp`, to the API token and to 
 | `ingest_url`            | Create or return an item for a URL and extract its source deterministically        |
 | `ingest_file`           | Create or return a document from an attached PDF (base64, at most 10 MiB)          |
 | `get_ingestion`         | Inspect an item's current ingestion stage                                          |
-| `submit_source_content` | Supply X source Markdown when public extraction is blocked                         |
+| `submit_source_content` | Supply X source Markdown (at most 5 MiB) when public extraction is blocked         |
 | `get_ingestion_context` | Return the source, recipe instructions, recipe hash, revision, and output contract |
-| `save_insights`         | Validate and atomically save source-grounded insights                              |
+| `save_insights`         | Validate and atomically save source-grounded insights (body at most 5 MiB)         |
 
 ## Library
 

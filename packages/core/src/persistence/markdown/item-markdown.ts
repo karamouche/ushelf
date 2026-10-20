@@ -13,6 +13,16 @@ const CUSTOM_INSIGHTS_START = "<!-- ushelf:custom-insights:start -->";
 const CUSTOM_INSIGHTS_END = "<!-- ushelf:custom-insights:end -->";
 const SOURCE_START = "<!-- ushelf:source:start -->";
 const SOURCE_END = "<!-- ushelf:source:end -->";
+const MARKER_PREFIX = "<!-- ushelf:";
+
+/**
+ * Every value rendered into the item body must pass through this so that only the codec's own
+ * markers delimit sections. Escaping `<` displays the same text but never yields `<!--`, so the
+ * result is stable across render/parse round trips.
+ */
+function neutralizeMarkers(value: string): string {
+  return value.replaceAll(MARKER_PREFIX, "&lt;!-- ushelf:");
+}
 
 function parseFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
   const match = /^(?:\uFEFF)?---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m.exec(raw);
@@ -30,10 +40,10 @@ export function sha256(value: string): string {
 
 function sourceLine(frontmatter: ItemFrontmatter): string {
   if (frontmatter.sourceType === "document") {
-    return `Original file: ${frontmatter.file.name}`;
+    return `Original file: ${neutralizeMarkers(frontmatter.file.name)}`;
   }
-  const author = frontmatter.author ? ` · ${frontmatter.author}` : "";
-  return `[Open original](${frontmatter.originalUrl})${author}`;
+  const author = frontmatter.author ? ` · ${neutralizeMarkers(frontmatter.author)}` : "";
+  return `[Open original](${neutralizeMarkers(frontmatter.originalUrl)})${author}`;
 }
 
 export function renderItemMarkdown(
@@ -47,11 +57,11 @@ export function renderItemMarkdown(
   const insights =
     frontmatter.enrichment.status === "complete"
       ? [
-          summary ? `### Summary\n\n${summary}` : "",
+          summary ? `### Summary\n\n${neutralizeMarkers(summary)}` : "",
           keyPoints.length
-            ? `### Key points\n\n${keyPoints.map((point) => `- ${point}`).join("\n")}`
+            ? `### Key points\n\n${keyPoints.map((point) => `- ${neutralizeMarkers(point)}`).join("\n")}`
             : "",
-          `${CUSTOM_INSIGHTS_START}\n${insightMarkdown.trim()}\n${CUSTOM_INSIGHTS_END}`,
+          `${CUSTOM_INSIGHTS_START}\n${neutralizeMarkers(insightMarkdown.trim())}\n${CUSTOM_INSIGHTS_END}`,
           citations.length ? `### Citations\n\n${citations.map(renderCitation).join("\n")}` : "",
         ]
           .filter(Boolean)
@@ -59,7 +69,7 @@ export function renderItemMarkdown(
       : "_Waiting for an agent to add insights._";
 
   const body = [
-    `# ${frontmatter.title}`,
+    `# ${neutralizeMarkers(frontmatter.title)}`,
     "",
     sourceLine(frontmatter),
     "",
@@ -72,7 +82,7 @@ export function renderItemMarkdown(
     "## Source",
     "",
     SOURCE_START,
-    sourceMarkdown.trim() || "_Source content has not been supplied yet._",
+    neutralizeMarkers(sourceMarkdown.trim()) || "_Source content has not been supplied yet._",
     SOURCE_END,
     "",
   ].join("\n");
@@ -84,13 +94,15 @@ function renderCitation(
   citation: NonNullable<ItemFrontmatter["enrichment"]["citations"]>[number],
 ): string {
   return "url" in citation
-    ? `- [${citation.label}](${citation.url})`
-    : `- Page ${citation.page} — ${citation.label}`;
+    ? `- [${neutralizeMarkers(citation.label)}](${neutralizeMarkers(citation.url)})`
+    : `- Page ${citation.page} — ${neutralizeMarkers(citation.label)}`;
 }
 
 function section(body: string, start: string, end: string): string {
+  // Rendered values never contain markers; pairing the first start with the last end also keeps a
+  // stray hand-edited end marker from truncating a section.
   const startIndex = body.indexOf(start);
-  const endIndex = body.indexOf(end);
+  const endIndex = body.lastIndexOf(end);
   if (startIndex < 0 || endIndex < startIndex) return "";
   return body.slice(startIndex + start.length, endIndex).trim();
 }
