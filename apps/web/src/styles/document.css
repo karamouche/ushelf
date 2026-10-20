@@ -4,22 +4,18 @@
   padding-top: 58px;
 }
 .document > h2 {
-  font:
-    400 31px Georgia,
-    serif;
+  font: 400 31px var(--font-serif);
   letter-spacing: -0.03em;
   padding-bottom: 15px;
-  border-bottom: 1px solid #111;
+  border-bottom: 1px solid var(--color-ink);
 }
 .document h3 {
-  font:
-    400 23px Georgia,
-    serif;
+  font: 400 23px var(--font-serif);
   margin-top: 40px;
 }
 .document p,
 .document li {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-serif);
   font-size: 17px;
   line-height: 1.68;
 }
@@ -42,7 +38,7 @@
   font-style: italic;
 }
 .document blockquote {
-  border-left: 2px solid #111;
+  border-left: 2px solid var(--color-ink);
   margin: 30px 0;
   padding: 1px 0 1px 24px;
   color: #555;
@@ -50,7 +46,7 @@
 .document pre {
   overflow: auto;
   padding: 18px;
-  background: #f3f3f3;
+  background: var(--color-surface);
 }
 .document code {
   font-size: 0.85em;
@@ -73,7 +69,7 @@
 }
 .mermaid-loading,
 .mermaid-fallback > p {
-  color: #777;
+  color: var(--color-muted);
   font-family: ui-sans-serif, sans-serif;
   font-size: 13px;
 }
@@ -86,10 +82,10 @@
   overflow-x: auto;
   border: 1px solid #d7d7d7;
   transform: translateX(-50%);
-  scrollbar-color: #aaa #f2f2f2;
+  scrollbar-color: var(--color-line-strong) #f2f2f2;
 }
 .table-scroll:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--color-ink);
   outline-offset: 3px;
 }
 .document table {
@@ -115,7 +111,7 @@
   border-bottom: 0;
 }
 .document th {
-  background: #f3f3f3;
+  background: var(--color-surface);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;

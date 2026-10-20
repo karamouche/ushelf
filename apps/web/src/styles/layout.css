@@ -21,7 +21,7 @@
   font-size: 22px;
 }
 .brand span {
-  font-family: Georgia, serif;
+  font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;
 }
@@ -32,7 +32,7 @@
   margin-left: auto;
   padding: 8px 12px;
   background: transparent;
-  border: 1px solid #aaa;
+  border: 1px solid var(--color-line-strong);
   cursor: pointer;
   font-size: 12px;
 }
@@ -48,17 +48,15 @@ main {
   font-size: 42px;
 }
 .empty h2 {
-  font:
-    400 28px Georgia,
-    serif;
+  font: 400 28px var(--font-serif);
   margin: 20px 0 8px;
 }
 .empty p {
-  color: #777;
+  color: var(--color-muted);
   line-height: 1.55;
 }
 .loading {
-  color: #777;
+  color: var(--color-muted);
   text-align: center;
   padding: 100px 0;
 }
