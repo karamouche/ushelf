@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { cors } from "hono/cors";
 import { createMiddleware } from "hono/factory";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -69,7 +68,6 @@ export function createApp(
   installApiTokenAuth(app, options.apiToken, connectorOAuth);
   if (!passwordGate) installLoopbackHostGuard(app);
   installWebAuth(app, prefix, passwordGate, options, connectorOAuth?.isPublicPath);
-  app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
   connectorOAuth?.install(app);
   const requireMcp = requireMcpAccess(connectorOAuth);
 

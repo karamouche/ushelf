@@ -8,7 +8,7 @@ This guide applies to `apps/server`. Read the repository `AGENTS.md`, root `READ
 
 ## Source responsibilities
 
-- `src/app.ts`: construct the injectable Hono app, API and MCP routes, adapter validation, CORS, error responses, configured base path, and production SPA/static routing.
+- `src/app.ts`: construct the injectable Hono app, API and MCP routes, adapter validation, error responses, configured base path, and production SPA/static routing.
 - `src/api-auth.ts`: bearer-token authentication for the CLI and agents, plus connector access tokens on `/mcp`; `src/web-auth.ts`: password sessions for browsers and the shared `PasswordGate`; `src/auth-page.ts`: the embedded stylesheet, HTML shell, and escaping helpers for the server-rendered sign-in and consent pages.
 - `src/oauth.ts`: OAuth discovery metadata, dynamic client registration, the consent page, and the token and revocation endpoints for remote MCP connectors. Grant rules and persistence belong in Core's `ConnectorAuthorization`.
 - `src/index.ts`: initialize `ShelfService`, resolve runtime host/port/base-path settings, locate the built web app, and start Node's HTTP server.
@@ -22,7 +22,7 @@ Keep `createApp` testable with an injected service. Avoid module-level server st
 - Validate query and body values at the HTTP boundary, preferably with schemas exported by Core. Pass complete use cases to `ShelfService` rather than coordinating persistence here.
 - Keep response envelopes stable (`{ items }`, `{ item }`, `{ recipes }`, `{ error }`). If a response field or accepted value changes, update `apps/web/src/api.ts` and affected web behavior/tests in the same change.
 - Reading-state writes should forward the client's revision so stale updates can be rejected.
-- Preserve the development CORS allowlist unless development origins intentionally change. Keep the loopback host default; remote exposure requires HTTPS, `USHELF_APP_PASSWORD`, and `USHELF_API_TOKEN`.
+- Do not add CORS to the reader API: Vite proxies `/api` and `/auth` in development, so the reader is always same-origin. Keep the loopback host default; remote exposure requires HTTPS, `USHELF_APP_PASSWORD`, and `USHELF_API_TOKEN`.
 - Agent-only and administrative routes must use `requireApiToken`. Never let a browser cookie authorize them, and never return stored credentials.
 - Connector OAuth tokens authorize `/mcp` only. Never accept them on `/api` routes, and never let connectors reach token-only administrative routes.
 - OAuth stays tied to the app password: the owner approves every connector by entering it on the consent page, and attempts share the sign-in rate limit. Keep S256 PKCE mandatory, redirect URIs exact (loopback ports excepted), and never redirect to an unregistered URI.
