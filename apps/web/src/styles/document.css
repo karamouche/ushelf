@@ -4,13 +4,13 @@
   padding-top: 58px;
 }
 .document > h2 {
-  font: 400 31px var(--font-serif);
+  font: 400 31px var(--font-display);
   letter-spacing: -0.03em;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--color-ink);
 }
 .document h3 {
-  font: 400 23px var(--font-serif);
+  font: 400 23px var(--font-display);
   margin-top: 40px;
 }
 .document p,
