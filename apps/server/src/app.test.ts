@@ -294,32 +294,34 @@ describe("optional app password", () => {
     ).toBe(401);
   });
 
-  it("limits failed sign-ins without letting them lock out the owner", async () => {
-    const app = createApp({} as ShelfService, undefined, "/reader/", { password });
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const response = await app.request(`${origin}/reader/auth/login`, {
+  it("refuses every sign-in, even the correct password, while rate limited", async () => {
+    let clock = 1_000_000;
+    const app = createApp({} as ShelfService, undefined, "/reader/", {
+      password,
+      now: () => clock,
+    });
+    const attempt = (value: string) =>
+      app.request(`${origin}/reader/auth/login`, {
         method: "POST",
         headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-        body: "password=wrong",
+        body: new URLSearchParams({ password: value }).toString(),
       });
-      expect(response.status).toBe(401);
-    }
-    const limited = await app.request(`${origin}/reader/auth/login`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-      body: "password=wrong",
-    });
+    for (let count = 0; count < 10; count++) expect((await attempt("wrong")).status).toBe(401);
+    const limited = await attempt("wrong");
     expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    const correctWhileLimited = await attempt(password);
+    expect(correctWhileLimited.status).toBe(429);
+    expect(correctWhileLimited.headers.get("set-cookie")).toBeNull();
+    clock += 60_001;
     const cookie = await signIn(app, "/reader");
     expect((await app.request(`${origin}/reader/auth/login`, { headers: { cookie } })).status).toBe(
       303,
     );
-    const afterSignIn = await app.request(`${origin}/reader/auth/login`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-      body: "password=wrong",
-    });
-    expect(afterSignIn.status).toBe(401);
+    expect((await attempt("wrong")).status).toBe(401);
+  });
+
+  it("keeps sessions scoped to the base path and rejects open redirects", async () => {
     const fresh = createApp({} as ShelfService, undefined, "/reader/", { password });
     const freshCookie = await signIn(fresh, "/reader");
     expect((await fresh.request(`${origin}/reader/api/health`)).status).toBe(200);

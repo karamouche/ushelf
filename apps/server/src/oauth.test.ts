@@ -18,7 +18,7 @@ afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
 
-async function fixture(basePath = "/") {
+async function fixture(basePath = "/", now?: () => number) {
   const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-oauth-test-"));
   roots.push(root);
   const service = new ShelfService(resolveConfig(root));
@@ -26,6 +26,7 @@ async function fixture(basePath = "/") {
     apiToken: API_TOKEN,
     password: PASSWORD,
     version: "1.2.3",
+    ...(now ? { now } : {}),
   });
   const prefix = basePath === "/" ? "" : basePath.replace(/\/$/, "");
   const request = (pathname: string, init?: RequestInit) =>
@@ -312,6 +313,34 @@ describe("connector OAuth", () => {
       },
     });
     expect(crossSite.status).toBe(403);
+  });
+
+  it("refuses consent, even with the correct password, while sign-ins are rate limited", async () => {
+    let clock = 1_000_000;
+    const { request } = await fixture("/", () => clock);
+    const client = await register(request);
+    const params = authorizeParams(client.client_id);
+    // Browser sign-in failures fill the same bucket the consent page checks.
+    for (let count = 0; count < 10; count++) {
+      const failed = await request("/auth/login", form({ password: "wrong" }));
+      expect(failed.status).toBe(401);
+    }
+    const limited = await request(
+      "/oauth/authorize",
+      form({ ...params, password: PASSWORD, decision: "allow" }),
+    );
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(limited.headers.get("location")).toBeNull();
+    expect(await limited.text()).toContain("Too many attempts.");
+
+    clock += 60_001;
+    const approved = await request(
+      "/oauth/authorize",
+      form({ ...params, password: PASSWORD, decision: "allow" }),
+    );
+    expect(approved.status).toBe(303);
+    expect(new URL(approved.headers.get("location")!).searchParams.get("code")).toBeTruthy();
   });
 
   it("never redirects to unregistered addresses and rejects other resources", async () => {

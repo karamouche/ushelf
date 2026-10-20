@@ -19,6 +19,12 @@ export interface WebAuthOptions {
 /**
  * Verifies the app password. Browser sign-in and connector consent share one failure bucket,
  * so neither form can be used to brute-force the password faster than the other.
+ *
+ * Once the bucket is full, every attempt is refused before the password is compared, including
+ * the correct one: otherwise a "limited" answer would only mean "wrong password" and guessing
+ * would stay unbounded. Existing browser sessions, API tokens, and connector tokens never pass
+ * through the gate, so they keep working. The trade-off is that an attacker can delay new
+ * sign-ins and connector approvals for up to one window.
  */
 export class PasswordGate {
   private readonly expected: Buffer;
@@ -32,15 +38,14 @@ export class PasswordGate {
   }
 
   check(supplied: string): "ok" | "invalid" | "limited" {
-    const valid = timingSafeEqual(createHash("sha256").update(supplied).digest(), this.expected);
     const threshold = this.now() - FAILED_LOGIN_WINDOW_MS;
     while (this.failures.length && this.failures[0]! <= threshold) this.failures.shift();
-    // A shared failure bucket must never let unauthenticated callers lock out the owner.
+    if (this.failures.length >= FAILED_LOGIN_LIMIT) return "limited";
+    const valid = timingSafeEqual(createHash("sha256").update(supplied).digest(), this.expected);
     if (valid) {
       this.failures.length = 0;
       return "ok";
     }
-    if (this.failures.length >= FAILED_LOGIN_LIMIT) return "limited";
     this.failures.push(this.now());
     return "invalid";
   }
