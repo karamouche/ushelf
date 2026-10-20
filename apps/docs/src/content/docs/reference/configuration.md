@@ -20,7 +20,7 @@ Containers use `/data` as `USHELF_ROOT`. Set `USHELF_ROOT` to move the complete 
 
 For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and a reverse proxy must preserve the prefix.
 
-Without `USHELF_API_TOKEN`, the MCP endpoint and administrative routes are unavailable. Without `USHELF_APP_PASSWORD`, browser access needs no sign-in, which is only appropriate on loopback.
+Without `USHELF_API_TOKEN`, the MCP endpoint and administrative routes are unavailable. Without `USHELF_APP_PASSWORD`, browser access needs no sign-in, so the server answers only requests addressed to `localhost`, `127.0.0.1`, or `[::1]` and returns `421` for any other `Host` unless the request carries the API token. Set a password to reach the reader through any other address.
 
 ## CLI files
 

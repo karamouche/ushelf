@@ -48,11 +48,11 @@ Shared flags for every target:
 
 ### deploy local
 
-| Flag     | Default     | Purpose               |
-| -------- | ----------- | --------------------- |
-| `--name` | `local`     | Context name          |
-| `--host` | `127.0.0.1` | Address to publish on |
-| `--port` | `43110`     | HTTP port             |
+| Flag     | Default     | Purpose                                                                                                |
+| -------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `--name` | `local`     | Context name                                                                                           |
+| `--host` | `127.0.0.1` | Address to publish on; anything other than `127.0.0.1`, `::1`, or `localhost` requires an app password |
+| `--port` | `43110`     | HTTP port                                                                                              |
 
 ### deploy ssh USER@HOST[:PORT]
 
