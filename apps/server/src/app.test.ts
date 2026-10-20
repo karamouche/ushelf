@@ -294,32 +294,34 @@ describe("optional app password", () => {
     ).toBe(401);
   });
 
-  it("limits failed sign-ins without letting them lock out the owner", async () => {
-    const app = createApp({} as ShelfService, undefined, "/reader/", { password });
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const response = await app.request(`${origin}/reader/auth/login`, {
+  it("refuses every sign-in, even the correct password, while rate limited", async () => {
+    let clock = 1_000_000;
+    const app = createApp({} as ShelfService, undefined, "/reader/", {
+      password,
+      now: () => clock,
+    });
+    const attempt = (value: string) =>
+      app.request(`${origin}/reader/auth/login`, {
         method: "POST",
         headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-        body: "password=wrong",
+        body: new URLSearchParams({ password: value }).toString(),
       });
-      expect(response.status).toBe(401);
-    }
-    const limited = await app.request(`${origin}/reader/auth/login`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-      body: "password=wrong",
-    });
+    for (let count = 0; count < 10; count++) expect((await attempt("wrong")).status).toBe(401);
+    const limited = await attempt("wrong");
     expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    const correctWhileLimited = await attempt(password);
+    expect(correctWhileLimited.status).toBe(429);
+    expect(correctWhileLimited.headers.get("set-cookie")).toBeNull();
+    clock += 60_001;
     const cookie = await signIn(app, "/reader");
     expect((await app.request(`${origin}/reader/auth/login`, { headers: { cookie } })).status).toBe(
       303,
     );
-    const afterSignIn = await app.request(`${origin}/reader/auth/login`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
-      body: "password=wrong",
-    });
-    expect(afterSignIn.status).toBe(401);
+    expect((await attempt("wrong")).status).toBe(401);
+  });
+
+  it("keeps sessions scoped to the base path and rejects open redirects", async () => {
     const fresh = createApp({} as ShelfService, undefined, "/reader/", { password });
     const freshCookie = await signIn(fresh, "/reader");
     expect((await fresh.request(`${origin}/reader/api/health`)).status).toBe(200);
@@ -331,5 +333,54 @@ describe("optional app password", () => {
       { headers: { cookie: freshCookie } },
     );
     expect(response.headers.get("location")).toBe("/reader/");
+  });
+
+  async function signInWithNext(app: ReturnType<typeof createApp>, next: string) {
+    return app.request(`${origin}/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password, next }).toString(),
+    });
+  }
+
+  function expectSameOriginRedirect(response: Response) {
+    expect(response.status).toBe(303);
+    const location = response.headers.get("location")!;
+    expect(location).not.toMatch(/[\\\u0000-\u001f\u007f]/);
+    expect(location.startsWith("//")).toBe(false);
+    expect(new URL(location, origin).origin).toBe(origin);
+    return location;
+  }
+
+  it.each([
+    "/\t/evil.example",
+    "/\n/evil.example",
+    "/\r/evil.example",
+    "/%09/evil.example",
+    "/\\evil.example",
+    "//evil.example",
+  ])("keeps sign-in redirects on the same origin for next=%j", async (next) => {
+    const app = createApp({} as ShelfService, undefined, "/", { password });
+    const signedIn = await signInWithNext(app, next);
+    expectSameOriginRedirect(signedIn);
+    const cookie = signedIn.headers.get("set-cookie")!.split(";")[0]!;
+    for (const query of [encodeURIComponent(next), next]) {
+      const response = await app.request(`${origin}/auth/login?next=${query}`, {
+        headers: { cookie },
+      });
+      expectSameOriginRedirect(response);
+    }
+  });
+
+  it("preserves a safe sign-in redirect path and query", async () => {
+    const app = createApp({} as ShelfService, undefined, "/", { password });
+    const signedIn = await signInWithNext(app, "/items/x?y=1");
+    expect(expectSameOriginRedirect(signedIn)).toBe("/items/x?y=1");
+    const cookie = signedIn.headers.get("set-cookie")!.split(";")[0]!;
+    const response = await app.request(
+      `${origin}/auth/login?next=${encodeURIComponent("/items/x?y=1")}`,
+      { headers: { cookie } },
+    );
+    expect(expectSameOriginRedirect(response)).toBe("/items/x?y=1");
   });
 });

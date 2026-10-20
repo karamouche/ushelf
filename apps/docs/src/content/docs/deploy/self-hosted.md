@@ -12,7 +12,7 @@ The image is `ghcr.io/karamouche/ushelf:<version>`. Give it:
 - A persistent volume mounted at `/data`.
 - `USHELF_HOST=0.0.0.0` so it listens inside the container, and optionally `USHELF_PORT` (default `43110`).
 - `USHELF_API_TOKEN`, a random string of at least 32 characters, for example from `openssl rand -base64 32`.
-- `USHELF_APP_PASSWORD` whenever the reader is reachable beyond loopback.
+- `USHELF_APP_PASSWORD`, at least 12 characters, whenever the reader is reachable beyond loopback.
 - HTTPS in front of it, preserving the original `Host` header.
 
 The container runs as an unprivileged user. If it starts as root, for example on a platform with root-owned volumes, it takes ownership of `/data` and drops privileges before starting the server. See [Configuration](../../reference/configuration/) for every variable.
