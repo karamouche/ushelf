@@ -44,6 +44,36 @@ func TestContextSpecValidationRejectsMisplacedFields(t *testing.T) {
 	}
 }
 
+func TestOnlyLoopbackLocalContextsMayOmitTheAppPassword(t *testing.T) {
+	for _, test := range []struct {
+		spec ContextSpec
+		want bool
+	}{
+		{ContextSpec{Driver: DriverLocal}, false},
+		{ContextSpec{Driver: DriverLocal, Host: "127.0.0.1"}, false},
+		{ContextSpec{Driver: DriverLocal, Host: "localhost"}, false},
+		{ContextSpec{Driver: DriverLocal, Host: "::1"}, false},
+		{ContextSpec{Driver: DriverLocal, Host: "0.0.0.0"}, true},
+		{ContextSpec{Driver: DriverLocal, Host: "::"}, true},
+		{ContextSpec{Driver: DriverLocal, Host: "192.168.1.20"}, true},
+		{ContextSpec{Driver: DriverLocal, Host: "127.0.0.2"}, true},
+		{ContextSpec{Driver: DriverSSH, SSH: "me@vps", Domain: "ushelf.example.com"}, true},
+		{ContextSpec{Driver: DriverFly, App: "my-ushelf", Region: "cdg"}, true},
+		{ContextSpec{Driver: DriverExternal, URL: "https://ushelf.example.com/"}, false},
+	} {
+		if got := test.spec.RequiresAppPassword(); got != test.want {
+			t.Errorf("%#v: RequiresAppPassword = %v, want %v", test.spec, got, test.want)
+		}
+		err := requirePasswordFor(test.spec, Credentials{APIToken: testToken})
+		if (err != nil) != test.want {
+			t.Errorf("%#v: requirePasswordFor without a password = %v", test.spec, err)
+		}
+		if err := requirePasswordFor(test.spec, Credentials{APIToken: testToken, AppPassword: "pw"}); err != nil {
+			t.Errorf("%#v: requirePasswordFor with a password = %v", test.spec, err)
+		}
+	}
+}
+
 func TestResolveHomePrecedence(t *testing.T) {
 	t.Setenv("USHELF_ROOT", "/tmp/from-env")
 	if home, _ := ResolveHome("/tmp/from-flag"); home != "/tmp/from-flag" {
