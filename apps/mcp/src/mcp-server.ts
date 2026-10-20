@@ -71,7 +71,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
       description: "Supply X source Markdown when public extraction is blocked.",
       inputSchema: {
         itemId: z.uuid(),
-        title: z.string().min(1),
+        title: z.string().trim().min(1),
         markdown: z.string().min(40).max(MAX_AGENT_MARKDOWN_LENGTH),
         author: z.string().optional(),
         publishedAt: z.iso.datetime().optional(),
