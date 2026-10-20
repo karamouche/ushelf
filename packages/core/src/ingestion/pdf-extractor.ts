@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+import { MessageChannel, Worker } from "node:worker_threads";
 import { deflateSync } from "node:zlib";
 // PDF.js names its Node-compatible distribution "legacy"; this is unrelated to uShelf schemas.
-import { getDocument, ImageKind, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, ImageKind, OPS, PDFWorker } from "pdfjs-dist/legacy/build/pdf.mjs";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { MediaCaptureStats } from "../domain/library-item.js";
 import type { MediaAsset } from "./media-localizer.js";
 import { mediaPath } from "./media-localizer.js";
@@ -14,6 +18,23 @@ const MIN_IMAGE_PIXELS = 64;
 const MIN_RENDERED_POINTS = 32;
 const MAX_IMAGE_PIXELS = 25_000_000;
 const MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+const PDF_WORKER_MEMORY_BYTES = 512 * 1024 * 1024;
+const PDF_WORKER_HEAP_MB = 256;
+const PDF_WORKER_SAMPLE_MS = 10;
+const PDF_EXTRACTION_TIMEOUT_MS = 120_000;
+const PDF_MEMORY_ERROR = "PDF needs too much memory to extract";
+const PDF_WORKER_ERROR = "PDF extraction failed unexpectedly";
+const PDF_WORKER_MODULE_URL = pathToFileURL(
+  createRequire(import.meta.url).resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"),
+).href;
+// Runs PDF.js's worker side in a worker thread, connected through the transferred port.
+const PDF_WORKER_SOURCE = `
+const { workerData } = require("node:worker_threads");
+import(workerData.moduleUrl).then(({ WorkerMessageHandler }) => {
+  workerData.port.start();
+  WorkerMessageHandler.initializeFromPort(workerData.port);
+});
+`;
 
 export interface ExtractedPdf {
   title: string;
@@ -50,8 +71,10 @@ export async function extractPdf(
   filename: string,
   itemId: string,
 ): Promise<ExtractedPdf> {
+  const isolate = startPdfWorker();
   const loadingTask = getDocument({
     data: new Uint8Array(bytes),
+    worker: isolate.pdfWorker,
     // PDF.js enforces this from the image dictionary before decoding, so an oversized raster
     // never reaches memory. With stopAtErrors it truncates that page's operator list, so the
     // page keeps its text but its figures are dropped.
@@ -62,110 +85,193 @@ export async function extractPdf(
     useWasm: false,
   });
   try {
-    const document = await loadingTask.promise;
-    if (document.numPages > MAX_PDF_PAGES) {
-      throw new Error("PDF contains more than 500 pages");
-    }
-    const metadata = await document.getMetadata().catch(() => undefined);
-    const info = metadata?.info as { Title?: unknown; Author?: unknown } | undefined;
-    const metadataTitle = cleanMetadata(info?.Title);
-    const author = cleanMetadata(info?.Author);
-    const pages: string[] = [];
-    const assets = new Map<string, MediaAsset>();
-    const media: MediaCaptureStats = { discovered: 0, localized: 0, omitted: 0, filtered: 0 };
-    let mediaBytes = 0;
-    let visibleCharacters = 0;
-    let inferredTitle: string | undefined;
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
-      const [content, operatorList] = await Promise.all([
-        page.getTextContent(),
-        page.getOperatorList(),
-      ]);
-      const layout = pageTextLayout(content.items);
-      const titleLine = pageNumber === 1 ? inferTitleLine(layout) : undefined;
-      if (!metadataTitle && titleLine) inferredTitle = titleLine.text;
-      const chosenTitle = metadataTitle ?? inferredTitle;
-      const textBlocks = renderTextBlocks(
-        layout,
-        titleLine && chosenTitle && normalizedText(titleLine.text) === normalizedText(chosenTitle)
-          ? titleLine
-          : undefined,
-      );
-      const blocks: PositionedBlock[] = [...textBlocks];
-      const figureResult = await pageFigures(page, operatorList.fnArray, operatorList.argsArray);
-      const figures = figureResult.figures;
-      media.discovered += figures.length + figureResult.filtered + figureResult.omitted.length;
-      media.filtered += figureResult.filtered;
-      media.omitted += figureResult.omitted.length;
-      for (const y of figureResult.omitted) {
-        blocks.push({ y, markdown: "*Image omitted: unsupported PDF figure.*" });
-      }
-      for (const figure of figures) {
-        if (
-          figure.width < MIN_IMAGE_PIXELS ||
-          figure.height < MIN_IMAGE_PIXELS ||
-          figure.renderedWidth < MIN_RENDERED_POINTS ||
-          figure.renderedHeight < MIN_RENDERED_POINTS
-        ) {
-          media.filtered += 1;
-          continue;
-        }
-        if (figure.width * figure.height > MAX_IMAGE_PIXELS) {
-          media.omitted += 1;
-          blocks.push({ y: figure.y, markdown: "*Image omitted: PDF figure is too large.*" });
-          continue;
-        }
-        try {
-          const png = encodePng(figure);
-          const digest = createHash("sha256").update(png).digest("hex");
-          const filename = `${digest}.png`;
-          if (!assets.has(filename)) {
-            if (mediaBytes + png.byteLength > MAX_MEDIA_BYTES) throw new Error("media limit");
-            mediaBytes += png.byteLength;
-            assets.set(filename, { filename, mediaType: "image/png", bytes: png });
-          }
-          media.localized += 1;
-          blocks.push({
-            y: figure.y,
-            markdown: `![PDF figure — page ${pageNumber}](${mediaPath(itemId, filename)})`,
-          });
-        } catch {
-          media.omitted += 1;
-          blocks.push({ y: figure.y, markdown: "*Image omitted: PDF figure.*" });
-        }
-      }
-      blocks.sort((left, right) => right.y - left.y);
-      const text = blocks
-        .map((block) => block.markdown)
-        .join("\n\n")
-        .trim();
-      visibleCharacters += layout.visibleCharacters;
-      pages.push(`## Page ${pageNumber}\n\n${text || "_No extractable text on this page._"}`);
-    }
-    if (visibleCharacters < MIN_VISIBLE_CHARACTERS) {
-      throw new Error("PDF does not contain enough embedded text; OCR is not supported");
-    }
-    const markdown = pages.join("\n\n");
-    if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES) {
-      throw new Error("Extracted PDF text is larger than 5 MiB");
-    }
-    const title =
-      metadataTitle ?? inferredTitle ?? (filename.replace(/\.pdf$/i, "").trim() || "Document");
-    return {
-      title,
-      ...(author ? { author } : {}),
-      markdown,
-      pageCount: document.numPages,
-      assets: [...assets.values()],
-      media,
-    };
+    return await Promise.race([
+      loadingTask.promise.then((document) => readPdf(document, filename, itemId)),
+      isolate.failure,
+    ]);
   } catch (error) {
     if (isPasswordError(error)) throw new Error("Encrypted PDFs are not supported");
     throw error;
   } finally {
-    await loadingTask.destroy();
+    await isolate.stop(loadingTask);
   }
+}
+
+async function readPdf(
+  document: PDFDocumentProxy,
+  filename: string,
+  itemId: string,
+): Promise<ExtractedPdf> {
+  if (document.numPages > MAX_PDF_PAGES) {
+    throw new Error("PDF contains more than 500 pages");
+  }
+  const metadata = await document.getMetadata().catch(() => undefined);
+  const info = metadata?.info as { Title?: unknown; Author?: unknown } | undefined;
+  const metadataTitle = cleanMetadata(info?.Title);
+  const author = cleanMetadata(info?.Author);
+  const pages: string[] = [];
+  const assets = new Map<string, MediaAsset>();
+  const media: MediaCaptureStats = { discovered: 0, localized: 0, omitted: 0, filtered: 0 };
+  let mediaBytes = 0;
+  let visibleCharacters = 0;
+  let inferredTitle: string | undefined;
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const [content, operatorList] = await Promise.all([
+      page.getTextContent(),
+      page.getOperatorList(),
+    ]);
+    const layout = pageTextLayout(content.items);
+    const titleLine = pageNumber === 1 ? inferTitleLine(layout) : undefined;
+    if (!metadataTitle && titleLine) inferredTitle = titleLine.text;
+    const chosenTitle = metadataTitle ?? inferredTitle;
+    const textBlocks = renderTextBlocks(
+      layout,
+      titleLine && chosenTitle && normalizedText(titleLine.text) === normalizedText(chosenTitle)
+        ? titleLine
+        : undefined,
+    );
+    const blocks: PositionedBlock[] = [...textBlocks];
+    const figureResult = await pageFigures(page, operatorList.fnArray, operatorList.argsArray);
+    const figures = figureResult.figures;
+    media.discovered += figures.length + figureResult.filtered + figureResult.omitted.length;
+    media.filtered += figureResult.filtered;
+    media.omitted += figureResult.omitted.length;
+    for (const y of figureResult.omitted) {
+      blocks.push({ y, markdown: "*Image omitted: unsupported PDF figure.*" });
+    }
+    for (const figure of figures) {
+      if (
+        figure.width < MIN_IMAGE_PIXELS ||
+        figure.height < MIN_IMAGE_PIXELS ||
+        figure.renderedWidth < MIN_RENDERED_POINTS ||
+        figure.renderedHeight < MIN_RENDERED_POINTS
+      ) {
+        media.filtered += 1;
+        continue;
+      }
+      if (figure.width * figure.height > MAX_IMAGE_PIXELS) {
+        media.omitted += 1;
+        blocks.push({ y: figure.y, markdown: "*Image omitted: PDF figure is too large.*" });
+        continue;
+      }
+      try {
+        const png = encodePng(figure);
+        const digest = createHash("sha256").update(png).digest("hex");
+        const filename = `${digest}.png`;
+        if (!assets.has(filename)) {
+          if (mediaBytes + png.byteLength > MAX_MEDIA_BYTES) throw new Error("media limit");
+          mediaBytes += png.byteLength;
+          assets.set(filename, { filename, mediaType: "image/png", bytes: png });
+        }
+        media.localized += 1;
+        blocks.push({
+          y: figure.y,
+          markdown: `![PDF figure — page ${pageNumber}](${mediaPath(itemId, filename)})`,
+        });
+      } catch {
+        media.omitted += 1;
+        blocks.push({ y: figure.y, markdown: "*Image omitted: PDF figure.*" });
+      }
+    }
+    blocks.sort((left, right) => right.y - left.y);
+    const text = blocks
+      .map((block) => block.markdown)
+      .join("\n\n")
+      .trim();
+    visibleCharacters += layout.visibleCharacters;
+    pages.push(`## Page ${pageNumber}\n\n${text || "_No extractable text on this page._"}`);
+  }
+  if (visibleCharacters < MIN_VISIBLE_CHARACTERS) {
+    throw new Error("PDF does not contain enough embedded text; OCR is not supported");
+  }
+  const markdown = pages.join("\n\n");
+  if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES) {
+    throw new Error("Extracted PDF text is larger than 5 MiB");
+  }
+  const title =
+    metadataTitle ?? inferredTitle ?? (filename.replace(/\.pdf$/i, "").trim() || "Document");
+  return {
+    title,
+    ...(author ? { author } : {}),
+    markdown,
+    pageCount: document.numPages,
+    assets: [...assets.values()],
+    media,
+  };
+}
+
+interface PdfWorkerIsolate {
+  pdfWorker: PDFWorker;
+  failure: Promise<never>;
+  stop(loadingTask: PDFDocumentLoadingTask): Promise<void>;
+}
+
+// In Node, PDF.js would run its parsing worker on the main thread, where decoded streams
+// (images sized by their data or an /SMask, fonts, content) grow without bound and block the
+// event loop. A worker thread lets the main thread meter that worker's heap and external
+// (ArrayBuffer) memory and terminate it past the memory budget or the time limit.
+function startPdfWorker(): PdfWorkerIsolate {
+  const { port1, port2 } = new MessageChannel();
+  const worker = new Worker(PDF_WORKER_SOURCE, {
+    eval: true,
+    workerData: { moduleUrl: PDF_WORKER_MODULE_URL, port: port2 },
+    transferList: [port2],
+    resourceLimits: { maxOldGenerationSizeMb: PDF_WORKER_HEAP_MB },
+  });
+  port1.start();
+  // PDF.js only needs postMessage and addEventListener, which a Node MessagePort provides.
+  const pdfWorker = new PDFWorker({ port: port1 as unknown as null });
+  let failed = false;
+  let rejectFailure: (error: Error) => void = () => {};
+  const failure = new Promise<never>((_, reject) => {
+    rejectFailure = reject;
+  });
+  failure.catch(() => {});
+  const fail = (message: string): void => {
+    if (failed) return;
+    failed = true;
+    rejectFailure(new Error(message));
+    void worker.terminate();
+  };
+  worker.on("error", (error: Error & { code?: string }) => {
+    fail(error.code === "ERR_WORKER_OUT_OF_MEMORY" ? PDF_MEMORY_ERROR : PDF_WORKER_ERROR);
+  });
+  worker.on("exit", () => fail(PDF_WORKER_ERROR));
+  const deadline = setTimeout(
+    () => fail("PDF took too long to extract"),
+    PDF_EXTRACTION_TIMEOUT_MS,
+  );
+  let sampling = false;
+  const meter = setInterval(() => {
+    if (sampling || failed) return;
+    sampling = true;
+    worker
+      .getHeapStatistics()
+      .then((stats) => {
+        const external = (stats as { external_memory?: number }).external_memory ?? 0;
+        if (stats.used_heap_size + external > PDF_WORKER_MEMORY_BYTES) fail(PDF_MEMORY_ERROR);
+      })
+      .catch(() => {})
+      .finally(() => {
+        sampling = false;
+      });
+  }, PDF_WORKER_SAMPLE_MS);
+  return {
+    pdfWorker,
+    failure,
+    async stop(loadingTask) {
+      clearTimeout(deadline);
+      clearInterval(meter);
+      // A terminated worker never answers PDF.js's shutdown request, so do not wait for it.
+      const destroyed = loadingTask.destroy().catch(() => {});
+      if (!failed) await destroyed;
+      failed = true;
+      pdfWorker.destroy();
+      port1.close();
+      await worker.terminate();
+    },
+  };
 }
 
 interface PositionedBlock {
