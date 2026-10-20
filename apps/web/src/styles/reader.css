@@ -5,7 +5,7 @@
   z-index: 5;
   top: 0;
   height: 66px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--color-line-soft);
   background: rgba(255, 255, 255, 0.96);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -21,7 +21,7 @@
 .reader-nav select {
   justify-self: end;
   height: 34px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-line);
   padding: 0 12px;
   font-size: 12px;
 }
@@ -31,13 +31,13 @@
   top: 65px;
   left: 0;
   height: 2px;
-  background: #111;
+  background: var(--color-ink);
 }
 .reader-save-error {
   margin: 0 0 28px;
-  border: 1px solid #9c1717;
+  border: 1px solid var(--color-danger);
   padding: 12px 14px;
-  color: #9c1717;
+  color: var(--color-danger);
   font-size: 13px;
 }
 .article {
@@ -54,10 +54,10 @@
   display: flex;
   justify-content: space-between;
   gap: 18px;
-  color: #666;
+  color: var(--color-subtle);
   font-size: 13px;
   padding-bottom: 55px;
-  border-bottom: 1px solid #111;
+  border-bottom: 1px solid var(--color-ink);
 }
 .byline a {
   text-underline-offset: 3px;
@@ -69,25 +69,25 @@
 }
 .notice {
   margin: 34px 0;
-  border: 1px solid #111;
+  border: 1px solid var(--color-ink);
   padding: 18px;
   display: grid;
   gap: 5px;
   font-size: 13px;
 }
 .notice span {
-  color: #666;
+  color: var(--color-subtle);
 }
 .source {
   margin-top: 44px;
-  border-top: 5px solid #111;
+  border-top: 5px solid var(--color-ink);
 }
 .provenance {
   margin-top: 70px;
   border-top: 1px solid #bbb;
   padding-top: 18px;
   font-size: 12px;
-  color: #666;
+  color: var(--color-subtle);
 }
 .provenance summary {
   cursor: pointer;
@@ -102,7 +102,7 @@
 }
 .provenance dd {
   margin: 0;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 @media (max-width: 800px) {
