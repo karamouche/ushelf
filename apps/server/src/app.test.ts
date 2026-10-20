@@ -334,4 +334,53 @@ describe("optional app password", () => {
     );
     expect(response.headers.get("location")).toBe("/reader/");
   });
+
+  async function signInWithNext(app: ReturnType<typeof createApp>, next: string) {
+    return app.request(`${origin}/auth/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ password, next }).toString(),
+    });
+  }
+
+  function expectSameOriginRedirect(response: Response) {
+    expect(response.status).toBe(303);
+    const location = response.headers.get("location")!;
+    expect(location).not.toMatch(/[\\\u0000-\u001f\u007f]/);
+    expect(location.startsWith("//")).toBe(false);
+    expect(new URL(location, origin).origin).toBe(origin);
+    return location;
+  }
+
+  it.each([
+    "/\t/evil.example",
+    "/\n/evil.example",
+    "/\r/evil.example",
+    "/%09/evil.example",
+    "/\\evil.example",
+    "//evil.example",
+  ])("keeps sign-in redirects on the same origin for next=%j", async (next) => {
+    const app = createApp({} as ShelfService, undefined, "/", { password });
+    const signedIn = await signInWithNext(app, next);
+    expectSameOriginRedirect(signedIn);
+    const cookie = signedIn.headers.get("set-cookie")!.split(";")[0]!;
+    for (const query of [encodeURIComponent(next), next]) {
+      const response = await app.request(`${origin}/auth/login?next=${query}`, {
+        headers: { cookie },
+      });
+      expectSameOriginRedirect(response);
+    }
+  });
+
+  it("preserves a safe sign-in redirect path and query", async () => {
+    const app = createApp({} as ShelfService, undefined, "/", { password });
+    const signedIn = await signInWithNext(app, "/items/x?y=1");
+    expect(expectSameOriginRedirect(signedIn)).toBe("/items/x?y=1");
+    const cookie = signedIn.headers.get("set-cookie")!.split(";")[0]!;
+    const response = await app.request(
+      `${origin}/auth/login?next=${encodeURIComponent("/items/x?y=1")}`,
+      { headers: { cookie } },
+    );
+    expect(expectSameOriginRedirect(response)).toBe("/items/x?y=1");
+  });
 });
