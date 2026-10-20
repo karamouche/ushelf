@@ -218,6 +218,14 @@ describe("loopback host guard without an app password", () => {
     expect((await app.request("http://attacker.example:43110/api/items")).status).toBe(421);
   });
 
+  it("does not grant cross-origin access to the reader API", async () => {
+    const app = createApp(service);
+    for (const origin of ["http://127.0.0.1:43111", "http://localhost:43111"]) {
+      const response = await app.request("/api/items", { headers: { host: "127.0.0.1", origin } });
+      expect(response.headers.get("access-control-allow-origin"), origin).toBeNull();
+    }
+  });
+
   it("still serves token clients through any host name", async () => {
     const app = createApp(service, undefined, "/", { apiToken });
     const response = await app.request("/api/items", {
