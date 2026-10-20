@@ -24,7 +24,7 @@
 }
 .kindle-dialog h2 {
   margin: 0;
-  font: 400 34px var(--font-serif);
+  font: 400 34px var(--font-display);
 }
 .dialog-close {
   position: absolute;

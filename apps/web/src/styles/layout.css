@@ -21,7 +21,7 @@
   font-size: 22px;
 }
 .brand span {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-style: italic;
   font-weight: 400;
 }
@@ -48,7 +48,7 @@ main {
   font-size: 42px;
 }
 .empty h2 {
-  font: 400 28px var(--font-serif);
+  font: 400 28px var(--font-display);
   margin: 20px 0 8px;
 }
 .empty p {
