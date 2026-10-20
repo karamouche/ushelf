@@ -73,8 +73,10 @@ export class MarkdownRepository {
       );
     await mkdir(path.dirname(filePath), { recursive: true });
     const raw = renderItemMarkdown(frontmatter, insightMarkdown, sourceMarkdown);
+    // Parse before writing so an invalid item never reaches the canonical library.
+    const item = parseItemMarkdown(raw, filePath);
     await atomicWrite(filePath, raw);
-    return parseItemMarkdown(raw, filePath);
+    return item;
   }
 
   async archive(item: ShelfItem): Promise<void> {

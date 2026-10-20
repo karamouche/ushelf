@@ -46,6 +46,13 @@ export interface IngestResult {
   state: IngestionState;
 }
 
+/** The outcome of indexing the canonical Markdown library. */
+export interface IndexReport {
+  indexed: number;
+  /** Item files left out of the index because they are invalid or conflict with another item. */
+  skipped: Array<{ filePath: string; error: string }>;
+}
+
 export interface ShelfServiceDependencies {
   kindleGateway?: KindleGateway;
 }
@@ -71,26 +78,31 @@ export class ShelfService {
     this.connectors = new ConnectorAuthorization(this.database);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<IndexReport> {
     await this.repository.initialize();
-    await this.reconcileIndex();
+    return this.reconcileIndex();
   }
 
-  async rebuildIndex(): Promise<number> {
+  async rebuildIndex(): Promise<IndexReport> {
     this.database.clearIndex();
     return this.reconcileIndex();
   }
 
-  private async reconcileIndex(): Promise<number> {
-    const files = await this.repository.itemFiles();
+  /** Indexes every item file, skipping the ones that cannot be indexed so one cannot block startup. */
+  private async reconcileIndex(): Promise<IndexReport> {
     const found = new Set<string>();
-    for (const filePath of files) {
-      const item = await this.repository.load(filePath);
-      found.add(item.id);
-      this.database.upsert(item);
+    const skipped: IndexReport["skipped"] = [];
+    for (const filePath of await this.repository.itemFiles()) {
+      try {
+        const item = await this.repository.load(filePath);
+        this.database.upsert(item);
+        found.add(item.id);
+      } catch (error) {
+        skipped.push({ filePath, error: error instanceof Error ? error.message : String(error) });
+      }
     }
     for (const id of this.database.indexedIds()) if (!found.has(id)) this.database.delete(id);
-    return files.length;
+    return { indexed: found.size, skipped };
   }
 
   async ingestUrl(url: string, recipeName = "default"): Promise<IngestResult> {

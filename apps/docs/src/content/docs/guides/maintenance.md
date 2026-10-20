@@ -13,6 +13,8 @@ ushelf rebuild-index
 
 The CLI pauses the server, runs the rebuild in a one-shot container without integration secrets, and restores the server. This works for local and SSH deployments. On Fly.io and self-hosted servers, the server reconciles its index from Markdown on every start.
 
+An item file that fails validation, or that shares its canonical URL or source PDF with another item, is left out of the index instead of stopping the server. The server log and `rebuild-index` name each skipped file with the reason. Fix or remove the file while the server is stopped, then rebuild the index.
+
 ## Import a Markdown item
 
 To import an externally edited, validated item document:
