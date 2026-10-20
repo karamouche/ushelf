@@ -9,7 +9,7 @@ This guide applies to `apps/server`. Read the repository `AGENTS.md`, root `READ
 ## Source responsibilities
 
 - `src/app.ts`: construct the injectable Hono app, API and MCP routes, adapter validation, CORS, error responses, configured base path, and production SPA/static routing.
-- `src/api-auth.ts`: bearer-token authentication for the CLI and agents, plus connector access tokens on `/mcp`; `src/web-auth.ts`: password sessions for browsers and the shared `PasswordGate`.
+- `src/api-auth.ts`: bearer-token authentication for the CLI and agents, plus connector access tokens on `/mcp`; `src/web-auth.ts`: password sessions for browsers and the shared `PasswordGate`; `src/auth-page.ts`: the embedded stylesheet, HTML shell, and escaping helpers for the server-rendered sign-in and consent pages.
 - `src/oauth.ts`: OAuth discovery metadata, dynamic client registration, the consent page, and the token and revocation endpoints for remote MCP connectors. Grant rules and persistence belong in Core's `ConnectorAuthorization`.
 - `src/index.ts`: initialize `ShelfService`, resolve runtime host/port/base-path settings, locate the built web app, and start Node's HTTP server.
 - `src/cli.ts`: thin `rebuild-index` and validated Markdown `import` commands.

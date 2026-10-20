@@ -1,0 +1,135 @@
+/* Library view: heading, search and filter controls, and item cards. */
+
+.library-head {
+  padding: 72px 0 36px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+}
+.count {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 14px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-ink);
+}
+.search input {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  padding: 12px 14px;
+  outline: none;
+}
+.search input:focus {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 1px var(--color-ink);
+}
+.status-tabs {
+  display: flex;
+  border: 1px solid var(--color-line);
+}
+.status-tabs button {
+  border: 0;
+  border-right: 1px solid var(--color-line-soft);
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.status-tabs button:last-child {
+  border: 0;
+}
+.status-tabs button.active {
+  color: var(--color-paper);
+  background: var(--color-ink);
+}
+.controls select {
+  border: 1px solid var(--color-line);
+  padding: 0 12px;
+  font-size: 12px;
+}
+.item-list {
+  border-bottom: 1px solid var(--color-ink);
+}
+.item-card {
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.item-card:last-child {
+  border: 0;
+}
+.item-card > a {
+  display: block;
+  text-decoration: none;
+  padding: 28px 2px 24px;
+  transition: padding 0.15s ease;
+}
+.item-card > a:hover {
+  padding-left: 10px;
+}
+.item-meta {
+  display: flex;
+  gap: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  color: var(--color-muted);
+}
+.item-meta .state {
+  margin-left: auto;
+  color: var(--color-ink);
+}
+.state-failed {
+  color: #a00 !important;
+}
+.item-card h2 {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.9vw, 32px);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  margin: 12px 0 8px;
+}
+.item-card p {
+  max-width: 760px;
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 22px;
+}
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.progress {
+  height: 1px;
+  background: #eee;
+  margin-top: 14px;
+}
+.progress i {
+  height: 1px;
+  display: block;
+  background: var(--color-ink);
+}
+@media (max-width: 800px) {
+  .library-head {
+    padding-top: 48px;
+  }
+  .controls {
+    grid-template-columns: 1fr;
+  }
+  .status-tabs {
+    overflow-x: auto;
+    min-height: 42px;
+  }
+  .controls select {
+    min-height: 42px;
+  }
+}

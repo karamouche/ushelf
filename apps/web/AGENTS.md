@@ -8,10 +8,13 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 
 ## Source responsibilities
 
-- `src/App.tsx`: library and reader routes, filters, Markdown/Mermaid rendering, and reading-state UX.
+- `src/App.tsx`: the route table.
+- `src/pages/`: the `Library` view (search, filters, item cards) and the `Reader` view (article, insights, reading-state UX).
+- `src/components/`: shared pieces such as the brand, sign-out button, empty state, sanitized `Markdown`, the lazy `MermaidDiagram`, and the Send to Kindle dialog.
+- `src/format.ts`: reading statuses and display labels shared by both views.
 - `src/use-reading-progress.ts`: live reader progress, restoration suppression, debounced and maximum-interval persistence, serialized revision-aware writes, and exit flushing.
 - `src/api.ts`: the browser-facing HTTP contract and base-path-aware request helpers.
-- `src/styles.css`: the complete visual system and responsive behavior.
+- `src/styles/`: the visual system, one stylesheet per UI area imported in cascade order from `index.css`. Shared colors and font stacks are custom properties on `:root` in `base.css`; responsive overrides sit at the end of the file they adjust.
 - `src/main.tsx`: React bootstrapping and `BrowserRouter` basename configuration.
 - `base-path.ts` and `vite.config.ts`: normalize `USHELF_WEB_BASE_PATH`, set Vite's base, and proxy the matching development API path.
 - `e2e/`: production-reader behavior in desktop and mobile Playwright projects.

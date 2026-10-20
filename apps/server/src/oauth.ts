@@ -4,13 +4,8 @@ import { cors } from "hono/cors";
 import { OAuthError, type ConnectorAuthorization, type ConnectorClient } from "@ushelf/core";
 import { z } from "zod";
 import type { AppEnv, McpBearerAuth } from "./api-auth.js";
-import {
-  authPageHtml,
-  escapeHtml,
-  readUrlEncodedForm,
-  sameOrigin,
-  type PasswordGate,
-} from "./web-auth.js";
+import { authPageHtml, errorAlertHtml, escapeHtml } from "./auth-page.js";
+import { readUrlEncodedForm, sameOrigin, type PasswordGate } from "./web-auth.js";
 
 /**
  * OAuth 2.1 authorization server for remote MCP connectors (Claude, ChatGPT, and other
@@ -467,7 +462,7 @@ function consentError(c: Context<AppEnv>, message: string, status: 400 | 403 = 4
   return c.html(
     authPageHtml(
       "Connection failed",
-      `<p class="error" role="alert">${escapeHtml(message)}</p><p>Start the connection again from your AI app.</p>`,
+      errorAlertHtml(message) + "<p>Start the connection again from your AI app.</p>",
     ),
     status,
   );
@@ -499,16 +494,21 @@ function consentPage(
   return c.html(
     authPageHtml(
       "Connect an app",
-      `<p><strong>${escapeHtml(name)}</strong> wants to connect to your library and will return to <strong>${escapeHtml(redirect.host)}</strong>.</p>` +
-        `<p>Once connected it can search, read, save, edit, and delete items, and send them to Kindle, until you revoke it with <code>ushelf connectors revoke</code>.</p>` +
-        (loopback
-          ? `<p class="warning">This app runs on a computer, not a hosted service. Continue only if you started this connection yourself.</p>`
-          : "") +
-        (error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : "") +
-        `<form method="post" action="${escapeHtml(action)}">${fields}` +
-        `<label for="password">uShelf password</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " autofocus>` +
-        `<button type="submit" name="decision" value="allow">Allow access</button>` +
-        `<button type="submit" name="decision" value="deny" class="secondary">Deny</button></form>`,
+      [
+        `<p><strong>${escapeHtml(name)}</strong> wants to connect to your library and will return to <strong>${escapeHtml(redirect.host)}</strong>.</p>`,
+        "<p>Once connected it can search, read, save, edit, and delete items, and send them to Kindle, until you revoke it with <code>ushelf connectors revoke</code>.</p>",
+        loopback
+          ? '<p class="warning">This app runs on a computer, not a hosted service. Continue only if you started this connection yourself.</p>'
+          : "",
+        error ? errorAlertHtml(error) : "",
+        `<form method="post" action="${escapeHtml(action)}">`,
+        fields,
+        '<label for="password">uShelf password</label>',
+        '<input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " autofocus>',
+        '<button type="submit" name="decision" value="allow">Allow access</button>',
+        '<button type="submit" name="decision" value="deny" class="secondary">Deny</button>',
+        "</form>",
+      ].join(""),
     ),
     status,
   );
