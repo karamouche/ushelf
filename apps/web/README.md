@@ -5,7 +5,7 @@ The browser UI for browsing and reading a uShelf library. It provides search and
 ## What to know
 
 - This is a React 19 single-page app built with Vite.
-- `src/App.tsx` contains the library and reader routes; `src/api.ts` is the API client.
+- `src/App.tsx` holds the routes; views live in `src/pages/`, shared components in `src/components/`, and stylesheets in `src/styles/`. `src/api.ts` is the API client.
 - The app does not read library files directly. All data and updates go through the API path below the configured `USHELF_WEB_BASE_PATH`.
 - Reader pages can send source-only EPUB editions to a Kindle device after credentials are configured through the native CLI, and default to the last successfully used device when it remains registered.
 - Rendered Markdown is sanitized. Only content-addressed item media is rendered; external or malformed image references are shown as omission text and never requested.
