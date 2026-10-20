@@ -34,7 +34,7 @@
   margin: 32px auto;
 }
 .media-omitted {
-  color: var(--muted);
+  color: var(--color-muted);
   font-style: italic;
 }
 .document blockquote {
