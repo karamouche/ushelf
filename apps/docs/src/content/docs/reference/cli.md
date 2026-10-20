@@ -85,16 +85,16 @@ Registers a server deployed outside the CLI. The token is read from `USHELF_API_
 
 `config set` and `config unset` change the current context; run `ushelf start` to apply them. The available keys depend on the driver:
 
-| Key            | Drivers                           | Purpose                                  |
-| -------------- | --------------------------------- | ---------------------------------------- |
-| `image`        | local, ssh, fly                   | Runtime image                            |
-| `base-path`    | local, ssh, fly                   | Reader, API, and MCP URL prefix          |
-| `host`         | local, ssh with `--url`           | Address to publish on                    |
-| `port`         | local, ssh                        | HTTP port                                |
-| `domain`       | ssh                               | HTTPS domain served by the managed proxy |
-| `url`          | ssh with your own proxy, external | Server URL                               |
-| `region`       | fly                               | Fly.io region                            |
-| `app-password` | local, ssh, fly                   | Reader password, prompted without echo   |
+| Key            | Drivers                           | Purpose                                                        |
+| -------------- | --------------------------------- | -------------------------------------------------------------- |
+| `image`        | local, ssh, fly                   | Runtime image                                                  |
+| `base-path`    | local, ssh, fly                   | Reader, API, and MCP URL prefix                                |
+| `host`         | local, ssh with `--url`           | Address to publish on                                          |
+| `port`         | local, ssh                        | HTTP port                                                      |
+| `domain`       | ssh                               | HTTPS domain served by the managed proxy                       |
+| `url`          | ssh with your own proxy, external | Server URL                                                     |
+| `region`       | fly                               | Fly.io region                                                  |
+| `app-password` | local, ssh, fly                   | Reader password, prompted without echo; at least 12 characters |
 
 ## logs
 

@@ -36,11 +36,11 @@ The local driver also stores its library under the same directory. See [Library 
 
 ## CLI environment variables
 
-| Variable              | Purpose                                               |
-| --------------------- | ----------------------------------------------------- |
-| `USHELF_ROOT`         | CLI home, overridden by `--home`                      |
-| `USHELF_CONTEXT`      | Context for one command, overridden by `--context`    |
-| `USHELF_APP_PASSWORD` | Reader password used by `deploy` instead of prompting |
-| `USHELF_API_TOKEN`    | Token used by `context add` instead of prompting      |
+| Variable              | Purpose                                                                       |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `USHELF_ROOT`         | CLI home, overridden by `--home`                                              |
+| `USHELF_CONTEXT`      | Context for one command, overridden by `--context`                            |
+| `USHELF_APP_PASSWORD` | Reader password used by `deploy` instead of prompting; at least 12 characters |
+| `USHELF_API_TOKEN`    | Token used by `context add` instead of prompting                              |
 
 Use `ushelf config show` to see the current context's effective settings. Secrets are reported only as `configured` or `unset`.

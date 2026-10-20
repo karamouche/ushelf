@@ -21,10 +21,19 @@ const packageVersion = (
 ).version;
 const version = process.env.USHELF_VERSION?.trim() || packageVersion;
 
+const MIN_APP_PASSWORD_LENGTH = 12;
+const appPassword = process.env.USHELF_APP_PASSWORD || undefined;
+// Warn rather than refuse to start, so existing deployments with short passwords keep running.
+if (appPassword && [...appPassword].length < MIN_APP_PASSWORD_LENGTH) {
+  console.warn(
+    `Warning: USHELF_APP_PASSWORD is shorter than ${MIN_APP_PASSWORD_LENGTH} characters; set a longer one with \`ushelf config set app-password\`.`,
+  );
+}
+
 serve(
   {
     fetch: createApp(service, webRoot, basePath, {
-      password: process.env.USHELF_APP_PASSWORD || undefined,
+      password: appPassword,
       apiToken: resolveApiToken(),
       secureCookie: process.env.NODE_ENV !== "development",
       version,

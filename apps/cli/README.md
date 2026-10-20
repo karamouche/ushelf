@@ -36,7 +36,7 @@ library/ recipes/ state/ secrets/   data of the local driver only
 
 Context selection precedence is `--context`, then `USHELF_CONTEXT`, then the saved current context. `ushelf start` without any context deploys `local`.
 
-Secrets never appear in process arguments: Docker receives them through a temporary owner-only `--env-file` and Fly.io through `fly secrets import` on stdin. Remote contexts always require an app password, read from `USHELF_APP_PASSWORD` or prompted without echo.
+Secrets never appear in process arguments: Docker receives them through a temporary owner-only `--env-file` and Fly.io through `fly secrets import` on stdin. Remote contexts always require an app password of at least 12 characters, read from `USHELF_APP_PASSWORD` or prompted without echo.
 
 ## Command output
 

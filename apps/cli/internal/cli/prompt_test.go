@@ -20,3 +20,22 @@ func TestPromptSecretFromPipedInput(t *testing.T) {
 		t.Fatalf("single entry = %q, %v", value, err)
 	}
 }
+
+func TestAppPasswordsMustBeAtLeastTwelveCharacters(t *testing.T) {
+	for _, value := range []string{"", "short", "elevenchars", "ünicodeünic"} {
+		if err := validateAppPassword(value); err == nil {
+			t.Errorf("%q should be rejected", value)
+		}
+	}
+	for _, value := range []string{"twelve-chars", "ünicodeünicö", "a much longer passphrase"} {
+		if err := validateAppPassword(value); err != nil {
+			t.Errorf("%q should be accepted: %v", value, err)
+		}
+	}
+	if _, err := promptAppPassword(strings.NewReader("hunter22\nhunter22\n"), &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "at least 12") {
+		t.Fatalf("short prompted password: %v", err)
+	}
+	if value, err := promptAppPassword(strings.NewReader("correct horse\ncorrect horse\n"), &bytes.Buffer{}); err != nil || value != "correct horse" {
+		t.Fatalf("value = %q, err = %v", value, err)
+	}
+}

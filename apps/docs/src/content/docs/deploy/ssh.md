@@ -34,7 +34,7 @@ The server is published on `--host:--port` of the remote host (loopback by defau
 
 ## Password
 
-Remote deployments always require a reader password. The CLI reads it from `USHELF_APP_PASSWORD` or prompts for it without echo on the first deploy, and reuses it afterwards.
+Remote deployments always require a reader password of at least 12 characters. The CLI reads it from `USHELF_APP_PASSWORD` or prompts for it without echo on the first deploy, and reuses it afterwards.
 
 ## Storage and maintenance
 

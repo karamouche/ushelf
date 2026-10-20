@@ -51,7 +51,7 @@ The uShelf consent page shows:
 
 Enter your app password and choose **Allow access**. The app returns to its own page and lists the uShelf tools. **Deny** sends it back without access.
 
-Password attempts on this page and on the reader's sign-in page share one rate limit.
+Password attempts on this page and on the reader's sign-in page share one rate limit. While it is active, even the correct password is refused until the minute is up.
 
 ## What a connector can do
 
@@ -111,5 +111,5 @@ The static API token keeps working on `/mcp`, so the stdio bridge and direct HTT
 | "Couldn't reach the MCP server" or the app never shows sign-in | The URL must be public HTTPS and end in `/mcp`. `curl -i https://…/mcp -X POST` must return `401` with a `resource_metadata` link. Without an app password, OAuth is off and the link is missing. |
 | The consent page says the connector is not registered          | The registration was revoked or discarded. Start the connection again from the app.                                                                                                               |
 | Metadata URLs show `http://` or an internal host               | Your proxy does not forward `Host` or `X-Forwarded-Proto`. Fix the proxy configuration.                                                                                                           |
-| "Too many attempts"                                            | Ten wrong passwords within a minute pause sign-in and approval for a minute.                                                                                                                      |
+| "Too many attempts"                                            | Ten wrong passwords within a minute pause sign-in and approval, even with the correct password, until the minute is up.                                                                           |
 | The app asks to reconnect                                      | Its refresh token expired after 30 days without use, was revoked, or was replayed.                                                                                                                |

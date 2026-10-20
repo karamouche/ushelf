@@ -19,7 +19,8 @@ func (s *commandState) deployCommand() *cobra.Command {
 		Short: "Deploy uShelf locally, to a Docker host over SSH, or to Fly.io",
 		Long: "Deploy uShelf and save the result as a context.\n\n" +
 			"Deploying generates an API token for the CLI and agents. Remote deployments also\n" +
-			"require a reader password, read from USHELF_APP_PASSWORD or prompted without echo.\n" +
+			"require a reader password of at least 12 characters, read from USHELF_APP_PASSWORD\n" +
+			"or prompted without echo.\n" +
 			"Redeploying an existing context keeps its saved settings unless flags override them.",
 		Example: `  ushelf deploy local
   ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
@@ -161,10 +162,13 @@ func (s *commandState) deploy(ctx context.Context, name string, override Context
 
 func (s *commandState) requireAppPassword() (string, error) {
 	if value := os.Getenv("USHELF_APP_PASSWORD"); value != "" {
+		if err := validateAppPassword(value); err != nil {
+			return "", fmt.Errorf("USHELF_APP_PASSWORD: %w", err)
+		}
 		return value, nil
 	}
-	fmt.Fprintln(s.deps.Stderr, "A remote uShelf is reachable from the network, so its reader needs a password.")
-	return promptSecret(s.deps.Stdin, s.deps.Stderr, "App password", true)
+	fmt.Fprintf(s.deps.Stderr, "A remote uShelf is reachable from the network, so its reader needs a password of at least %d characters.\n", minAppPasswordLength)
+	return promptAppPassword(s.deps.Stdin, s.deps.Stderr)
 }
 
 // apply deploys a context and waits until its API accepts the context's token.
