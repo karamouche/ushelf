@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import BetterSqlite3 from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../configuration/ushelf-config.js";
 import type { ItemFrontmatter } from "../domain/library-item.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
@@ -14,6 +14,7 @@ const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
+afterEach(() => vi.restoreAllMocks());
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-test-"));
@@ -140,6 +141,33 @@ describe("agent-driven workflow", () => {
     const deletion = service.requestDelete(first.item.id);
     await service.confirmDelete(first.item.id, deletion.token);
     await expect(service.getOriginalFile(first.item.id)).rejects.toThrow(/not found/i);
+  });
+
+  it("stores a document once when the same PDF is ingested concurrently", async () => {
+    const { config, service } = await fixture();
+    const payload = { filename: "useful-paper.pdf", contentBase64: SIMPLE_PDF_BASE64 };
+    const results = await Promise.all([service.ingestFile(payload), service.ingestFile(payload)]);
+
+    expect(results.map((result) => result.duplicate)).toEqual([false, true]);
+    expect(results[1]?.item.id).toBe(results[0]?.item.id);
+    expect(service.listItems({ sourceType: "document" })).toHaveLength(1);
+    expect(await readdir(config.filesDir)).toEqual([results[0]?.item.id]);
+    await service.rebuildIndex();
+    expect(service.listItems()).toHaveLength(2);
+  });
+
+  it("removes a new item's files when indexing it fails", async () => {
+    const { config, service } = await fixture();
+    vi.spyOn(ShelfDatabase.prototype, "upsert").mockImplementationOnce(() => {
+      throw new Error("index unavailable");
+    });
+
+    await expect(
+      service.ingestFile({ filename: "useful-paper.pdf", contentBase64: SIMPLE_PDF_BASE64 }),
+    ).rejects.toThrow("index unavailable");
+    expect(await readdir(config.filesDir)).toEqual([]);
+    await service.rebuildIndex();
+    expect(service.listItems()).toHaveLength(1);
   });
 
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {

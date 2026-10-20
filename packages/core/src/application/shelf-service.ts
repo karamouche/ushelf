@@ -38,6 +38,7 @@ import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
 import { MarkdownRepository } from "../persistence/markdown/markdown-repository.js";
 import { ShelfDatabase } from "../persistence/sqlite/shelf-database.js";
+import { KeyedLock } from "./keyed-lock.js";
 
 export interface IngestResult {
   item: ShelfItem;
@@ -57,6 +58,8 @@ export class ShelfService {
   private readonly repository: MarkdownRepository;
   private readonly database: ShelfDatabase;
   private readonly kindleGateway: KindleGateway;
+  /** Serializes captures of one source so concurrent saves cannot both pass deduplication. */
+  private readonly ingestionLock = new KeyedLock();
   /** OAuth grants for remote MCP connectors, kept in the disposable SQLite state. */
   readonly connectors: ConnectorAuthorization;
 
@@ -92,6 +95,16 @@ export class ShelfService {
 
   async ingestUrl(url: string, recipeName = "default"): Promise<IngestResult> {
     const canonicalUrl = canonicalizeUrl(url);
+    return this.ingestionLock.run(canonicalUrl, () =>
+      this.captureUrl(url, canonicalUrl, recipeName),
+    );
+  }
+
+  private async captureUrl(
+    url: string,
+    canonicalUrl: string,
+    recipeName: string,
+  ): Promise<IngestResult> {
     const existingId = this.database.findByCanonicalUrl(canonicalUrl);
     if (existingId) {
       const item = await this.getItem(existingId);
@@ -147,15 +160,10 @@ export class ShelfService {
       enrichment: { status: "pending", recipe: recipeName },
       media: { source: sourceMedia, insights: emptyMediaStats() },
     };
-    let item: ShelfItem;
-    try {
+    const item = await this.storeNewItem(id, async () => {
       await this.repository.saveMediaAssets(id, mediaAssets);
-      item = await this.repository.save(frontmatter, "", sourceMarkdown);
-    } catch (error) {
-      await this.repository.removeItemFiles(id);
-      throw error;
-    }
-    this.database.upsert(item);
+      return this.repository.save(frontmatter, "", sourceMarkdown);
+    });
     return { item, duplicate: false, state: ingestionState(item) };
   }
 
@@ -166,21 +174,31 @@ export class ShelfService {
   }): Promise<IngestResult> {
     const bytes = decodePdfPayload(input.filename, input.contentBase64);
     const sourceHash = createHash("sha256").update(bytes).digest("hex");
+    return this.ingestionLock.run(sourceHash, () =>
+      this.captureFile(input.filename, bytes, sourceHash, input.recipe ?? "default"),
+    );
+  }
+
+  private async captureFile(
+    filename: string,
+    bytes: Buffer,
+    sourceHash: string,
+    recipeName: string,
+  ): Promise<IngestResult> {
     const existingId = this.database.findBySourceHash(sourceHash);
     if (existingId) {
       const item = await this.getItem(existingId);
       return { item, duplicate: true, state: ingestionState(item) };
     }
-    const recipeName = input.recipe ?? "default";
     await this.repository.recipe(recipeName);
     const now = new Date().toISOString();
     const id = randomUUID();
-    const source = await extractPdf(bytes, input.filename, id);
+    const source = await extractPdf(bytes, filename, id);
     const frontmatter: ItemFrontmatter = {
       id,
       sourceType: "document",
       file: {
-        name: input.filename,
+        name: filename,
         mediaType: "application/pdf",
         sizeBytes: bytes.length,
         sha256: sourceHash,
@@ -201,17 +219,26 @@ export class ShelfService {
       enrichment: { status: "pending", recipe: recipeName },
       media: { source: source.media, insights: emptyMediaStats() },
     };
-    let item: ShelfItem;
-    try {
+    const item = await this.storeNewItem(id, async () => {
       await this.repository.saveOriginalFile(id, bytes);
       await this.repository.saveMediaAssets(id, source.assets);
-      item = await this.repository.save(frontmatter, "", source.markdown);
+      return this.repository.save(frontmatter, "", source.markdown);
+    });
+    return { item, duplicate: false, state: ingestionState(item) };
+  }
+
+  /** Writes and indexes a new item, removing everything it wrote if either step fails. */
+  private async storeNewItem(id: string, write: () => Promise<ShelfItem>): Promise<ShelfItem> {
+    let item: ShelfItem | undefined;
+    try {
+      item = await write();
+      this.database.upsert(item);
+      return item;
     } catch (error) {
-      await this.repository.removeItemFiles(id);
+      if (item) await this.repository.remove(item);
+      else await this.repository.removeItemFiles(id);
       throw error;
     }
-    this.database.upsert(item);
-    return { item, duplicate: false, state: ingestionState(item) };
   }
 
   async submitSourceContent(input: {
