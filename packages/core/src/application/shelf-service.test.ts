@@ -142,6 +142,19 @@ describe("agent-driven workflow", () => {
     await expect(service.getOriginalFile(first.item.id)).rejects.toThrow(/not found/i);
   });
 
+  it("stores a document once when the same PDF is ingested concurrently", async () => {
+    const { config, service } = await fixture();
+    const payload = { filename: "useful-paper.pdf", contentBase64: SIMPLE_PDF_BASE64 };
+    const results = await Promise.all([service.ingestFile(payload), service.ingestFile(payload)]);
+
+    expect(results.map((result) => result.duplicate)).toEqual([false, true]);
+    expect(results[1]?.item.id).toBe(results[0]?.item.id);
+    expect(service.listItems({ sourceType: "document" })).toHaveLength(1);
+    expect(await readdir(config.filesDir)).toEqual([results[0]?.item.id]);
+    await service.rebuildIndex();
+    expect(service.listItems()).toHaveLength(2);
+  });
+
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {
     const { config, service, item } = await fixture();
     const sourceUrl = "https://x.com/a/status/1";
