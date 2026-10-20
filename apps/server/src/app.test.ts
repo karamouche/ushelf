@@ -43,6 +43,45 @@ describe("createApp base path", () => {
     });
   });
 
+  it("accepts reader writes only as small JSON bodies", async () => {
+    let delivered = false;
+    const service = {
+      sendToKindle: async () => {
+        delivered = true;
+        return {};
+      },
+      updateReading: async () => ({ id: "item-id" }),
+    } as unknown as ShelfService;
+    const app = createApp(service);
+
+    const plainText = await app.request("/api/items/item-id/kindle-deliveries", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ targetSerial: "DEVICE123" }),
+    });
+    expect(plainText.status).toBe(415);
+    const untyped = await app.request("/api/items/item-id/reading", {
+      method: "PATCH",
+      body: JSON.stringify({ status: "read", progress: 1 }),
+    });
+    expect(untyped.status).toBe(415);
+    expect(delivered).toBe(false);
+
+    const oversized = await app.request("/api/items/item-id/reading", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "read", progress: 1, revision: "x".repeat(17 * 1024) }),
+    });
+    expect(oversized.status).toBe(413);
+
+    const update = await app.request("/api/items/item-id/reading", {
+      method: "PATCH",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ status: "read", progress: 1 }),
+    });
+    expect(update.status).toBe(200);
+  });
+
   it("returns stable Kindle error codes", async () => {
     const service = {
       kindleDevices: async () => {
@@ -151,6 +190,46 @@ describe("createApp base path", () => {
     expect(() => createApp({} as ShelfService, undefined, '/reader/\"><script>')).toThrow(
       "USHELF_WEB_BASE_PATH",
     );
+  });
+});
+
+describe("loopback host guard without an app password", () => {
+  const apiToken = "t".repeat(43);
+  const service = { listItems: () => [] } as unknown as ShelfService;
+
+  it("serves the reader API only through loopback host names", async () => {
+    const app = createApp(service);
+    for (const host of ["127.0.0.1:43110", "localhost:43110", "[::1]:43110", "localhost"]) {
+      const response = await app.request("/api/items", { headers: { host } });
+      expect(response.status, host).toBe(200);
+    }
+    for (const host of [
+      "attacker.example:43110",
+      "192.168.1.20:43110",
+      "127.0.0.1.nip.io",
+      "localhost.attacker.example",
+    ]) {
+      const response = await app.request("/api/items", { headers: { host } });
+      expect(response.status, host).toBe(421);
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringContaining("USHELF_APP_PASSWORD"),
+      });
+    }
+    expect((await app.request("http://attacker.example:43110/api/items")).status).toBe(421);
+  });
+
+  it("still serves token clients through any host name", async () => {
+    const app = createApp(service, undefined, "/", { apiToken });
+    const response = await app.request("/api/items", {
+      headers: { host: "nas.tailnet.example", authorization: `Bearer ${apiToken}` },
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("leaves host checks to the password gate when a password is set", async () => {
+    const app = createApp({} as ShelfService, undefined, "/", { password: "example-secret" });
+    const response = await app.request("/api/health", { headers: { host: "ushelf.example" } });
+    expect(response.status).toBe(200);
   });
 });
 

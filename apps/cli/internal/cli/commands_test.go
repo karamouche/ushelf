@@ -121,6 +121,53 @@ func TestDeployRejectsShortAppPasswords(t *testing.T) {
 	}
 }
 
+func TestLocalDeployOnANetworkHostRequiresAnAppPassword(t *testing.T) {
+	cli := newTestCLI(t)
+	t.Setenv("USHELF_APP_PASSWORD", "")
+	for _, host := range []string{"0.0.0.0", "192.168.1.20"} {
+		err := cli.run("deploy", "local", "--host", host)
+		if err == nil || !strings.Contains(err.Error(), "app password") {
+			t.Fatalf("%s: expected missing password error, got %v", host, err)
+		}
+	}
+	if len(cli.runner.calls) != 0 {
+		t.Fatalf("nothing should be deployed without a password: %v", cli.runner.calls)
+	}
+	if credentials, _ := cli.store().LoadCredentials(); credentials["local"].APIToken != "" {
+		t.Fatal("a refused deployment must not be saved")
+	}
+}
+
+func TestConfigRefusesToExposeALocalContextWithoutAnAppPassword(t *testing.T) {
+	cli := newTestCLI(t)
+	cli.addContext(t, "local", ContextSpec{Driver: DriverLocal}, Credentials{APIToken: testToken})
+	if err := cli.run("config", "set", "host", "0.0.0.0"); err == nil || !strings.Contains(err.Error(), "needs an app password") {
+		t.Fatalf("expected missing password error, got %v", err)
+	}
+	if config, _ := cli.store().Load(); config.Contexts["local"].Host != "" {
+		t.Fatalf("host must not be saved: %#v", config.Contexts["local"])
+	}
+	if err := cli.run("config", "set", "host", "localhost"); err != nil {
+		t.Fatal(err)
+	}
+
+	cli.addContext(t, "lan", ContextSpec{Driver: DriverLocal, Host: "0.0.0.0"}, Credentials{APIToken: testToken, AppPassword: "pw"})
+	if err := cli.run("config", "unset", "app-password"); err == nil || !strings.Contains(err.Error(), "requires an app password") {
+		t.Fatalf("expected the password to be kept, got %v", err)
+	}
+	if err := cli.run("config", "set", "host", "192.168.1.20"); err != nil {
+		t.Fatal(err)
+	}
+
+	cli.addContext(t, "edited", ContextSpec{Driver: DriverLocal, Host: "0.0.0.0"}, Credentials{APIToken: testToken})
+	if err := cli.run("start"); err == nil || !strings.Contains(err.Error(), "needs an app password") {
+		t.Fatalf("start must refuse an exposed context without a password, got %v", err)
+	}
+	if len(cli.runner.calls) != 0 {
+		t.Fatalf("nothing should be started without a password: %v", cli.runner.calls)
+	}
+}
+
 func TestDeployValidatesTargetsBeforeTouchingDocker(t *testing.T) {
 	cli := newTestCLI(t)
 	t.Setenv("USHELF_APP_PASSWORD", "reader-password")

@@ -12,7 +12,7 @@ The image is `ghcr.io/karamouche/ushelf:<version>`. Give it:
 - A persistent volume mounted at `/data`.
 - `USHELF_HOST=0.0.0.0` so it listens inside the container, and optionally `USHELF_PORT` (default `43110`).
 - `USHELF_API_TOKEN`, a random string of at least 32 characters, for example from `openssl rand -base64 32`.
-- `USHELF_APP_PASSWORD`, at least 12 characters, whenever the reader is reachable beyond loopback.
+- `USHELF_APP_PASSWORD`, at least 12 characters, whenever the reader is reachable beyond loopback. Without it, the server answers only the host names `localhost`, `127.0.0.1`, and `[::1]` (other requests get `421` unless they carry the API token), so a proxy or another machine cannot use the reader.
 - HTTPS in front of it, preserving the original `Host` header.
 
 The container runs as an unprivileged user. If it starts as root, for example on a platform with root-owned volumes, it takes ownership of `/data` and drops privileges before starting the server. See [Configuration](../../reference/configuration/) for every variable.
@@ -41,6 +41,8 @@ test -f "$HOME/.ushelf/recipes/default.md" || \
 docker compose up -d --build
 ushelf context add compose --url http://127.0.0.1:43110
 ```
+
+Compose publishes the port on `127.0.0.1` unless `.env` sets `USHELF_HOST`. If you publish it on `0.0.0.0` or a LAN address, also set `USHELF_APP_PASSWORD` in `.env`; without it, browsers on other machines get `421`.
 
 To use another location, set an absolute `USHELF_ROOT` in `.env` and create the same directories there. `USHELF_UID` and `USHELF_GID` let the container access your files.
 
