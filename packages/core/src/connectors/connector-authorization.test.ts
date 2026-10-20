@@ -243,17 +243,50 @@ describe("ConnectorAuthorization", () => {
     expect(connectors.verifyAccessToken(fourth.tokens.accessToken)).toBeUndefined();
   });
 
-  it("purges abandoned registrations before enforcing the client limit", async () => {
-    const { clock, connectors } = await fixture();
-    for (let index = 0; index < 100; index++) {
+  it("evicts the oldest unapproved registration instead of refusing new ones", async () => {
+    const { connectors } = await fixture();
+    const unapproved = Array.from({ length: 100 }, () =>
+      connectors.register({ redirectUris: [CLAUDE_CALLBACK] }),
+    );
+
+    const { tokens } = connect(connectors);
+
+    expect(connectors.verifyAccessToken(tokens.accessToken)).toBeDefined();
+    expect(connectors.client(unapproved[0]!.clientId)).toBeUndefined();
+    expect(connectors.client(unapproved[1]!.clientId)).toBeDefined();
+  });
+
+  it("never evicts connected clients or clients with a pending authorization code", async () => {
+    const { connectors } = await fixture();
+    const connected = connect(connectors);
+    const approved = connectors.register({ redirectUris: [CLAUDE_CALLBACK] });
+    connectors.issueCode({
+      clientId: approved.clientId,
+      redirectUri: CLAUDE_CALLBACK,
+      codeChallenge: CHALLENGE,
+    });
+
+    for (let index = 0; index < 200; index++) {
       connectors.register({ redirectUris: [CLAUDE_CALLBACK] });
     }
+
+    expect(connectors.verifyAccessToken(connected.tokens.accessToken)).toBeDefined();
+    expect(connectors.client(approved.clientId)).toBeDefined();
+  });
+
+  it("refuses registration only when every slot holds a connected client", async () => {
+    const { connectors } = await fixture();
+    for (let index = 0; index < 100; index++) connect(connectors);
     expect(oauthCode(() => connectors.register({ redirectUris: [CLAUDE_CALLBACK] }))).toBe(
       "temporarily_unavailable",
     );
+  });
+
+  it("purges registrations abandoned for a day", async () => {
+    const { clock, connectors } = await fixture();
+    const abandoned = connectors.register({ redirectUris: [CLAUDE_CALLBACK] });
     clock.now += 25 * 60 * 60_000;
-    expect(
-      oauthCode(() => connectors.register({ redirectUris: [CLAUDE_CALLBACK] })),
-    ).toBeUndefined();
+    connectors.register({ redirectUris: [CLAUDE_CALLBACK] });
+    expect(connectors.client(abandoned.clientId)).toBeUndefined();
   });
 });

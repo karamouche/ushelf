@@ -93,10 +93,15 @@ export class ConnectorAuthorization {
     const method = input.tokenEndpointAuthMethod ?? "client_secret_basic";
     const now = this.now();
     this.database.purgeOAuth(now, now - ABANDONED_REGISTRATION_MS);
-    if (this.database.oauthClientCount() >= MAX_CLIENTS) {
+    // Registration is unauthenticated, so make room by dropping the oldest unapproved client
+    // rather than refusing: otherwise anyone could fill the table and lock the owner out.
+    if (
+      this.database.oauthClientCount() >= MAX_CLIENTS &&
+      !this.database.deleteOldestUnapprovedOAuthClient()
+    ) {
       throw new OAuthError(
         "temporarily_unavailable",
-        "Too many connectors are registered; revoke unused ones with `ushelf connectors revoke`",
+        "Too many connectors are connected; revoke unused ones with `ushelf connectors revoke`",
       );
     }
     const clientId = randomUUID();
