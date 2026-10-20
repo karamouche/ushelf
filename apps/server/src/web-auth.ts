@@ -219,11 +219,24 @@ export function sameOrigin(
   }
 }
 
+const NEXT_BASE = "http://ushelf.invalid";
+// Browsers strip tab, CR, and LF from URLs, so "/\t/evil.example" would become "//evil.example".
+const UNSAFE_NEXT = /[\\\u0000-\u001f\u007f]/;
+
+/** Returns a same-origin, normalized path below the base path, or the fallback. */
 function safeNext(value: string | null | undefined, prefix: string, fallback: string): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || UNSAFE_NEXT.test(value)) {
     return fallback;
   }
-  const pathname = new URL(value, "http://localhost").pathname;
+  let resolved: URL;
+  try {
+    resolved = new URL(value, NEXT_BASE);
+  } catch {
+    return fallback;
+  }
+  if (resolved.origin !== NEXT_BASE) return fallback;
+  const { pathname } = resolved;
+  if (pathname.startsWith("//")) return fallback;
   if (prefix && pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return fallback;
-  return value;
+  return `${pathname}${resolved.search}${resolved.hash}`;
 }
