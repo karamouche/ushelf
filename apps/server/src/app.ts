@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { createMiddleware } from "hono/factory";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "@ushelf/mcp";
@@ -20,6 +21,22 @@ import { installWebAuth, PasswordGate, type WebAuthOptions } from "./web-auth.js
 // Attached PDFs are limited to 10 MiB before base64 encoding inside a JSON-RPC envelope.
 const MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const KINDLE_CREDENTIAL_MAX_BYTES = 64 * 1024;
+const JSON_BODY_MAX_BYTES = 16 * 1024;
+
+// Requiring application/json forces a CORS preflight, so cross-site pages cannot send these writes.
+const requireJsonBody = [
+  createMiddleware<AppEnv>(async (c, next) => {
+    const type = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    if (type !== "application/json") {
+      return c.json({ error: "Content-Type must be application/json" }, 415);
+    }
+    await next();
+  }),
+  bodyLimit({
+    maxSize: JSON_BODY_MAX_BYTES,
+    onError: (c) => c.json({ error: "Request body is too large" }, 413),
+  }),
+] as const;
 
 export interface AppOptions extends WebAuthOptions {
   apiToken?: string | undefined;
@@ -149,7 +166,7 @@ export function createApp(
       "x-content-type-options": "nosniff",
     });
   });
-  app.patch(route("/api/items/:id/reading"), async (c) => {
+  app.patch(route("/api/items/:id/reading"), ...requireJsonBody, async (c) => {
     const body = await c.req.json<{ status: string; progress: number; revision?: string }>();
     const item = await service.updateReading(
       c.req.param("id")!,
@@ -159,7 +176,7 @@ export function createApp(
     );
     return c.json({ item });
   });
-  app.post(route("/api/items/:id/kindle-deliveries"), async (c) => {
+  app.post(route("/api/items/:id/kindle-deliveries"), ...requireJsonBody, async (c) => {
     const body = kindleTargetSchema.parse(await c.req.json());
     return c.json(
       await service.sendToKindle(c.req.param("id")!, body.targetSerial, c.req.raw.signal),
