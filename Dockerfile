@@ -1,7 +1,7 @@
 ARG USHELF_WEB_BASE_PATH=/
 ARG USHELF_PORT=43110
 
-FROM golang:1.25-bookworm AS kindle-bridge-build
+FROM golang:1.27.3-bookworm AS kindle-bridge-build
 
 WORKDIR /src/apps/cli
 COPY apps/cli/go.mod apps/cli/go.sum ./
