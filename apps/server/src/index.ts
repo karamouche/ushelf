@@ -5,9 +5,10 @@ import { serve } from "@hono/node-server";
 import { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
 import { resolveApiToken } from "./api-auth.js";
+import { warnSkippedItems } from "./index-report.js";
 
 const service = new ShelfService();
-await service.initialize();
+warnSkippedItems(await service.initialize());
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webRoot =
