@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import BetterSqlite3 from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../configuration/ushelf-config.js";
 import type { ItemFrontmatter } from "../domain/library-item.js";
 import { sha256 } from "../persistence/markdown/item-markdown.js";
@@ -14,6 +14,7 @@ const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
+afterEach(() => vi.restoreAllMocks());
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-test-"));
@@ -153,6 +154,20 @@ describe("agent-driven workflow", () => {
     expect(await readdir(config.filesDir)).toEqual([results[0]?.item.id]);
     await service.rebuildIndex();
     expect(service.listItems()).toHaveLength(2);
+  });
+
+  it("removes a new item's files when indexing it fails", async () => {
+    const { config, service } = await fixture();
+    vi.spyOn(ShelfDatabase.prototype, "upsert").mockImplementationOnce(() => {
+      throw new Error("index unavailable");
+    });
+
+    await expect(
+      service.ingestFile({ filename: "useful-paper.pdf", contentBase64: SIMPLE_PDF_BASE64 }),
+    ).rejects.toThrow("index unavailable");
+    expect(await readdir(config.filesDir)).toEqual([]);
+    await service.rebuildIndex();
+    expect(service.listItems()).toHaveLength(1);
   });
 
   it("resumes source fallback, saves insights, persists reading state, and rebuilds from Markdown", async () => {

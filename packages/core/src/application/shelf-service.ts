@@ -160,15 +160,10 @@ export class ShelfService {
       enrichment: { status: "pending", recipe: recipeName },
       media: { source: sourceMedia, insights: emptyMediaStats() },
     };
-    let item: ShelfItem;
-    try {
+    const item = await this.storeNewItem(id, async () => {
       await this.repository.saveMediaAssets(id, mediaAssets);
-      item = await this.repository.save(frontmatter, "", sourceMarkdown);
-    } catch (error) {
-      await this.repository.removeItemFiles(id);
-      throw error;
-    }
-    this.database.upsert(item);
+      return this.repository.save(frontmatter, "", sourceMarkdown);
+    });
     return { item, duplicate: false, state: ingestionState(item) };
   }
 
@@ -224,17 +219,26 @@ export class ShelfService {
       enrichment: { status: "pending", recipe: recipeName },
       media: { source: source.media, insights: emptyMediaStats() },
     };
-    let item: ShelfItem;
-    try {
+    const item = await this.storeNewItem(id, async () => {
       await this.repository.saveOriginalFile(id, bytes);
       await this.repository.saveMediaAssets(id, source.assets);
-      item = await this.repository.save(frontmatter, "", source.markdown);
+      return this.repository.save(frontmatter, "", source.markdown);
+    });
+    return { item, duplicate: false, state: ingestionState(item) };
+  }
+
+  /** Writes and indexes a new item, removing everything it wrote if either step fails. */
+  private async storeNewItem(id: string, write: () => Promise<ShelfItem>): Promise<ShelfItem> {
+    let item: ShelfItem | undefined;
+    try {
+      item = await write();
+      this.database.upsert(item);
+      return item;
     } catch (error) {
-      await this.repository.removeItemFiles(id);
+      if (item) await this.repository.remove(item);
+      else await this.repository.removeItemFiles(id);
       throw error;
     }
-    this.database.upsert(item);
-    return { item, duplicate: false, state: ingestionState(item) };
   }
 
   async submitSourceContent(input: {
