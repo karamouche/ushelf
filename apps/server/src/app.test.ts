@@ -154,6 +154,46 @@ describe("createApp base path", () => {
   });
 });
 
+describe("loopback host guard without an app password", () => {
+  const apiToken = "t".repeat(43);
+  const service = { listItems: () => [] } as unknown as ShelfService;
+
+  it("serves the reader API only through loopback host names", async () => {
+    const app = createApp(service);
+    for (const host of ["127.0.0.1:43110", "localhost:43110", "[::1]:43110", "localhost"]) {
+      const response = await app.request("/api/items", { headers: { host } });
+      expect(response.status, host).toBe(200);
+    }
+    for (const host of [
+      "attacker.example:43110",
+      "192.168.1.20:43110",
+      "127.0.0.1.nip.io",
+      "localhost.attacker.example",
+    ]) {
+      const response = await app.request("/api/items", { headers: { host } });
+      expect(response.status, host).toBe(421);
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringContaining("USHELF_APP_PASSWORD"),
+      });
+    }
+    expect((await app.request("http://attacker.example:43110/api/items")).status).toBe(421);
+  });
+
+  it("still serves token clients through any host name", async () => {
+    const app = createApp(service, undefined, "/", { apiToken });
+    const response = await app.request("/api/items", {
+      headers: { host: "nas.tailnet.example", authorization: `Bearer ${apiToken}` },
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("leaves host checks to the password gate when a password is set", async () => {
+    const app = createApp({} as ShelfService, undefined, "/", { password: "example-secret" });
+    const response = await app.request("/api/health", { headers: { host: "ushelf.example" } });
+    expect(response.status).toBe(200);
+  });
+});
+
 describe("optional app password", () => {
   const origin = "https://ushelf.example";
   const password = "example-secret";

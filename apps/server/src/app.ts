@@ -50,6 +50,7 @@ export function createApp(
       })
     : undefined;
   installApiTokenAuth(app, options.apiToken, connectorOAuth);
+  if (!passwordGate) installLoopbackHostGuard(app);
   installWebAuth(app, prefix, passwordGate, options, connectorOAuth?.isPublicPath);
   app.use(route("/api/*"), cors({ origin: ["http://127.0.0.1:43111", "http://localhost:43111"] }));
   connectorOAuth?.install(app);
@@ -213,6 +214,36 @@ export function createApp(
     app.get(webRoute, (c) => c.html(indexHtml));
   }
   return app;
+}
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Without an app password the reader API is unauthenticated, so it may only be reached through a
+ * loopback Host. This blocks DNS-rebinding pages and LAN clients; token clients stay allowed.
+ */
+function installLoopbackHostGuard(app: Hono<AppEnv>): void {
+  app.use("*", async (c, next) => {
+    if (c.get("apiClient") || isLoopbackHost(c.req.header("host") ?? new URL(c.req.url).host)) {
+      await next();
+      return;
+    }
+    return c.json(
+      {
+        error:
+          "This uShelf server has no app password, so it only answers on localhost. Set USHELF_APP_PASSWORD to reach it through another host name.",
+      },
+      421,
+    );
+  });
+}
+
+function isLoopbackHost(host: string): boolean {
+  try {
+    return LOOPBACK_HOSTNAMES.has(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
 }
 
 function encodeHeaderFilename(value: string): string {
