@@ -397,6 +397,14 @@ describe("connector OAuth", () => {
     await expect(implicit.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
   });
 
+  it("still connects the owner's app after anonymous registrations fill the client limit", async () => {
+    const context = await fixture();
+    for (let index = 0; index < 100; index++) await register(context.request);
+
+    const { tokens } = await connect(context);
+    expect((await context.request("/mcp", mcpRequest(tokens.access_token))).status).toBe(200);
+  });
+
   it("keeps connector tokens off every route except MCP", async () => {
     const context = await fixture();
     const { tokens } = await connect(context);

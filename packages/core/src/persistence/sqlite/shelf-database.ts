@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import BetterSqlite3 from "better-sqlite3";
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -305,25 +306,39 @@ export class ShelfDatabase {
       transaction.delete(oauthGrants).where(lte(oauthGrants.refreshExpiresAt, now)).run();
       transaction
         .delete(oauthClients)
-        .where(
-          and(
-            lt(oauthClients.createdAt, abandonedBefore),
-            notExists(
-              transaction
-                .select({ id: oauthGrants.id })
-                .from(oauthGrants)
-                .where(eq(oauthGrants.clientId, oauthClients.clientId)),
-            ),
-            notExists(
-              transaction
-                .select({ codeHash: oauthAuthorizationCodes.codeHash })
-                .from(oauthAuthorizationCodes)
-                .where(eq(oauthAuthorizationCodes.clientId, oauthClients.clientId)),
-            ),
-          ),
-        )
+        .where(and(lt(oauthClients.createdAt, abandonedBefore), this.unapprovedOAuthClient()))
         .run();
     });
+  }
+
+  /** Deletes the oldest registration without a grant or pending code; false when none exists. */
+  deleteOldestUnapprovedOAuthClient(): boolean {
+    const oldest = this.database
+      .select({ clientId: oauthClients.clientId })
+      .from(oauthClients)
+      .where(this.unapprovedOAuthClient())
+      .orderBy(asc(oauthClients.createdAt))
+      .limit(1)
+      .get();
+    return oldest ? this.deleteOAuthClient(oldest.clientId) : false;
+  }
+
+  /** Matches registrations the owner never approved: no grant and no pending authorization code. */
+  private unapprovedOAuthClient(): SQL | undefined {
+    return and(
+      notExists(
+        this.database
+          .select({ id: oauthGrants.id })
+          .from(oauthGrants)
+          .where(eq(oauthGrants.clientId, oauthClients.clientId)),
+      ),
+      notExists(
+        this.database
+          .select({ codeHash: oauthAuthorizationCodes.codeHash })
+          .from(oauthAuthorizationCodes)
+          .where(eq(oauthAuthorizationCodes.clientId, oauthClients.clientId)),
+      ),
+    );
   }
 
   insertAuthorizationCode(code: typeof oauthAuthorizationCodes.$inferInsert): void {
