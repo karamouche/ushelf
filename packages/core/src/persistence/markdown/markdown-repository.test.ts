@@ -181,6 +181,23 @@ describe("MarkdownRepository", () => {
     await expect(repository.importFile(firstPath)).rejects.toThrow(/already exists/);
     expect(await readFile(firstImported.filePath, "utf8")).toBe(firstRaw);
   });
+
+  it("writes nothing when the item does not satisfy its schema", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-repository-test-"));
+    roots.push(root);
+    const config = resolveConfig(root);
+    const repository = new MarkdownRepository(config);
+    await repository.initialize();
+
+    const saved = await repository.save(articleFrontmatter(), "", "Original source.");
+    const before = await readFile(saved.filePath, "utf8");
+    const invalid = { ...articleFrontmatter(), title: "" };
+
+    await expect(repository.save(invalid, "", "New source.", saved.filePath)).rejects.toThrow();
+    await expect(repository.save(invalid, "", "New source.")).rejects.toThrow();
+    expect(await readFile(saved.filePath, "utf8")).toBe(before);
+    expect(await repository.itemFiles()).toEqual([saved.filePath]);
+  });
 });
 
 function articleFrontmatter(): Extract<ItemFrontmatter, { sourceType: "article" | "x" }> {

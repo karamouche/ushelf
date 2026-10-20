@@ -1,5 +1,9 @@
 export { ShelfService } from "./application/shelf-service.js";
-export type { IngestResult, ShelfServiceDependencies } from "./application/shelf-service.js";
+export type {
+  IndexReport,
+  IngestResult,
+  ShelfServiceDependencies,
+} from "./application/shelf-service.js";
 export { resolveConfig } from "./configuration/ushelf-config.js";
 export type { UshelfConfig } from "./configuration/ushelf-config.js";
 export {
