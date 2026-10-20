@@ -2,6 +2,8 @@ module github.com/karamouche/ushelf/apps/cli
 
 go 1.25.0
 
+toolchain go1.27.3
+
 require (
 	github.com/cyrgim/stk v0.1.0
 	github.com/spf13/cobra v1.10.2
