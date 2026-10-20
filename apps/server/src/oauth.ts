@@ -506,7 +506,7 @@ function consentPage(
           : "") +
         (error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : "") +
         `<form method="post" action="${escapeHtml(action)}">${fields}` +
-        `<label for="password">uShelf password</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus>` +
+        `<label for="password">uShelf password</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " autofocus>` +
         `<button type="submit" name="decision" value="allow">Allow access</button>` +
         `<button type="submit" name="decision" value="deny" class="secondary">Deny</button></form>`,
     ),
