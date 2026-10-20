@@ -52,6 +52,11 @@ export async function extractPdf(
 ): Promise<ExtractedPdf> {
   const loadingTask = getDocument({
     data: new Uint8Array(bytes),
+    // PDF.js enforces this from the image dictionary before decoding, so an oversized raster
+    // never reaches memory. With stopAtErrors it truncates that page's operator list, so the
+    // page keeps its text but its figures are dropped.
+    maxImageSize: MAX_IMAGE_PIXELS,
+    enableXfa: false,
     stopAtErrors: true,
     useSystemFonts: true,
     useWasm: false,
@@ -87,9 +92,9 @@ export async function extractPdf(
           ? titleLine
           : undefined,
       );
+      const blocks: PositionedBlock[] = [...textBlocks];
       const figureResult = await pageFigures(page, operatorList.fnArray, operatorList.argsArray);
       const figures = figureResult.figures;
-      const blocks: PositionedBlock[] = [...textBlocks];
       media.discovered += figures.length + figureResult.filtered + figureResult.omitted.length;
       media.filtered += figureResult.filtered;
       media.omitted += figureResult.omitted.length;
