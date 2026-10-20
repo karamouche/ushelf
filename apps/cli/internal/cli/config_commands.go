@@ -111,8 +111,8 @@ func (s *commandState) changeSetting(key string, values []string, unset bool) er
 		}
 		entry := credentials[current.Name]
 		if unset {
-			if current.Spec.Driver != DriverLocal {
-				return fmt.Errorf("a %s deployment always requires an app password; set a new one instead", current.Spec.Driver)
+			if current.Spec.RequiresAppPassword() {
+				return fmt.Errorf("this %s deployment is reachable from the network, so it requires an app password; set a new one instead", current.Spec.Driver)
 			}
 			entry.AppPassword = ""
 		} else if current.Spec.Driver == DriverExternal {
@@ -168,6 +168,9 @@ func (s *commandState) changeSetting(key string, values []string, unset bool) er
 		return fmt.Errorf("unknown config key %q; use %s", key, strings.Join(configKeyNames, ", "))
 	}
 	if err := spec.Validate(); err != nil {
+		return err
+	}
+	if err := requirePasswordFor(spec, current.Credentials); err != nil {
 		return err
 	}
 	config, err := s.store.Load()

@@ -236,6 +236,39 @@ func (s ContextSpec) Validate() error {
 	}
 }
 
+// RequiresAppPassword reports whether the server is reachable beyond this machine. Without an app
+// password the server answers only loopback host names, so such a deployment needs one.
+func (s ContextSpec) RequiresAppPassword() bool {
+	switch s.Driver {
+	case DriverLocal:
+		return !isLoopbackHost(s.Host)
+	case DriverExternal:
+		return false
+	default:
+		return true
+	}
+}
+
+// isLoopbackHost matches the host names the server accepts when no app password is set.
+func isLoopbackHost(host string) bool {
+	switch host {
+	case "", "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
+}
+
+// requirePasswordFor rejects a context whose exposure needs an app password it does not have.
+func requirePasswordFor(spec ContextSpec, credentials Credentials) error {
+	if !spec.RequiresAppPassword() || credentials.AppPassword != "" {
+		return nil
+	}
+	if spec.Driver == DriverLocal {
+		return fmt.Errorf("host %s exposes uShelf beyond this machine, so it needs an app password; run `ushelf config set app-password` or use 127.0.0.1", spec.Host)
+	}
+	return fmt.Errorf("a %s deployment requires an app password; run `ushelf config set app-password`", spec.Driver)
+}
+
 func newAPIToken() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {

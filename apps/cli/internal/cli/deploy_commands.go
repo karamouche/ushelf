@@ -20,7 +20,8 @@ func (s *commandState) deployCommand() *cobra.Command {
 		Long: "Deploy uShelf and save the result as a context.\n\n" +
 			"Deploying generates an API token for the CLI and agents. Remote deployments also\n" +
 			"require a reader password of at least 12 characters, read from USHELF_APP_PASSWORD\n" +
-			"or prompted without echo.\n" +
+			"or prompted without echo, and so does a local deployment published on a host other\n" +
+			"than 127.0.0.1, ::1, or localhost.\n" +
 			"Redeploying an existing context keeps its saved settings unless flags override them.",
 		Example: `  ushelf deploy local
   ushelf deploy ssh me@vps.example.com --domain ushelf.example.com
@@ -50,7 +51,7 @@ func (s *commandState) deployLocalCommand() *cobra.Command {
 		},
 	}
 	addCommonDeployFlags(command, flags, "local")
-	command.Flags().StringVar(&flags.host, "host", "", "address to publish on (default 127.0.0.1)")
+	command.Flags().StringVar(&flags.host, "host", "", "address to publish on (default 127.0.0.1; other addresses require an app password)")
 	command.Flags().IntVar(&flags.port, "port", 0, "HTTP port (default 43110)")
 	return command
 }
@@ -143,7 +144,7 @@ func (s *commandState) deploy(ctx context.Context, name string, override Context
 			return err
 		}
 	}
-	if spec.Driver != DriverLocal && credentials.AppPassword == "" {
+	if spec.RequiresAppPassword() && credentials.AppPassword == "" {
 		if credentials.AppPassword, err = s.requireAppPassword(); err != nil {
 			return err
 		}
@@ -167,12 +168,15 @@ func (s *commandState) requireAppPassword() (string, error) {
 		}
 		return value, nil
 	}
-	fmt.Fprintf(s.deps.Stderr, "A remote uShelf is reachable from the network, so its reader needs a password of at least %d characters.\n", minAppPasswordLength)
+	fmt.Fprintf(s.deps.Stderr, "This uShelf is reachable from the network, so its reader needs a password of at least %d characters.\n", minAppPasswordLength)
 	return promptAppPassword(s.deps.Stdin, s.deps.Stderr)
 }
 
 // apply deploys a context and waits until its API accepts the context's token.
 func (s *commandState) apply(ctx context.Context, current Context) error {
+	if err := requirePasswordFor(current.Spec, current.Credentials); err != nil {
+		return err
+	}
 	deployment, err := s.deploymentFor(current)
 	if err != nil {
 		return err
