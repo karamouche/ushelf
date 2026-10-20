@@ -8,6 +8,9 @@ import {
 import { z } from "zod";
 import { registerKindleTools } from "./kindle-tools.js";
 
+// Agent-supplied Markdown shares the 5 MiB bound of fetched sources.
+const MAX_AGENT_MARKDOWN_LENGTH = 5 * 1024 * 1024;
+
 const json = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   structuredContent: value as Record<string, unknown>,
@@ -69,7 +72,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
       inputSchema: {
         itemId: z.uuid(),
         title: z.string().min(1),
-        markdown: z.string().min(40),
+        markdown: z.string().min(40).max(MAX_AGENT_MARKDOWN_LENGTH),
         author: z.string().optional(),
         publishedAt: z.iso.datetime().optional(),
         revision: z.string().optional(),
@@ -101,7 +104,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
         keyPoints: z.array(z.string().min(1)).min(1).max(12),
         tags: z.array(z.string()).max(12),
         citations: z.array(citationSchema),
-        bodyMarkdown: z.string(),
+        bodyMarkdown: z.string().max(MAX_AGENT_MARKDOWN_LENGTH),
       },
     },
     async (input) => json(await service.saveInsights(input)),
