@@ -80,7 +80,7 @@ describe("PDF ingestion", () => {
 
   it("skips images above the pixel limit before PDF.js decodes them", async () => {
     // 8000 x 8000 grayscale is 64 Mpx (61 MiB decoded) but deflates to well under 100 KiB.
-    const bytes = makePdfWithCompressedImage(8000);
+    const bytes = makePdfWithImageObjects([grayImage(8000)]);
     expect(bytes.length).toBeLessThan(128 * 1024);
     const peakBefore = process.resourceUsage().maxRSS;
 
@@ -92,6 +92,34 @@ describe("PDF ingestion", () => {
     expect(result.media.localized).toBe(0);
     // maxRSS is in KiB. Decoding the image would add at least its 61 MiB raster.
     expect(process.resourceUsage().maxRSS - peakBefore).toBeLessThan(32 * 1024);
+  });
+
+  it("rejects a small image whose /SMask would decode beyond the memory budget", async () => {
+    // PDF.js upsamples the 64 x 64 image to its 12000 x 12000 mask: a 549 MiB RGBA raster.
+    const base = Buffer.alloc(64 * 64 * 3, 0x20);
+    const bytes = makePdfWithImageObjects([
+      imageStream("/Width 64 /Height 64 /SMask 7 0 R /ColorSpace /DeviceRGB", deflateSync(base)),
+      grayImage(12000),
+    ]);
+    expect(bytes.length).toBeLessThan(256 * 1024);
+    const peakBefore = process.resourceUsage().maxRSS;
+
+    await expect(extractPdf(bytes, "mask.pdf", ITEM_ID)).rejects.toThrow(/too much memory/);
+    expect(process.resourceUsage().maxRSS - peakBefore).toBeLessThan(128 * 1024);
+  });
+
+  it("rejects a JPEG whose frame header claims far larger dimensions than its dictionary", async () => {
+    const jpeg = Buffer.from(SMALL_JPEG_BASE64, "base64");
+    const frame = jpeg.indexOf(Buffer.from([0xff, 0xc0]));
+    jpeg.writeUInt16BE(20000, frame + 5);
+    jpeg.writeUInt16BE(20000, frame + 7);
+    const bytes = makePdfWithImageObjects([
+      imageStream("/Width 64 /Height 64 /ColorSpace /DeviceRGB /Filter /DCTDecode", jpeg, false),
+    ]);
+    const peakBefore = process.resourceUsage().maxRSS;
+
+    await expect(extractPdf(bytes, "frame.pdf", ITEM_ID)).rejects.toThrow(/too much memory/);
+    expect(process.resourceUsage().maxRSS - peakBefore).toBeLessThan(128 * 1024);
   });
 });
 
@@ -171,12 +199,33 @@ function makePdfWithImage(): Buffer {
   return Buffer.from(pdf);
 }
 
-function makePdfWithCompressedImage(side: number): Buffer {
+// A 64 x 64 baseline JPEG; tests patch its frame header.
+const SMALL_JPEG_BASE64 =
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCABAAEADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAYH/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AgAE82EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB/9k=";
+
+function grayImage(side: number): Buffer {
+  return imageStream(
+    `/Width ${side} /Height ${side} /ColorSpace /DeviceGray`,
+    deflateSync(Buffer.alloc(side * side, 0x7f), { level: 9 }),
+  );
+}
+
+function imageStream(entries: string, data: Buffer, flate = true): Buffer {
+  return Buffer.concat([
+    Buffer.from(
+      `<< /Type /XObject /Subtype /Image ${entries} /BitsPerComponent 8${flate ? " /Filter /FlateDecode" : ""} /Length ${data.length} >>\nstream\n`,
+    ),
+    data,
+    Buffer.from("\nendstream"),
+  ]);
+}
+
+// Object 6 is drawn on the page; later images are available as objects 7 onwards.
+function makePdfWithImageObjects(images: Buffer[]): Buffer {
   const content = Buffer.from(
     textAt("F1", 12, 72, 720, "Text beside an oversized figure, long enough for extraction.") +
       `\nq\n200 0 0 200 72 400 cm\n/Im1 Do\nQ`,
   );
-  const image = deflateSync(Buffer.alloc(side * side, 0x7f), { level: 9 });
   return buildPdf([
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
@@ -185,13 +234,7 @@ function makePdfWithCompressedImage(side: number): Buffer {
     ),
     Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
     pdfStream(content),
-    Buffer.concat([
-      Buffer.from(
-        `<< /Type /XObject /Subtype /Image /Width ${side} /Height ${side} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`,
-      ),
-      image,
-      Buffer.from("\nendstream"),
-    ]),
+    ...images,
   ]);
 }
 
