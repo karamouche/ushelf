@@ -198,6 +198,30 @@ describe("ShelfDatabase", () => {
     reopened.close();
   });
 
+  it("bounds list pages even when limit or offset is invalid", async () => {
+    const { database, itemsDir } = await fixture();
+    for (let index = 0; index < 60; index += 1) {
+      const id = `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+      const url = `https://example.com/article-${index}`;
+      database.upsert(
+        article(itemsDir, {
+          id,
+          originalUrl: url,
+          canonicalUrl: url,
+          filePath: path.join(itemsDir, "2026", `${id}.md`),
+        }),
+      );
+    }
+
+    expect(database.list({ limit: -1 })).toHaveLength(50);
+    expect(database.list({ limit: 0 })).toHaveLength(50);
+    expect(database.list({ limit: Number.NaN })).toHaveLength(50);
+    expect(database.list({ limit: 1.5 })).toHaveLength(50);
+    expect(database.list({ limit: 1000 })).toHaveLength(60);
+    expect(database.list({ limit: 5, offset: -3 })).toEqual(database.list({ limit: 5 }));
+    expect(database.list({ limit: 5, offset: 58 })).toHaveLength(2);
+  });
+
   it("keeps canonical URL and document hash uniqueness transactional", async () => {
     const { database, itemsDir } = await fixture();
     const savedArticle = article(itemsDir);
