@@ -96,3 +96,20 @@ func TestClientReportsServerErrors(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestClientRefusesRedirectsWithTheToken(t *testing.T) {
+	var leaked bool
+	target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked = leaked || r.Header.Get("Authorization") != ""
+	}))
+	defer target.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+	client, _ := New(server.URL, "secret-token")
+	_, err := client.Server(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "redirected") || leaked {
+		t.Fatalf("err = %v, leaked = %v", err, leaked)
+	}
+}
