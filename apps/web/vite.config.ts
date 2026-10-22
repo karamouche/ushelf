@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import legacy from "@vitejs/plugin-legacy";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { resolveWebBasePath } from "./base-path.js";
@@ -15,7 +16,14 @@ export default defineConfig(({ command, mode }) => {
   return {
     root: webRoot,
     base: command === "build" ? "./" : base,
-    plugins: [react()],
+    plugins: [
+      react(),
+      // E-reader browsers such as the Kindle's run old engines that cannot parse the default
+      // modern syntax, which leaves a blank page. Modern chunks are lowered to the plugin's
+      // Chrome 64 / Safari 12 targets with usage-based polyfills, and engines without ES modules
+      // get a SystemJS build transpiled down to ES5.
+      legacy({ targets: ["defaults", "chrome >= 40", "safari >= 8"], modernPolyfills: true }),
+    ],
     server: {
       proxy: {
         [apiPrefix]: {

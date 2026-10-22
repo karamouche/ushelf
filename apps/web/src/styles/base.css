@@ -59,6 +59,7 @@ h1 {
   margin: 0;
   font-family: var(--font-serif);
   font-weight: 400;
+  font-size: 41px;
   font-size: clamp(41px, 6.3vw, 70px);
   letter-spacing: -0.045em;
   line-height: 0.95;
@@ -76,6 +77,7 @@ h1 {
 }
 @media (max-width: 800px) {
   h1 {
+    font-size: 36px;
     font-size: clamp(36px, 11vw, 46px);
     line-height: 1;
   }

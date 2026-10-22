@@ -52,7 +52,8 @@
   font-size: 0.85em;
 }
 .mermaid-diagram {
-  width: min(960px, calc(100vw - 40px));
+  width: calc(100vw - 40px);
+  max-width: 960px;
   margin: 34px 50%;
   overflow-x: auto;
   transform: translateX(-50%);
@@ -77,7 +78,8 @@
   margin-bottom: 0;
 }
 .table-scroll {
-  width: min(960px, calc(100vw - 40px));
+  width: calc(100vw - 40px);
+  max-width: 960px;
   margin: 34px 50%;
   overflow-x: auto;
   border: 1px solid #d7d7d7;

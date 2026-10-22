@@ -224,7 +224,7 @@ export function createApp(
       "<head>",
       `<head><base href="${normalizedBasePath}"><script>${basePathScript}</script>`,
     );
-    const indexHeaders = webAppHeaders(basePathScript);
+    const indexHeaders = webAppHeaders(inlineScripts(indexHtml));
     const webRoute = route("/*");
     app.get(route("/"), (c) => c.html(indexHtml, 200, indexHeaders));
     app.get(route("/index.html"), (c) => c.html(indexHtml, 200, indexHeaders));
@@ -292,20 +292,31 @@ function normalizeBasePath(value: string): string {
 }
 
 function runtimeBasePathScript(basePath: string): string {
-  return `globalThis.__USHELF_BASE_PATH__=${JSON.stringify(basePath).replaceAll("<", "\\u003c")};`;
+  // `window` rather than `globalThis`: this runs before any polyfill, including on old engines.
+  return `window.__USHELF_BASE_PATH__=${JSON.stringify(basePath).replaceAll("<", "\\u003c")};`;
+}
+
+/** Bodies of the inline scripts in the served page: the base-path script and build loaders. */
+function inlineScripts(html: string): string[] {
+  return [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter(([, attributes = ""]) => !/(?:^|\s)src\s*=/i.test(attributes))
+    .map(([, , body = ""]) => body);
 }
 
 /**
  * The reader renders sanitized third-party content, so the CSP is a second layer behind the
- * sanitizers: only bundled scripts and the inline base-path script may run. Styles stay inline
- * for React style props and Mermaid's generated SVG. Framing is refused to stop clickjacking.
+ * sanitizers: only bundled scripts and the page's own inline scripts (the base-path script and
+ * the legacy-browser loaders emitted by the build) may run. Styles stay inline for React style
+ * props and Mermaid's generated SVG. Framing is refused to stop clickjacking.
  */
-function webAppHeaders(inlineScript: string): Record<string, string> {
-  const scriptHash = createHash("sha256").update(inlineScript).digest("base64");
+function webAppHeaders(scripts: string[]): Record<string, string> {
+  const scriptHashes = [...new Set(scripts)].map(
+    (script) => `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
+  );
   return {
     "content-security-policy": [
       "default-src 'self'",
-      `script-src 'self' 'sha256-${scriptHash}'`,
+      ["script-src 'self'", ...scriptHashes].join(" "),
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       "font-src 'self' data:",

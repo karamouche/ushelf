@@ -209,7 +209,7 @@ describe("createApp base path", () => {
       const html = await spaRoute.text();
       expect(html).toContain("<main>reader</main>");
       expect(html).toContain('<base href="/reader/">');
-      expect(html).toContain('globalThis.__USHELF_BASE_PATH__="/reader/"');
+      expect(html).toContain('window.__USHELF_BASE_PATH__="/reader/"');
 
       expect((await app.request("/app.js")).status).toBe(404);
     } finally {
@@ -237,6 +237,41 @@ describe("createApp base path", () => {
         expect(policy).toContain("frame-ancestors 'none'");
         expect(response.headers.get("x-frame-options")).toBe("DENY");
       }
+    } finally {
+      await fs.rm(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("allows the build's inline legacy-browser loaders but no other inline script", async () => {
+    const webRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ushelf-web-"));
+    const detect = "import.meta.url;window.__vite_is_modern_browser=true";
+    const loader =
+      "System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))";
+    try {
+      await fs.writeFile(
+        path.join(webRoot, "index.html"),
+        [
+          "<html><head>",
+          '<script type="module" crossorigin src="./assets/index.js"></script>',
+          `<script type="module">${detect}</script>`,
+          "</head><body>",
+          `<script nomodule crossorigin id="vite-legacy-entry" data-src="./a.js">${loader}</script>`,
+          "</body></html>",
+        ].join(""),
+      );
+      const app = createApp({} as ShelfService, webRoot);
+
+      const response = await app.request("/");
+      const policy = response.headers.get("content-security-policy") ?? "";
+      const scriptSrc = policy.split("; ").find((directive) => directive.startsWith("script-src"));
+      const hashes = (await response.text())
+        .match(/<script\b[^>]*>[\s\S]*?<\/script>/g)
+        ?.filter((tag) => !tag.includes(" src="))
+        .map((tag) => tag.replace(/^<script\b[^>]*>|<\/script>$/g, ""))
+        .map((body) => `'sha256-${createHash("sha256").update(body).digest("base64")}'`);
+
+      expect(hashes).toHaveLength(3);
+      expect(scriptSrc).toBe(["script-src 'self'", ...(hashes ?? [])].join(" "));
     } finally {
       await fs.rm(webRoot, { recursive: true, force: true });
     }
