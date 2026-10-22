@@ -1,7 +1,8 @@
 /* Page shell shared by the library and error views: top bar, brand, footer, and empty/loading states. */
 
 .shell {
-  width: min(1120px, calc(100% - 40px));
+  width: calc(100% - 40px);
+  max-width: 1120px;
   margin: 0 auto;
   min-height: 100vh;
   display: flex;
@@ -70,7 +71,8 @@ footer {
 }
 @media (max-width: 800px) {
   .shell {
-    width: min(100% - 24px, 1120px);
+    width: calc(100% - 24px);
+    max-width: 1120px;
   }
   .topbar .quiet {
     display: none;
