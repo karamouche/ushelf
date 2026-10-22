@@ -42,6 +42,14 @@ uShelf has three kinds of clients and a credential for each.
 - Secrets reach Docker through a temporary owner-only env file, and Fly.io through `fly secrets import` on stdin. They never appear in process arguments.
 - The Kindle credential lives only on the server, in `secrets/kindle.json`, and is never returned by the API or MCP tools.
 
+## Saved content in the browser
+
+Saved articles, PDFs, and images come from pages anyone could have written, so the reader treats them as hostile:
+
+- Article HTML is sanitized when it is saved and again when it is rendered. Only images saved with the item are displayed, never external ones.
+- The reader sends a Content-Security-Policy that runs only uShelf's own scripts and refuses to be framed by other sites, so a sanitizer bypass cannot run injected script and a page cannot overlay the reader to trick clicks.
+- Item images and original PDFs are served with a sandboxing Content-Security-Policy and `X-Content-Type-Options: nosniff`. A PDF still opens in the browser's viewer, but a flaw in that viewer cannot act with your session.
+
 ## Caching proxies
 
 Responses use `Cache-Control: no-store`. If a proxy or CDN cached uShelf responses before you enabled a password, purge it, especially `/api/items/*/media/*`, and disable caching of protected responses.
