@@ -28,8 +28,8 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 - Apply pending Drizzle migrations whenever `ShelfDatabase` opens and before `ShelfService` reconciles Markdown. Do not add inline schema DDL, `SCHEMA_VERSION`, or `PRAGMA user_version` management.
 - The Drizzle baseline is the only supported database schema. Do not detect, adopt, migrate, or preserve pre-Drizzle development databases; they must be deleted and rebuilt from Markdown.
 - After a successful item mutation, atomically save Markdown and then upsert the returned item into SQLite. Do not create an independent database-only representation of durable state.
-- Preserve the marked Insights and Source sections and validated frontmatter when changing the Markdown codec. A parsed item's `revision` is the SHA-256 of its complete Markdown document.
-- Archive a completed enrichment before clearing or replacing it because of a changed source, requested re-enrichment, or new insights.
+- Preserve the marked Source section and validated frontmatter when changing the Markdown codec. A parsed item's `revision` is the SHA-256 of its complete Markdown document.
+- Archive a completed enrichment before clearing or replacing it because of a changed source, requested re-enrichment, or a new description.
 - Honor supplied revisions on mutations. Enrichment writes must also verify the current recipe hash; they store only the description and tags.
 - Canonical URLs drive web deduplication and original-file hashes drive document deduplication. Keep SQLite item paths portable relative to `library/items` and reject paths that escape that directory.
 - Permanent deletion stays a two-step token flow. Consuming a token is single-use and expiry-bound.

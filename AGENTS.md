@@ -119,11 +119,11 @@ When changing shared behavior, inspect both adapters and the web client for cont
 
 ## Storage and workflow invariants
 
-- Item Markdown contains validated frontmatter plus separate insight and source sections.
+- Item Markdown contains validated frontmatter (including the generated description and tags) plus a marked source section.
 - Canonical URLs provide ingestion deduplication.
 - Content hashes detect source changes; recipe hashes detect stale enrichment.
 - Rendered Markdown images use validated relative references to content-addressed files beneath the owning item's `library/files` directory; the reader must never fetch external image references.
-- A changed enriched source is archived before its insights are cleared.
+- A changed enriched source is archived before its description is cleared.
 - Core must apply pending Drizzle migrations before SQLite startup reconciliation restores index state from Markdown.
 - FTS5 schema changes belong in explicit custom migrations; keep query-only virtual-table mappings outside the schema scanned by Drizzle Kit.
 - Permanent deletion remains a two-step, short-lived confirmation-token flow.

@@ -1,6 +1,6 @@
 # @ushelf/mcp
 
-The Model Context Protocol tool surface for uShelf. It lets a connected agent ingest sources, add source-grounded insights, search and manage the library, send saved items to Kindle, and read item or recipe resources.
+The Model Context Protocol tool surface for uShelf. It lets a connected agent ingest sources, add a source-grounded description and tags, search and manage the library, send saved items to Kindle, and read item or recipe resources.
 
 ## What to know
 
@@ -14,7 +14,7 @@ The Model Context Protocol tool surface for uShelf. It lets a connected agent in
 
 ## Kindle delivery
 
-Run `ushelf kindle setup` before asking an agent to send a saved item. The agent uses `list_kindle_devices` to resolve a registered destination and `send_to_kindle` with the saved item ID and selected device serial. Delivery produces a source-only EPUB with validated local images; generated insights are excluded. MCP tools never return the credential. The integration uses Amazon's unofficial, undocumented Send to Kindle protocol and may stop working if Amazon changes it.
+Run `ushelf kindle setup` before asking an agent to send a saved item. The agent uses `list_kindle_devices` to resolve a registered destination and `send_to_kindle` with the saved item ID and selected device serial. Delivery produces a source-only EPUB with validated local images; the generated description is excluded. MCP tools never return the credential. The integration uses Amazon's unofficial, undocumented Send to Kindle protocol and may stop working if Amazon changes it.
 
 ## Development
 
