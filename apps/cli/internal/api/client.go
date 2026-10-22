@@ -50,7 +50,13 @@ func New(baseURL, token string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{base: parsed, token: token, http: &http.Client{Timeout: 2 * time.Minute}}, nil
+	return &Client{base: parsed, token: token, http: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: refuseRedirect}}, nil
+}
+
+// refuseRedirect stops the token from following a redirect to another scheme or host.
+// The server never redirects API requests, so one means the context URL is wrong.
+func refuseRedirect(request *http.Request, _ []*http.Request) error {
+	return fmt.Errorf("server redirected to %s; update the context URL instead of following it with the API token", request.URL.Redacted())
 }
 
 // ParseBaseURL normalizes a server URL and enforces the transport policy.
