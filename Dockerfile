@@ -14,7 +14,8 @@ FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054f
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 
-RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
+# Node 25+ no longer bundles corepack; install the pinned pnpm with npm.
+RUN npm install --global pnpm@11.25.0
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends g++ make python3 \
