@@ -110,6 +110,7 @@ describe("createApp base path", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("content-disposition")).toContain("Useful%20paper.pdf");
+    expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(Buffer.from(await response.arrayBuffer()).toString()).toBe("%PDF-test");
   });
