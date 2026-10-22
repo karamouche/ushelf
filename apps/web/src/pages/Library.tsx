@@ -121,7 +121,7 @@ function ItemCard({ item }: { item: ItemSummary }) {
         {item.summary ? (
           <p>{item.summary}</p>
         ) : (
-          <p className="muted">Insights have not been added yet.</p>
+          <p className="muted">Description has not been added yet.</p>
         )}
         <div className="card-foot">
           <div className="tags">

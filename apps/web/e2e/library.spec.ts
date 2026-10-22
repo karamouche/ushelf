@@ -9,6 +9,36 @@ test("empty library is calm, searchable, and responsive", async ({ page }) => {
   await expect(page.getByText("Local, portable, and agent-driven.")).toBeVisible();
 });
 
+test("library cards show the generated description and tags", async ({ page }) => {
+  await page.context().route("**/api/items?*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            id: "described-article",
+            title: "Described article",
+            sourceType: "article",
+            capturedAt: "2026-08-20T12:00:00.000Z",
+            updatedAt: "2026-08-20T12:00:00.000Z",
+            status: "inbox",
+            progress: 0,
+            tags: ["reading", "agents"],
+            ingestionState: "ready",
+            summary: "A short description of the article.",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const card = page.getByRole("article").filter({ hasText: "Described article" });
+  await expect(card.getByText("A short description of the article.")).toBeVisible();
+  await expect(card.getByText("#reading")).toBeVisible();
+  await expect(card.getByText("#agents")).toBeVisible();
+});
+
 test("Mermaid source renders as a diagram and falls back when invalid", async ({ page }) => {
   const cspViolations = await trackCspViolations(page);
   await page.context().route("**/api/items/*", async (route) => {
@@ -39,7 +69,7 @@ test("Mermaid source renders as a diagram and falls back when invalid", async ({
   expect(await cspViolations()).toEqual([]);
 });
 
-test("document reader opens the retained PDF and links page citations", async ({ page }) => {
+test("document reader opens the retained PDF without generated insights", async ({ page }) => {
   await page.context().route("**/api/items/pdf-document", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -64,6 +94,7 @@ test("document reader opens the retained PDF and links page citations", async ({
             status: "complete",
             recipe: "default",
             summary: "A saved report.",
+            keyPoints: ["A legacy key point"],
             citations: [{ page: 2, label: "Supporting evidence" }],
           },
           media: {
@@ -71,7 +102,7 @@ test("document reader opens the retained PDF and links page citations", async ({
             insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
           },
           sourceMarkdown: "## Page 1\n\nReport text.",
-          insightMarkdown: "",
+          insightMarkdown: "### Why it matters\n\nLegacy recipe body.",
           revision: "0123456789abcdef",
         },
       }),
@@ -84,10 +115,13 @@ test("document reader opens the retained PDF and links page citations", async ({
     "href",
     "/api/items/pdf-document/original",
   );
-  await expect(page.getByRole("link", { name: "Page 2 — Supporting evidence" })).toHaveAttribute(
-    "href",
-    "/api/items/pdf-document/original#page=2",
-  );
+  await expect(page.getByRole("heading", { name: "Source" })).toBeVisible();
+  await expect(page.getByText("Report text.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Insights" })).toHaveCount(0);
+  await expect(page.getByText("A saved report.")).toHaveCount(0);
+  await expect(page.getByText("A legacy key point")).toHaveCount(0);
+  await expect(page.getByText("Legacy recipe body.")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Supporting evidence/ })).toHaveCount(0);
 });
 
 test("reader loads only content-addressed local Markdown images", async ({ page }) => {

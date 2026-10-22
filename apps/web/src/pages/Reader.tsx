@@ -1,12 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  getItem,
-  originalFileUrl,
-  type Citation,
-  type ReadingStatus,
-  type ShelfItem,
-} from "../api.js";
+import { getItem, originalFileUrl, type ReadingStatus, type ShelfItem } from "../api.js";
 import { Brand } from "../components/Brand.js";
 import { Empty } from "../components/Empty.js";
 import { KindleDelivery } from "../components/KindleDelivery.js";
@@ -29,24 +23,6 @@ export function Reader() {
       })
       .catch((reason: Error) => setError(reason.message));
   }, [id]);
-  const insightDocument = useMemo(
-    () =>
-      item
-        ? [
-            item.enrichment.summary ? `### Summary\n\n${item.enrichment.summary}` : "",
-            item.enrichment.keyPoints?.length
-              ? `### Key points\n\n${item.enrichment.keyPoints.map((point) => `- ${point}`).join("\n")}`
-              : "",
-            item.insightMarkdown,
-            item.enrichment.citations?.length
-              ? `### Citations\n\n${item.enrichment.citations.map((citation) => readerCitation(item.id, citation)).join("\n")}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n")
-        : "",
-    [item],
-  );
 
   if (error && !item)
     return (
@@ -120,21 +96,13 @@ export function Reader() {
             <strong>
               {item.extraction.status !== "complete"
                 ? "Source needs attention"
-                : "Insights pending"}
+                : "Description pending"}
             </strong>
             <span>
               {item.extraction.error ?? "Ask your connected agent to resume this ingestion."}
             </span>
           </aside>
         ) : null}
-        <section className="document insights">
-          <h2>Insights</h2>
-          {insightDocument ? (
-            <Markdown value={insightDocument} itemId={item.id} />
-          ) : (
-            <p className="muted">Waiting for an agent to add insights.</p>
-          )}
-        </section>
         <section className="document source">
           <h2>Source</h2>
           {item.sourceMarkdown ? (
@@ -160,10 +128,4 @@ export function Reader() {
       </main>
     </div>
   );
-}
-
-function readerCitation(itemId: string, citation: Citation): string {
-  return "url" in citation
-    ? `- [${citation.label}](${citation.url})`
-    : `- [Page ${citation.page} — ${citation.label}](${originalFileUrl(itemId, citation.page)})`;
 }
