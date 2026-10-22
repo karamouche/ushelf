@@ -17,6 +17,34 @@ interface BridgeStatus {
   serial: string;
 }
 
+// The bridge only needs its secrets directory plus what Go's runtime, HTTP proxy, and TLS
+// support read. Everything else, including the server's API token and app password, stays out.
+const BRIDGE_ENV_NAMES = new Set([
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TZ",
+  "LANG",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+]);
+
+export function bridgeEnvironment(
+  environment: NodeJS.ProcessEnv,
+  secretsDir: string,
+): NodeJS.ProcessEnv {
+  const allowed = Object.entries(environment).filter(
+    ([name]) => BRIDGE_ENV_NAMES.has(name) || name.startsWith("LC_"),
+  );
+  return { ...Object.fromEntries(allowed), USHELF_SECRETS_DIR: secretsDir };
+}
+
 export interface KindleGateway {
   connect(credential: string, signal?: AbortSignal): Promise<BridgeStatus>;
   disconnect(options: { deregister: boolean }, signal?: AbortSignal): Promise<void>;
@@ -83,10 +111,7 @@ export class KindleBridgeGateway implements KindleGateway {
         this.config.kindleBridgePath,
         [command],
         {
-          env: {
-            ...process.env,
-            USHELF_SECRETS_DIR: this.config.secretsDir,
-          },
+          env: bridgeEnvironment(process.env, this.config.secretsDir),
           encoding: "utf8",
           maxBuffer: 128 * 1024,
           timeout: 120_000,
