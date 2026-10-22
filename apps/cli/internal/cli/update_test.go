@@ -54,3 +54,21 @@ func TestRestartArgsTargetTheUpdatedContext(t *testing.T) {
 		t.Fatalf("restartArgs = %#v, want %#v", actual, want)
 	}
 }
+
+func TestOlderReleaseBlocksOnlyRealDowngrades(t *testing.T) {
+	for _, tc := range []struct {
+		target, current string
+		older           bool
+	}{
+		{"0.1.1", "0.1.2", true},
+		{"0.9.9", "1.0.0", true},
+		{"1.0.0", "0.9.9", false},
+		{"0.1.10", "0.1.9", false},
+		{"0.1.2", "dev", false},
+		{"0.1.2", "0.1.3-rc.1", false},
+	} {
+		if got := olderRelease(tc.target, tc.current); got != tc.older {
+			t.Errorf("olderRelease(%q, %q) = %v, want %v", tc.target, tc.current, got, tc.older)
+		}
+	}
+}
