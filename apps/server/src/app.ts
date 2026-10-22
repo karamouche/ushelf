@@ -13,9 +13,14 @@ import {
 } from "@ushelf/core";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { installApiTokenAuth, requireApiToken, requireMcpAccess, type AppEnv } from "./api-auth.js";
 import { createConnectorOAuth } from "./oauth.js";
 import { installWebAuth, PasswordGate, type WebAuthOptions } from "./web-auth.js";
+
+// Same bounds as the MCP list_items tool, with the reader's larger default page.
+const pageLimitSchema = z.coerce.number().int().min(1).max(200).default(100);
+const pageOffsetSchema = z.coerce.number().int().min(0).default(0);
 
 // Attached PDFs are limited to 10 MiB before base64 encoding inside a JSON-RPC envelope.
 const MCP_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
@@ -139,8 +144,8 @@ export function createApp(
         ...(statusValue ? { status: readingStatusSchema.parse(statusValue) } : {}),
         ...(sourceValue ? { sourceType: sourceTypeSchema.parse(sourceValue) } : {}),
         ...(c.req.query("tag") ? { tag: c.req.query("tag") } : {}),
-        limit: Number(c.req.query("limit") ?? 100),
-        offset: Number(c.req.query("offset") ?? 0),
+        limit: pageLimitSchema.parse(c.req.query("limit")),
+        offset: pageOffsetSchema.parse(c.req.query("offset")),
       }),
     });
   });
