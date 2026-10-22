@@ -10,8 +10,9 @@ allowBuilds:
 overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
   fast-uri: 3.1.8
-  hono: 4.13.7
+  hono: 4.13.13
   katex: 0.18.2
+  "postcss-nested>postcss-selector-parser": 7.1.7
   qs: 6.16.0
   shell-quote: 1.11.0
   source-map-js: 1.2.2
