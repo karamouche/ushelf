@@ -7,10 +7,6 @@ import {
 } from "../../domain/library-item.js";
 import type { Recipe } from "../../domain/recipe.js";
 
-const INSIGHTS_START = "<!-- ushelf:insights:start -->";
-const INSIGHTS_END = "<!-- ushelf:insights:end -->";
-const CUSTOM_INSIGHTS_START = "<!-- ushelf:custom-insights:start -->";
-const CUSTOM_INSIGHTS_END = "<!-- ushelf:custom-insights:end -->";
 const SOURCE_START = "<!-- ushelf:source:start -->";
 const SOURCE_END = "<!-- ushelf:source:end -->";
 const MARKER_PREFIX = "<!-- ushelf:";
@@ -46,38 +42,11 @@ function sourceLine(frontmatter: ItemFrontmatter): string {
   return `[Open original](${neutralizeMarkers(frontmatter.originalUrl)})${author}`;
 }
 
-export function renderItemMarkdown(
-  frontmatter: ItemFrontmatter,
-  insightMarkdown: string,
-  sourceMarkdown: string,
-): string {
-  const keyPoints = frontmatter.enrichment.keyPoints ?? [];
-  const citations = frontmatter.enrichment.citations ?? [];
-  const summary = frontmatter.enrichment.summary;
-  const insights =
-    frontmatter.enrichment.status === "complete"
-      ? [
-          summary ? `### Summary\n\n${neutralizeMarkers(summary)}` : "",
-          keyPoints.length
-            ? `### Key points\n\n${keyPoints.map((point) => `- ${neutralizeMarkers(point)}`).join("\n")}`
-            : "",
-          `${CUSTOM_INSIGHTS_START}\n${neutralizeMarkers(insightMarkdown.trim())}\n${CUSTOM_INSIGHTS_END}`,
-          citations.length ? `### Citations\n\n${citations.map(renderCitation).join("\n")}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-      : "_Waiting for an agent to add insights._";
-
+export function renderItemMarkdown(frontmatter: ItemFrontmatter, sourceMarkdown: string): string {
   const body = [
     `# ${neutralizeMarkers(frontmatter.title)}`,
     "",
     sourceLine(frontmatter),
-    "",
-    "## Insights",
-    "",
-    INSIGHTS_START,
-    insights,
-    INSIGHTS_END,
     "",
     "## Source",
     "",
@@ -88,14 +57,6 @@ export function renderItemMarkdown(
   ].join("\n");
 
   return `---\n${dump(frontmatter)}---\n${body}`;
-}
-
-function renderCitation(
-  citation: NonNullable<ItemFrontmatter["enrichment"]["citations"]>[number],
-): string {
-  return "url" in citation
-    ? `- [${neutralizeMarkers(citation.label)}](${neutralizeMarkers(citation.url)})`
-    : `- Page ${citation.page} — ${neutralizeMarkers(citation.label)}`;
 }
 
 function section(body: string, start: string, end: string): string {
@@ -110,27 +71,13 @@ function section(body: string, start: string, end: string): string {
 export function parseItemMarkdown(raw: string, filePath: string): ShelfItem {
   const parsed = parseFrontmatter(raw);
   const frontmatter = itemFrontmatterSchema.parse(parsed.data);
-  const renderedInsights = section(parsed.content, INSIGHTS_START, INSIGHTS_END);
   const sourceMarkdown = section(parsed.content, SOURCE_START, SOURCE_END);
   return {
     ...frontmatter,
     filePath,
     sourceMarkdown: sourceMarkdown.startsWith("_Source content has not") ? "" : sourceMarkdown,
-    insightMarkdown: extractCustomInsight(renderedInsights),
     revision: sha256(raw),
   };
-}
-
-function extractCustomInsight(rendered: string): string {
-  if (!rendered || rendered.startsWith("_Waiting for")) return "";
-  const marked = section(rendered, CUSTOM_INSIGHTS_START, CUSTOM_INSIGHTS_END);
-  if (rendered.includes(CUSTOM_INSIGHTS_START)) return marked;
-  const beforeCitations = rendered.split(/\n### Citations\n/)[0] ?? "";
-  const afterKeyPoints = beforeCitations.split(/\n### Key points\n[\s\S]*?(?=\n### |$)/);
-  const withoutSummary = (afterKeyPoints.at(-1) ?? beforeCitations)
-    .replace(/^### Summary\n\n[\s\S]*?(?=\n### |$)/, "")
-    .trim();
-  return withoutSummary;
 }
 
 export function parseRecipe(raw: string, filePath: string): Recipe {

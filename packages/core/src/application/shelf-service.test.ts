@@ -45,10 +45,9 @@ async function fixture() {
     enrichment: { status: "pending", recipe: "default" },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
   };
-  const item = await repository.save(frontmatter, "", "");
+  const item = await repository.save(frontmatter, "");
   database.upsert(item);
   database.close();
   return { root, config, service, item };
@@ -163,7 +162,6 @@ describe("agent-driven workflow", () => {
     expect(ready.enrichment.status).toBe("complete");
     expect(ready.enrichment.summary).toBe("A compact test summary.");
     expect(ready.tags).toEqual(["testing"]);
-    expect(ready.insightMarkdown).toBe("");
     expect(ready.sourceMarkdown).not.toContain("data:image");
     expect(ready.media.source).toMatchObject({ discovered: 1, localized: 1, omitted: 0 });
     expect(await readdir(path.join(config.filesDir, item.id, "media"))).toHaveLength(1);
@@ -212,58 +210,36 @@ describe("agent-driven workflow", () => {
     ).rejects.toThrow(/recipe changed/);
   });
 
-  it("archives legacy insights and keeps only the description and tags on re-enrichment", async () => {
-    const { config, service, item } = await fixture();
+  it("loads item files with removed insight fields and drops them on the next write", async () => {
+    const { service, item } = await fixture();
     const sourced = await service.submitSourceContent({
       itemId: item.id,
       title: "Thread",
       markdown: "A complete source that contains enough characters for fallback acceptance.",
       revision: item.revision,
     });
-    const repository = new MarkdownRepository(config);
-    const {
-      filePath,
-      sourceMarkdown,
-      insightMarkdown: _insights,
-      revision: _revision,
-      ...rest
-    } = sourced;
-    await repository.save(
-      {
-        ...rest,
-        enrichment: {
-          status: "complete",
-          recipe: "default",
-          summary: "Old summary.",
-          keyPoints: ["Old point"],
-          citations: [{ url: "https://x.com/a/status/1", label: "Original" }],
-        },
-      } as ItemFrontmatter,
-      "### Why it matters\n\nOld body.",
-      sourceMarkdown,
-      filePath,
-    );
-    const legacy = await service.getItem(item.id);
-    expect(legacy.enrichment.keyPoints).toEqual(["Old point"]);
-    expect(legacy.insightMarkdown).toContain("Old body.");
+    const raw = await readFile(sourced.filePath, "utf8");
+    const old = raw
+      .replace(
+        "  recipe: default\n",
+        "  recipe: default\n  keyPoints:\n    - Old point\n  citations:\n    - url: https://x.com/a/status/1\n      label: Original\n",
+      )
+      .replace(
+        "## Source",
+        "## Insights\n\n<!-- ushelf:insights:start -->\n### Key points\n\n- Old point\n<!-- ushelf:insights:end -->\n\n## Source",
+      );
+    expect(old.match(/Old point/g)).toHaveLength(2);
+    await writeFile(sourced.filePath, old);
+    await service.rebuildIndex();
+    const loaded = await service.getItem(item.id);
+    expect(loaded.enrichment).not.toHaveProperty("keyPoints");
+    expect(loaded.sourceMarkdown).toBe(sourced.sourceMarkdown);
 
-    const context = await service.ingestionContext(item.id);
-    const ready = await service.saveInsights({
-      itemId: item.id,
-      recipeHash: context.recipe.hash,
-      revision: legacy.revision,
-      summary: "New description.",
-      tags: ["Fresh"],
-    });
-    expect(ready.enrichment).not.toHaveProperty("keyPoints");
-    expect(ready.enrichment).not.toHaveProperty("citations");
-    expect(ready.enrichment.summary).toBe("New description.");
-    expect(ready.tags).toEqual(["fresh"]);
-    expect(ready.insightMarkdown).toBe("");
-    const raw = await readFile(ready.filePath, "utf8");
-    expect(raw).not.toContain("Old point");
-    expect(raw).not.toContain("### Citations");
-    expect(await readdir(path.join(config.historyDir, item.id))).toHaveLength(1);
+    const read = await service.updateReading(item.id, "reading", 0.2, loaded.revision);
+    const rewritten = await readFile(read.filePath, "utf8");
+    expect(rewritten).not.toContain("Old point");
+    expect(rewritten).not.toContain("## Insights");
+    expect(service.listItems()).toHaveLength(1);
   });
 
   it("keeps the captured source intact when inputs contain section markers", async () => {
@@ -293,7 +269,6 @@ describe("agent-driven workflow", () => {
     expect(reread.sourceMarkdown).toBe(escapedSource);
     expect(reread.extraction).toEqual(sourced.extraction);
     expect(reread.enrichment.summary).toBe(`Summary ${fakeSource}`);
-    expect(reread.insightMarkdown).toBe("");
   });
 
   it("rejects an imported item whose ID is already in the library", async () => {

@@ -105,7 +105,7 @@ export class ShelfDatabase {
           id: item.id,
           title: item.title,
           source: item.sourceMarkdown,
-          insights: item.insightMarkdown,
+          summary: item.enrichment.summary ?? "",
           tags: item.tags.join(" "),
         })
         .run();

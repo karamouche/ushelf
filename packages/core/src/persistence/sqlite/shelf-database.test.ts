@@ -51,11 +51,9 @@ function article(itemsDir: string, overrides: Partial<ShelfItem> = {}): ShelfIte
     },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
     filePath: path.join(itemsDir, "2026", `${id}.md`),
     sourceMarkdown: "Typed queries make the architecture maintainable.",
-    insightMarkdown: "Drizzle keeps the SQL visible.",
     revision: "revision-1",
     ...overrides,
   } as ShelfItem;
@@ -80,7 +78,6 @@ function document(itemsDir: string): ShelfItem {
     enrichment: { status: "pending", recipe: "default" },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
     file: {
       name: "sqlite.pdf",
@@ -91,7 +88,6 @@ function document(itemsDir: string): ShelfItem {
     },
     filePath: path.join(itemsDir, "2026", `${id}.md`),
     sourceMarkdown: "A paper about full text search.",
-    insightMarkdown: "",
     revision: "revision-2",
   };
 }
@@ -124,7 +120,7 @@ describe("ShelfDatabase", () => {
       { name: "oauth_clients", type: "table" },
       { name: "oauth_grants", type: "table" },
     ]);
-    expect(appliedBefore.count).toBe(5);
+    expect(appliedBefore.count).toBe(6);
 
     const reopened = new ShelfDatabase(databasePath, itemsDir);
     reopened.close();
@@ -133,7 +129,7 @@ describe("ShelfDatabase", () => {
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
       .get() as { count: number };
     verification.close();
-    expect(appliedAfter.count).toBe(5);
+    expect(appliedAfter.count).toBe(6);
   });
 
   it("provides typed CRUD, filtering, FTS, path, and delete-token behavior", async () => {
@@ -158,6 +154,9 @@ describe("ShelfDatabase", () => {
       expect.objectContaining({ id: savedArticle.id, tags: ["sqlite", "architecture"] }),
     ]);
     expect(database.list({ query: "maintainable architecture" })).toEqual([
+      expect.objectContaining({ id: savedArticle.id }),
+    ]);
+    expect(database.list({ query: "concise database" })).toEqual([
       expect.objectContaining({ id: savedArticle.id }),
     ]);
     expect(database.list({ query: "full text" })).toEqual([

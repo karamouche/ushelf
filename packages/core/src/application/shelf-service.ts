@@ -169,11 +169,11 @@ export class ShelfService {
       tags: [],
       extraction,
       enrichment: { status: "pending", recipe: recipeName },
-      media: { source: sourceMedia, insights: emptyMediaStats() },
+      media: { source: sourceMedia },
     };
     const item = await this.storeNewItem(id, async () => {
       await this.repository.saveMediaAssets(id, mediaAssets);
-      return this.repository.save(frontmatter, "", sourceMarkdown);
+      return this.repository.save(frontmatter, sourceMarkdown);
     });
     return { item, duplicate: false, state: ingestionState(item) };
   }
@@ -228,12 +228,12 @@ export class ShelfService {
         contentHash: sha256(source.markdown),
       },
       enrichment: { status: "pending", recipe: recipeName },
-      media: { source: source.media, insights: emptyMediaStats() },
+      media: { source: source.media },
     };
     const item = await this.storeNewItem(id, async () => {
       await this.repository.saveOriginalFile(id, bytes);
       await this.repository.saveMediaAssets(id, source.assets);
-      return this.repository.save(frontmatter, "", source.markdown);
+      return this.repository.save(frontmatter, source.markdown);
     });
     return { item, duplicate: false, state: ingestionState(item) };
   }
@@ -289,18 +289,10 @@ export class ShelfService {
       ...(sourceChanged
         ? { enrichment: { status: "pending" as const, recipe: latest.enrichment.recipe } }
         : {}),
-      media: {
-        source: localized.stats,
-        insights: sourceChanged ? emptyMediaStats() : latest.media.insights,
-      },
+      media: { source: localized.stats },
     };
     await this.repository.saveMediaAssets(item.id, localized.assets);
-    const saved = await this.repository.save(
-      frontmatter,
-      sourceChanged ? "" : latest.insightMarkdown,
-      localized.markdown,
-      latest.filePath,
-    );
+    const saved = await this.repository.save(frontmatter, localized.markdown, latest.filePath);
     this.database.upsert(saved);
     return saved;
   }
@@ -356,9 +348,8 @@ export class ShelfService {
         completedAt: now,
         summary: input.summary.trim(),
       },
-      media: { ...item.media, insights: emptyMediaStats() },
     };
-    const saved = await this.repository.save(frontmatter, "", item.sourceMarkdown, item.filePath);
+    const saved = await this.repository.save(frontmatter, item.sourceMarkdown, item.filePath);
     this.database.upsert(saved);
     return saved;
   }
@@ -574,7 +565,6 @@ export class ShelfService {
         updatedAt: now,
         reading: { status, progress: status === "read" ? 1 : normalizedProgress, lastReadAt: now },
       },
-      item.insightMarkdown,
       item.sourceMarkdown,
       item.filePath,
     );
@@ -590,9 +580,7 @@ export class ShelfService {
         ...frontmatterOf(item),
         updatedAt: new Date().toISOString(),
         enrichment: { status: "pending", recipe: item.enrichment.recipe },
-        media: { ...item.media, insights: emptyMediaStats() },
       },
-      "",
       item.sourceMarkdown,
       item.filePath,
     );
@@ -625,12 +613,8 @@ export class ShelfService {
         ...(changed
           ? { enrichment: { status: "pending" as const, recipe: latest.enrichment.recipe } }
           : {}),
-        media: {
-          source: localized.stats,
-          insights: changed ? emptyMediaStats() : latest.media.insights,
-        },
+        media: { source: localized.stats },
       },
-      changed ? "" : latest.insightMarkdown,
       localized.markdown,
       latest.filePath,
     );
@@ -683,10 +667,7 @@ export class ShelfService {
           : "An item with this canonical URL already exists",
       );
     }
-    const filenames = [
-      ...assertLocalMarkdownImages(imported.sourceMarkdown, imported.id),
-      ...assertLocalMarkdownImages(imported.insightMarkdown, imported.id),
-    ];
+    const filenames = assertLocalMarkdownImages(imported.sourceMarkdown, imported.id);
     const assets = await Promise.all(
       [...new Set(filenames)].map(async (filename) => {
         const sourceAsset = path.resolve(
@@ -718,7 +699,6 @@ function frontmatterOf(item: ShelfItem): ItemFrontmatter {
   const {
     filePath: _filePath,
     sourceMarkdown: _source,
-    insightMarkdown: _insights,
     revision: _revision,
     ...frontmatter
   } = item;
