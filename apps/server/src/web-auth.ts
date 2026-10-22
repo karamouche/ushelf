@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { isIPv4 } from "node:net";
 import type { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppEnv } from "./api-auth.js";
@@ -9,6 +10,29 @@ const DEV_COOKIE_NAME = "ushelf-session";
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const FAILED_LOGIN_LIMIT = 10;
 const FAILED_LOGIN_WINDOW_MS = 60 * 1000;
+
+/**
+ * Refuses to expose the reader beyond loopback without an app password. The loopback Host guard
+ * only stops browsers (DNS rebinding); any other client chooses its own Host header.
+ *
+ * `exposedHost` is where clients reach the listener: the bind address, or the address a container
+ * port is published on, since a container must bind every interface even when published on loopback.
+ */
+export function requirePasswordBeyondLoopback(
+  exposedHost: string,
+  password: string | undefined,
+): void {
+  if (password || isLoopbackAddress(exposedHost)) return;
+  throw new Error(
+    `uShelf is exposed on ${exposedHost} without an app password, so anyone who can reach it could read and change the library. Set USHELF_APP_PASSWORD, or listen on 127.0.0.1.`,
+  );
+}
+
+function isLoopbackAddress(host: string): boolean {
+  const address = host.trim().replace(/^\[(.*)\]$/, "$1");
+  if (address === "localhost" || address === "::1") return true;
+  return isIPv4(address) && address.startsWith("127.");
+}
 
 export interface WebAuthOptions {
   password?: string | undefined;

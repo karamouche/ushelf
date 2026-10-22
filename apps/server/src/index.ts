@@ -6,6 +6,7 @@ import { ShelfService } from "@ushelf/core";
 import { createApp } from "./app.js";
 import { resolveApiToken } from "./api-auth.js";
 import { warnSkippedItems } from "./index-report.js";
+import { requirePasswordBeyondLoopback } from "./web-auth.js";
 
 const service = new ShelfService();
 warnSkippedItems(await service.initialize());
@@ -24,6 +25,7 @@ const version = process.env.USHELF_VERSION?.trim() || packageVersion;
 
 const MIN_APP_PASSWORD_LENGTH = 12;
 const appPassword = process.env.USHELF_APP_PASSWORD || undefined;
+requirePasswordBeyondLoopback(process.env.USHELF_PUBLISHED_HOST?.trim() || hostname, appPassword);
 // Warn rather than refuse to start, so existing deployments with short passwords keep running.
 if (appPassword && [...appPassword].length < MIN_APP_PASSWORD_LENGTH) {
   console.warn(
