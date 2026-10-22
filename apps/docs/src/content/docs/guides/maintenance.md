@@ -36,7 +36,7 @@ ushelf update --check
 ushelf update
 ```
 
-`update` downloads the latest release, verifies its checksum, and replaces the CLI. If the current context uses the release-matched image, it then redeploys that context with the new image and refreshes the agent skills that `ushelf setup` linked. Contexts that pin an image with `ushelf config set image` are left alone. Run `ushelf --context NAME start` to roll other contexts forward.
+`update` downloads the latest release, verifies its checksum and its Sigstore build provenance, and replaces the CLI. The provenance check proves the archive was built by this repository's release workflow on `main`, and the update stops if it fails. It needs access to `api.github.com` and Sigstore's trust root at `tuf-repo-cdn.sigstore.dev`, which is cached in `~/.ushelf/sigstore`. If the current context uses the release-matched image, it then redeploys that context with the new image and refreshes the agent skills that `ushelf setup` linked. Contexts that pin an image with `ushelf config set image` are left alone. Run `ushelf --context NAME start` to roll other contexts forward.
 
 ## Backups
 
