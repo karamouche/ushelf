@@ -130,8 +130,7 @@ async function expectCanonicalDocument(
   expect(document).toContain(expected.canonicalUrl);
   expect(document).toContain(`# ${expected.title}`);
   expect(document).toContain(`[Open original](${expected.originalUrl})`);
-  expect(document).toContain("<!-- ushelf:insights:start -->");
-  expect(document).toContain("_Waiting for an agent to add insights._");
+  expect(document).not.toContain("## Insights");
   expect(document).toContain("<!-- ushelf:source:start -->");
   expect(document).toContain(expected.sourceAnchor);
   expect(document).toContain("<!-- ushelf:source:end -->");

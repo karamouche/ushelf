@@ -94,7 +94,7 @@ export function KindleDelivery({ item }: { item: ShelfItem }) {
         <h2 id="kindle-dialog-title">Send to Kindle</h2>
         <p className="dialog-copy">
           uShelf will send a reflowable EPUB containing the saved source and its images. It will not
-          include insights or remain in your Amazon cloud library.
+          include the generated description or remain in your Amazon cloud library.
         </p>
         {loading ? <p role="status">Checking Kindle…</p> : null}
         {!loading && configured === false ? (

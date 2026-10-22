@@ -69,7 +69,7 @@ test("Mermaid source renders as a diagram and falls back when invalid", async ({
   expect(await cspViolations()).toEqual([]);
 });
 
-test("document reader opens the retained PDF without generated insights", async ({ page }) => {
+test("document reader opens the retained PDF and shows only its source", async ({ page }) => {
   await page.context().route("**/api/items/pdf-document", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -94,15 +94,11 @@ test("document reader opens the retained PDF without generated insights", async 
             status: "complete",
             recipe: "default",
             summary: "A saved report.",
-            keyPoints: ["A legacy key point"],
-            citations: [{ page: 2, label: "Supporting evidence" }],
           },
           media: {
             source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-            insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
           },
           sourceMarkdown: "## Page 1\n\nReport text.",
-          insightMarkdown: "### Why it matters\n\nLegacy recipe body.",
           revision: "0123456789abcdef",
         },
       }),
@@ -119,9 +115,6 @@ test("document reader opens the retained PDF without generated insights", async 
   await expect(page.getByText("Report text.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Insights" })).toHaveCount(0);
   await expect(page.getByText("A saved report.")).toHaveCount(0);
-  await expect(page.getByText("A legacy key point")).toHaveCount(0);
-  await expect(page.getByText("Legacy recipe body.")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: /Supporting evidence/ })).toHaveCount(0);
 });
 
 test("reader loads only content-addressed local Markdown images", async ({ page }) => {
@@ -143,7 +136,6 @@ test("reader loads only content-addressed local Markdown images", async ({ page 
           ),
           media: {
             source: { discovered: 2, localized: 1, omitted: 1, filtered: 0 },
-            insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
           },
         },
       }),
@@ -568,10 +560,8 @@ function mermaidItem(id: string, sourceMarkdown: string) {
     enrichment: { status: "complete", recipe: "default", summary: "A diagram example." },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
     sourceMarkdown,
-    insightMarkdown: "",
     revision: "0123456789abcdef",
   };
 }
