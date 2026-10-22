@@ -28,6 +28,8 @@ uShelf includes no model SDK, AI API key, embeddings store, or autonomous LLM pr
 
 Articles use Readability. Attached PDFs use PDF.js to extract text and embedded figures. X has limited public extraction, with agent-supplied fallback content. uShelf also captures images locally and blocks unsafe URLs.
 
+Web pages are extracted in an isolated worker with a 512 MiB memory budget and a one-minute time limit, and pages that exceed either fail extraction.
+
 PDF attachments must be at most 10 MiB and contain embedded text. Extraction runs in an isolated worker with a 512 MiB memory budget and a two-minute time limit, and PDFs that exceed either are rejected. Embedded images larger than 25 megapixels are skipped. Remote PDF URLs, OCR, vector-diagram reconstruction, complex multi-column layouts, DOCX, and PPTX are unsupported.
 
 ## Next steps

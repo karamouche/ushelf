@@ -241,6 +241,46 @@ describe("readable article extraction", () => {
 | [Model](https://docs.example.test/model) | \`agent.py\` | Required core options. |
 | Tools | \`tools/\` | Application logic \\| services. |`);
   });
+
+  it("promotes code and images through deeply nested wrappers", () => {
+    const wrap = (content: string) => "<div>".repeat(1000) + content + "</div>".repeat(1000);
+    const dom = articleDom(`
+      <h1>Nested layout</h1>
+      <p>This introduction contains enough useful prose for Readability to identify the article consistently.</p>
+      ${wrap("<pre><code>deeplyNested();</code></pre>")}
+      ${wrap('<img src="https://docs.example.test/nested.png" alt="Nested image">')}
+      <p>The closing paragraph keeps enough surrounding prose for the extraction to stay deterministic.</p>
+    `);
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guide");
+
+    expect(result.markdown).toContain("```\ndeeplyNested();\n```");
+    expect(result.markdown).toContain("![Nested image](https://docs.example.test/nested.png)");
+  });
+
+  it("extracts many blocks sharing one container in linear time", () => {
+    // Every block used to re-read the whole container, which took over ten seconds here.
+    const blocks = Array.from(
+      { length: 600 },
+      (_, index) => `
+        <p>Step ${index} explains the following snippet and figure in enough detail.</p>
+        <div class="code"><pre><code>step(${index});</code></pre></div>
+        <figure><img src="https://docs.example.test/${index}.png" alt="Step ${index}"><figcaption>Step ${index} result</figcaption></figure>`,
+    ).join("");
+    const dom = articleDom(`
+      <h1>Long tutorial</h1>
+      <p>This introduction contains enough useful prose for Readability to identify the article consistently.</p>
+      ${blocks}
+    `);
+
+    const started = performance.now();
+    const result = extractReadableArticle(dom, "https://docs.example.test/guide");
+
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(result.markdown.match(/```\nstep\(\d+\);\n```/g)).toHaveLength(600);
+    expect(result.markdown.match(/!\[/g)).toHaveLength(600);
+    expect(result.markdown).toContain("```\nstep(599);\n```");
+  });
 });
 
 function articleDom(content: string, metadata = ""): JSDOM {

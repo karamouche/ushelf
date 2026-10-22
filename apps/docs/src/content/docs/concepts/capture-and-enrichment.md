@@ -9,7 +9,7 @@ uShelf splits every save into two stages with a strict boundary between them.
 
 When an agent calls `ingest_url` or `ingest_file`, the server fetches and normalizes the source with ordinary code:
 
-- **Articles** are extracted with Readability, sanitized, and converted to Markdown.
+- **Articles** are extracted with Readability, sanitized, and converted to Markdown. Parsing and extraction run in a worker thread with memory and time limits, so a hostile page cannot stall the server.
 - **PDF attachments** are parsed with PDF.js into page-scoped Markdown with joined paragraphs and conservative heading, list, and simple-table recovery. Raster figures are placed by page coordinates. Parsing and decoding run in a worker thread with memory and time limits.
 - **X posts and threads** use a limited public extraction path. When it is blocked, the item waits in `awaiting_source` until the agent submits the content with `submit_source_content`. That content is recorded as agent-supplied, not independently verified.
 - **Images** are validated and stored content-addressably; Mermaid diagrams are normalized to fenced `mermaid` blocks.
