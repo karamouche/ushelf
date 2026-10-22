@@ -13,7 +13,12 @@ privateNetworkBlocks.addSubnet("100.64.0.0", 10, "ipv4");
 privateNetworkBlocks.addSubnet("127.0.0.0", 8, "ipv4");
 privateNetworkBlocks.addSubnet("169.254.0.0", 16, "ipv4");
 privateNetworkBlocks.addSubnet("172.16.0.0", 12, "ipv4");
+privateNetworkBlocks.addSubnet("192.0.0.0", 24, "ipv4");
+privateNetworkBlocks.addSubnet("192.0.2.0", 24, "ipv4");
 privateNetworkBlocks.addSubnet("192.168.0.0", 16, "ipv4");
+privateNetworkBlocks.addSubnet("198.18.0.0", 15, "ipv4");
+privateNetworkBlocks.addSubnet("198.51.100.0", 24, "ipv4");
+privateNetworkBlocks.addSubnet("203.0.113.0", 24, "ipv4");
 privateNetworkBlocks.addSubnet("224.0.0.0", 4, "ipv4");
 privateNetworkBlocks.addSubnet("240.0.0.0", 4, "ipv4");
 // IPv4-compatible addresses (deprecated), including the unspecified and loopback addresses.
