@@ -46,4 +46,4 @@ ushelf update --check
 ushelf update
 ```
 
-`ushelf update` verifies the release checksum, replaces the CLI, and rolls the current context forward to the matching server image. It never installs a release older than the running CLI; to downgrade on purpose, rerun the installer with `USHELF_VERSION` set to the version you want. See [Maintenance](../../guides/maintenance/#updating).
+`ushelf update` verifies the release checksums against the release signing key built into the CLI, replaces the CLI, and rolls the current context forward to the matching server image. It never installs a release older than the running CLI; to downgrade on purpose, rerun the installer with `USHELF_VERSION` set to the version you want. See [Maintenance](../../guides/maintenance/#updating).
