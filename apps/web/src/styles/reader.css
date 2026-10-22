@@ -18,8 +18,17 @@
   font-size: 24px;
   cursor: pointer;
 }
-.reader-nav select {
+.reader-nav-actions {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reader-nav-actions .logout-button {
+  height: 34px;
+  margin-left: 0;
+}
+.reader-nav select {
   height: 34px;
   border: 1px solid var(--color-line);
   padding: 0 12px;
@@ -108,6 +117,9 @@
 @media (max-width: 800px) {
   .reader-nav {
     padding: 0 14px;
+  }
+  .reader-nav-actions {
+    gap: 8px;
   }
   .reader-nav select {
     max-width: 110px;
