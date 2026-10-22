@@ -48,7 +48,7 @@ type envelope struct {
 // Run forwards messages until stdin closes, then waits for in-flight requests.
 func (b *Bridge) Run(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	if b.HTTP == nil {
-		b.HTTP = &http.Client{}
+		b.HTTP = &http.Client{CheckRedirect: refuseRedirect}
 	}
 	reader := bufio.NewReaderSize(stdin, 64*1024)
 	var inFlight sync.WaitGroup
@@ -221,4 +221,10 @@ func describeError(raw []byte) string {
 		text = text[:200]
 	}
 	return text
+}
+
+// refuseRedirect stops the token from following a redirect to another scheme or host.
+// The MCP endpoint never redirects, so one means the context URL is wrong.
+func refuseRedirect(request *http.Request, _ []*http.Request) error {
+	return fmt.Errorf("server redirected to %s; update the context URL instead of following it with the API token", request.URL.Redacted())
 }
