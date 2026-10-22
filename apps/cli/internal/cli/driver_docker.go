@@ -128,7 +128,8 @@ func (d DockerDeployment) applyServer(ctx context.Context) error {
 	if d.remote() && d.Context.Spec.Domain != "" {
 		args = append(args, "--network", networkName)
 	} else {
-		args = append(args, "-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Context.Port())), d.Context.Port()))
+		args = append(args, "-e", "USHELF_PUBLISHED_HOST="+d.publishHost(),
+			"-p", fmt.Sprintf("%s:%d", net.JoinHostPort(d.publishHost(), strconv.Itoa(d.Context.Port())), d.Context.Port()))
 	}
 	args = append(args, d.Context.Image())
 	if err := d.reconcile(ctx, containerName, hash, "uShelf service", args); err != nil {
