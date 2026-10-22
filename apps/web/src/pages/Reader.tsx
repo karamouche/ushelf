@@ -62,6 +62,7 @@ export function Reader() {
     <div className="reader-shell">
       <header className="reader-nav">
         <button
+          className="reader-back"
           onClick={() => {
             void flush({ keepalive: true });
             navigate(-1);
@@ -71,18 +72,20 @@ export function Reader() {
           ←
         </button>
         <Brand />
-        <LogoutButton />
-        <select
-          aria-label="Reading status"
-          value={item.reading.status}
-          onChange={(event) => void changeStatus(event.target.value as ReadingStatus)}
-        >
-          {statuses.slice(1).map((status) => (
-            <option key={status.value} value={status.value}>
-              {status.label}
-            </option>
-          ))}
-        </select>
+        <div className="reader-nav-actions">
+          <select
+            aria-label="Reading status"
+            value={item.reading.status}
+            onChange={(event) => void changeStatus(event.target.value as ReadingStatus)}
+          >
+            {statuses.slice(1).map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+          <LogoutButton />
+        </div>
       </header>
       <div className="reading-progress" style={{ width: `${liveProgress * 100}%` }} />
       <main className="article">
