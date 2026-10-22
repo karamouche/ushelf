@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,6 +46,10 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 			s.actions().Done("uShelf %s is already current", current)
 		}
 		return nil
+	}
+	if olderRelease(targetVersion, current) {
+		// A rolled-back or tampered "latest" release must not silently downgrade the CLI.
+		return fmt.Errorf("the latest release %s is older than this CLI (%s); reinstall with USHELF_VERSION=%s to downgrade on purpose", targetVersion, current, targetVersion)
 	}
 	if checkOnly {
 		fmt.Fprintf(s.deps.Stdout, "Update available: %s -> %s\n", current, targetVersion)
@@ -123,6 +128,38 @@ func (s *commandState) rollOutUpdate(ctx context.Context, executable, version st
 		return err
 	}
 	return refreshManagedSkillLinks(skillsRoot, s.assetsDir())
+}
+
+// olderRelease reports whether target is a lower release than current. Versions that are not
+// plain MAJOR.MINOR.PATCH, such as development builds, never block an update.
+func olderRelease(target, current string) bool {
+	targetParts, okTarget := releaseParts(target)
+	currentParts, okCurrent := releaseParts(current)
+	if !okTarget || !okCurrent {
+		return false
+	}
+	for i := range targetParts {
+		if targetParts[i] != currentParts[i] {
+			return targetParts[i] < currentParts[i]
+		}
+	}
+	return false
+}
+
+func releaseParts(version string) ([3]int, bool) {
+	var parts [3]int
+	fields := strings.Split(version, ".")
+	if len(fields) != 3 {
+		return parts, false
+	}
+	for i, field := range fields {
+		value, err := strconv.Atoi(field)
+		if err != nil || value < 0 {
+			return parts, false
+		}
+		parts[i] = value
+	}
+	return parts, true
 }
 
 func restartArgs(home, contextName string) []string {
