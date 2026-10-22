@@ -36,7 +36,7 @@ ushelf update --check
 ushelf update
 ```
 
-`update` downloads the latest release, verifies its checksum, and replaces the CLI. If the current context uses the release-matched image, it then redeploys that context with the new image and refreshes the agent skills that `ushelf setup` linked. Contexts that pin an image with `ushelf config set image` are left alone. Run `ushelf --context NAME start` to roll other contexts forward.
+`update` downloads the latest release, checks that its `SHA256SUMS` is signed with the uShelf release key built into the CLI, verifies the archive against it, and replaces the CLI. The update stops if either check fails. If the current context uses the release-matched image, it then redeploys that context with the new image and refreshes the agent skills that `ushelf setup` linked. Contexts that pin an image with `ushelf config set image` are left alone. Run `ushelf --context NAME start` to roll other contexts forward.
 
 ## Backups
 
