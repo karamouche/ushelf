@@ -56,17 +56,19 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 		return nil
 	}
 	archiveName := fmt.Sprintf("ushelf_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
-	archiveURL, checksumsURL := "", ""
+	archiveURL, checksumsURL, signatureURL := "", "", ""
 	for _, asset := range latest.Assets {
 		switch asset.Name {
 		case archiveName:
 			archiveURL = asset.BrowserDownloadURL
 		case "SHA256SUMS":
 			checksumsURL = asset.BrowserDownloadURL
+		case "SHA256SUMS.sig":
+			signatureURL = asset.BrowserDownloadURL
 		}
 	}
-	if archiveURL == "" || checksumsURL == "" {
-		return fmt.Errorf("release %s does not contain %s and SHA256SUMS", latest.TagName, archiveName)
+	if archiveURL == "" || checksumsURL == "" || signatureURL == "" {
+		return fmt.Errorf("release %s does not contain %s, SHA256SUMS and SHA256SUMS.sig", latest.TagName, archiveName)
 	}
 	actions := s.actions()
 	actions.Step("Downloading uShelf %s...", targetVersion)
@@ -78,7 +80,14 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
-	actions.Step("Verifying the release archive...")
+	signature, err := download(ctx, signatureURL)
+	if err != nil {
+		return err
+	}
+	actions.Step("Verifying the release signature and archive...")
+	if err := verifyChecksumsSignature(checksums, signature); err != nil {
+		return err
+	}
 	if err := verifyChecksum(archiveName, archive, string(checksums)); err != nil {
 		return err
 	}
