@@ -39,7 +39,7 @@ export function registerKindleTools(server: McpServer, service: KindleService): 
     {
       title: "Send to Kindle",
       description:
-        "Send an already-saved item's canonical source and local images to a registered Kindle device as an EPUB. Generated insights are excluded.",
+        "Send an already-saved item's canonical source and local images to a registered Kindle device as an EPUB. The generated description is excluded.",
       inputSchema: {
         itemId: z.uuid(),
         targetSerial: kindleTargetSchema.shape.targetSerial,

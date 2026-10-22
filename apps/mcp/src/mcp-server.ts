@@ -89,7 +89,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
   server.registerTool(
     "save_insights",
     {
-      title: "Save insights",
+      title: "Save description",
       description: "Validate and atomically save the agent-written description and tags.",
       inputSchema: {
         itemId: z.uuid(),
@@ -122,7 +122,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     "search_items",
     {
       title: "Search library",
-      description: "Full-text search across source text, insights, titles, and tags.",
+      description: "Full-text search across source text, descriptions, titles, and tags.",
       inputSchema: {
         query: z.string().min(1),
         status: readingStatusSchema.optional(),
@@ -174,7 +174,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     {
       title: "Refresh source",
       description:
-        "Re-fetch a source; changed content archives insights and returns to enrichment pending.",
+        "Re-fetch a source; changed content archives the description and returns to enrichment pending.",
       inputSchema: { itemId: z.uuid(), revision: z.string().optional() },
     },
     async ({ itemId, revision }) => json(await service.refreshSource(itemId, revision)),
@@ -185,7 +185,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     {
       title: "Request re-enrichment",
       description:
-        "Archive current insights and mark an item pending without changing source content.",
+        "Archive the current description and mark an item pending without changing source content.",
       inputSchema: { itemId: z.uuid() },
     },
     async ({ itemId }) => json(await service.markForReenrichment(itemId)),
