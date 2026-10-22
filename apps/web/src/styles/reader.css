@@ -27,6 +27,7 @@
 .reader-nav-actions .logout-button {
   height: 34px;
   margin-left: 0;
+  white-space: nowrap;
 }
 .reader-nav select {
   height: 34px;
@@ -116,13 +117,22 @@
 }
 @media (max-width: 800px) {
   .reader-nav {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
     padding: 0 14px;
+  }
+  .reader-nav .brand {
+    justify-self: center;
   }
   .reader-nav-actions {
     gap: 8px;
   }
   .reader-nav select {
-    max-width: 110px;
+    max-width: 96px;
+    padding: 0 8px;
+  }
+  .reader-nav-actions .logout-button {
+    padding: 0 10px;
   }
   .byline {
     flex-direction: column;
