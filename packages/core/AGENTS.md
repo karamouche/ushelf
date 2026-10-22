@@ -30,7 +30,7 @@ This guide applies to `packages/core`. Read the repository `AGENTS.md`, root `RE
 - After a successful item mutation, atomically save Markdown and then upsert the returned item into SQLite. Do not create an independent database-only representation of durable state.
 - Preserve the marked Insights and Source sections and validated frontmatter when changing the Markdown codec. A parsed item's `revision` is the SHA-256 of its complete Markdown document.
 - Archive a completed enrichment before clearing or replacing it because of a changed source, requested re-enrichment, or new insights.
-- Honor supplied revisions on mutations. Enrichment writes must also verify the current recipe hash and reject citation URLs absent from the original/canonical URL or captured source.
+- Honor supplied revisions on mutations. Enrichment writes must also verify the current recipe hash; they store only the description and tags.
 - Canonical URLs drive web deduplication and original-file hashes drive document deduplication. Keep SQLite item paths portable relative to `library/items` and reject paths that escape that directory.
 - Permanent deletion stays a two-step token flow. Consuming a token is single-use and expiry-bound.
 - X fallback accepts agent-supplied content only for X items and records `agent_supplied`; never imply it was independently extracted.

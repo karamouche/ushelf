@@ -18,11 +18,10 @@ URL fetching accepts only HTTP(S), rejects credentials and private-network targe
 
 ## Enrichment is done by your agent
 
-Once the source is captured, the agent calls `get_ingestion_context`, which returns the source, the recipe instructions, the recipe hash, and the item revision. The agent writes a summary, key points, tags, cited insights, and a free-form body, then calls `save_insights`.
+Once the source is captured, the agent calls `get_ingestion_context`, which returns the source, the recipe instructions, the recipe hash, and the item revision. The agent writes a short description and a set of tags, then calls `save_insights`. The description appears on the item's library card; the reader shows only the captured source.
 
 The server validates the result before saving it:
 
 - The recipe hash must match the current recipe, and the revision must match the current item.
-- Citations must point to URLs present in the captured source, or to page numbers for PDF documents.
 
-Recipes define what the brief contains; skills define how the agent drives the tools. See [Skills and recipes](../../agents/skills-and-recipes/).
+Recipes define what the description and tags should capture; skills define how the agent drives the tools. See [Skills and recipes](../../agents/skills-and-recipes/).

@@ -90,7 +90,7 @@ Run the smallest relevant checks while iterating, then run `pnpm typecheck`, `pn
 - Treat `packages/core/src/persistence/sqlite/schema.ts` as the relational SQLite schema source and `packages/core/drizzle/` as the checked-in migration history. Do not restore inline startup DDL or `PRAGMA user_version` schema management.
 - Use Drizzle's typed query API for ordinary SQLite operations. Keep raw SQL narrowly limited to SQLite features Drizzle cannot model, currently FTS5 virtual-table creation and `MATCH` expressions.
 - Do not manually edit files under `library/` while the app is running. Use Core, MCP tools, or the import CLI for mutations.
-- Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, recipe-hash checks, and citation validation.
+- Preserve atomic Markdown writes, archived enrichment history, optimistic revision checks, and recipe-hash checks.
 - Connector OAuth (for hosted Claude and ChatGPT apps) is enabled only with an app password and authorizes `/mcp` only. Keep PKCE mandatory and redirect URIs exact, and store only token digests.
 - Keep secrets out of process arguments, logs, and `config.json`. API tokens travel only over HTTPS outside loopback; remote deployments always require both an API token and an app password.
 - Preserve URL protections when changing source or media extraction: allow only HTTP(S), reject credentials and private-network targets, and retain response-size, timeout, and redirect limits.
@@ -133,7 +133,7 @@ When changing shared behavior, inspect both adapters and the web client for cont
 
 The skills under `skills/ushelf-ingest` and `skills/ushelf-library` are part of the product contract. If an MCP tool name, input, output, or required sequence changes, update the affected skill and run `pnpm validate:skills`.
 
-Keep summaries compact and source-grounded. Do not manufacture missing source text or citations. Avoid re-enriching an already-ready duplicate unless the user explicitly requests it; this prevents unnecessary token use.
+Enrichment produces only a compact, source-grounded description and tags. Do not manufacture missing source text. Avoid re-enriching an already-ready duplicate unless the user explicitly requests it; this prevents unnecessary token use.
 
 ## Before handing off
 

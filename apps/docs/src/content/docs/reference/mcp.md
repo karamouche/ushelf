@@ -14,7 +14,7 @@ The server exposes these tools and resources at `/mcp`, to the API token and to 
 | `get_ingestion`         | Inspect an item's current ingestion stage                                          |
 | `submit_source_content` | Supply X source Markdown (at most 5 MiB) when public extraction is blocked         |
 | `get_ingestion_context` | Return the source, recipe instructions, recipe hash, revision, and output contract |
-| `save_insights`         | Validate and atomically save source-grounded insights (body at most 5 MiB)         |
+| `save_insights`         | Validate and atomically save the item's description and tags                       |
 
 ## Library
 
