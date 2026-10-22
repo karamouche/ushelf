@@ -46,6 +46,9 @@ describe("private address protection", () => {
     "2002:a9fe:a9fe::1",
     "2001::5efe:7f00:1",
     "100::1",
+    "192.0.0.8",
+    "198.18.0.1",
+    "203.0.113.10",
   ])("blocks %s", (address) => {
     expect(isPrivateAddress(address)).toBe(true);
   });
