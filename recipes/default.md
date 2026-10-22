@@ -1,14 +1,13 @@
 ---
 name: default
-description: A compact, source-grounded reading brief.
+description: A compact, source-grounded description with topical tags.
 ---
 
-Create a concise reading brief from the supplied source.
+Describe the supplied source for a reading-library card.
 
-Return the required typed fields and use the free-form Markdown body for:
+Return only the typed fields:
 
-1. **Why it matters** — the practical significance in one short paragraph.
-2. **Notable references** — people, projects, papers, or links worth following.
-3. **Open questions** — unresolved claims or ideas to test.
+1. **`summary`** — a one-to-three-sentence description of what the piece is and why it is worth reading. Write it as a description, not a review or a list.
+2. **`tags`** — up to 12 short, lowercase topical tags a reader would filter by.
 
-Keep claims grounded in the source. Every non-obvious claim in the brief must point to a supplied source URL, or to a page number when the source is a PDF document, in `citations`. Do not invent missing context. If the source is incomplete or uncertain, say so directly.
+Keep the description grounded in the source. Do not invent missing context. If the source is incomplete or uncertain, say so briefly in the description.
