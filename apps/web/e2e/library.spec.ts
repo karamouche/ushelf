@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("empty library is calm, searchable, and responsive", async ({ page }) => {
   await page.goto("/");
@@ -10,6 +10,7 @@ test("empty library is calm, searchable, and responsive", async ({ page }) => {
 });
 
 test("Mermaid source renders as a diagram and falls back when invalid", async ({ page }) => {
+  const cspViolations = await trackCspViolations(page);
   await page.context().route("**/api/items/*", async (route) => {
     const segments = new URL(route.request().url()).pathname.split("/");
     const id = segments.at(-1) === "reading" ? (segments.at(-2) ?? "") : (segments.at(-1) ?? "");
@@ -35,6 +36,7 @@ test("Mermaid source renders as a diagram and falls back when invalid", async ({
   await expect(page.locator("code.language-mermaid")).toContainText(
     "this is not valid Mermaid syntax",
   );
+  expect(await cspViolations()).toEqual([]);
 });
 
 test("document reader opens the retained PDF and links page citations", async ({ page }) => {
@@ -467,6 +469,25 @@ test("reader explains how to configure Kindle when no credential exists", async 
   await page.getByRole("button", { name: "Send to Kindle" }).click();
   await expect(page.getByText("ushelf kindle setup")).toBeVisible();
 });
+
+/** Records Content-Security-Policy violations in every document the page loads. */
+async function trackCspViolations(page: Page): Promise<() => Promise<string[]>> {
+  const violations: string[] = [];
+  await page.exposeFunction("reportCspViolation", (violation: string) => {
+    violations.push(violation);
+  });
+  await page.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (event) => {
+      const report = (window as unknown as { reportCspViolation: (value: string) => void })
+        .reportCspViolation;
+      report(`${event.effectiveDirective} blocked ${event.blockedURI || "inline"}`);
+    });
+  });
+  return async () => {
+    await page.waitForTimeout(100);
+    return violations;
+  };
+}
 
 function mermaidItem(id: string, sourceMarkdown: string) {
   return {
