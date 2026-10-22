@@ -95,44 +95,16 @@ describe("agent-driven workflow", () => {
     expect(duplicate).toMatchObject({ duplicate: true, item: { id: first.item.id } });
 
     const context = await service.ingestionContext(first.item.id);
-    expect(context.outputContract).toMatchObject({
-      citations: "{page,label}[] using page numbers present in the document",
-    });
+    expect(Object.keys(context.outputContract)).toEqual(["summary", "tags"]);
     const enriched = await service.saveInsights({
       itemId: first.item.id,
       recipeHash: context.recipe.hash,
       revision: first.item.revision,
       summary: "A PDF summary.",
-      keyPoints: ["A page-grounded point"],
       tags: ["Documents"],
-      citations: [{ page: 1, label: "The extracted page" }],
-      bodyMarkdown: "",
     });
-    expect(await readFile(enriched.filePath, "utf8")).toContain("- Page 1 — The extracted page");
-    await expect(
-      service.saveInsights({
-        itemId: first.item.id,
-        recipeHash: context.recipe.hash,
-        revision: enriched.revision,
-        summary: "Invalid citation.",
-        keyPoints: ["Point"],
-        tags: [],
-        citations: [{ url: "https://example.com", label: "Wrong citation kind" }],
-        bodyMarkdown: "",
-      }),
-    ).rejects.toThrow(/must use page numbers/);
-    await expect(
-      service.saveInsights({
-        itemId: first.item.id,
-        recipeHash: context.recipe.hash,
-        revision: enriched.revision,
-        summary: "Invalid citation.",
-        keyPoints: ["Point"],
-        tags: [],
-        citations: [{ page: 2, label: "Outside" }],
-        bodyMarkdown: "",
-      }),
-    ).rejects.toThrow(/outside the document/);
+    expect(enriched.enrichment.summary).toBe("A PDF summary.");
+    expect(enriched.tags).toEqual(["documents"]);
     await expect(service.refreshSource(first.item.id)).rejects.toThrow(/cannot be refreshed/);
 
     const original = await service.getOriginalFile(first.item.id);
@@ -186,17 +158,14 @@ describe("agent-driven workflow", () => {
       recipeHash: context.recipe.hash,
       revision: sourced.revision,
       summary: "A compact test summary.",
-      keyPoints: ["One grounded point"],
       tags: ["Testing"],
-      citations: [{ url: sourceUrl, label: "Original post" }],
-      bodyMarkdown: `### Why it matters\n\nIt proves the workflow.\n\n![Chart again](${PNG_DATA_URL})`,
     });
     expect(ready.enrichment.status).toBe("complete");
+    expect(ready.enrichment.summary).toBe("A compact test summary.");
     expect(ready.tags).toEqual(["testing"]);
+    expect(ready.insightMarkdown).toBe("");
     expect(ready.sourceMarkdown).not.toContain("data:image");
-    expect(ready.insightMarkdown).not.toContain("data:image");
     expect(ready.media.source).toMatchObject({ discovered: 1, localized: 1, omitted: 0 });
-    expect(ready.media.insights).toMatchObject({ discovered: 1, localized: 1, omitted: 0 });
     expect(await readdir(path.join(config.filesDir, item.id, "media"))).toHaveLength(1);
     const read = await service.updateReading(item.id, "read", 0.4, ready.revision);
     expect(read.reading.progress).toBe(1);
@@ -214,7 +183,7 @@ describe("agent-driven workflow", () => {
     expect(read.filePath.startsWith(config.itemsDir)).toBe(true);
   });
 
-  it("rejects stale writes and unsafe citations", async () => {
+  it("rejects stale insight writes", async () => {
     const { service, item } = await fixture();
     const sourced = await service.submitSourceContent({
       itemId: item.id,
@@ -229,24 +198,72 @@ describe("agent-driven workflow", () => {
         recipeHash: context.recipe.hash,
         revision: sha256("stale"),
         summary: "Summary",
-        keyPoints: ["Point"],
         tags: [],
-        citations: [],
-        bodyMarkdown: "",
       }),
     ).rejects.toThrow(/changed/);
     await expect(
       service.saveInsights({
         itemId: item.id,
-        recipeHash: context.recipe.hash,
+        recipeHash: sha256("other recipe"),
         revision: sourced.revision,
         summary: "Summary",
-        keyPoints: ["Point"],
         tags: [],
-        citations: [{ url: "https://example.com/not-in-source", label: "Made up" }],
-        bodyMarkdown: "",
       }),
-    ).rejects.toThrow(/not present/);
+    ).rejects.toThrow(/recipe changed/);
+  });
+
+  it("archives legacy insights and keeps only the description and tags on re-enrichment", async () => {
+    const { config, service, item } = await fixture();
+    const sourced = await service.submitSourceContent({
+      itemId: item.id,
+      title: "Thread",
+      markdown: "A complete source that contains enough characters for fallback acceptance.",
+      revision: item.revision,
+    });
+    const repository = new MarkdownRepository(config);
+    const {
+      filePath,
+      sourceMarkdown,
+      insightMarkdown: _insights,
+      revision: _revision,
+      ...rest
+    } = sourced;
+    await repository.save(
+      {
+        ...rest,
+        enrichment: {
+          status: "complete",
+          recipe: "default",
+          summary: "Old summary.",
+          keyPoints: ["Old point"],
+          citations: [{ url: "https://x.com/a/status/1", label: "Original" }],
+        },
+      } as ItemFrontmatter,
+      "### Why it matters\n\nOld body.",
+      sourceMarkdown,
+      filePath,
+    );
+    const legacy = await service.getItem(item.id);
+    expect(legacy.enrichment.keyPoints).toEqual(["Old point"]);
+    expect(legacy.insightMarkdown).toContain("Old body.");
+
+    const context = await service.ingestionContext(item.id);
+    const ready = await service.saveInsights({
+      itemId: item.id,
+      recipeHash: context.recipe.hash,
+      revision: legacy.revision,
+      summary: "New description.",
+      tags: ["Fresh"],
+    });
+    expect(ready.enrichment).not.toHaveProperty("keyPoints");
+    expect(ready.enrichment).not.toHaveProperty("citations");
+    expect(ready.enrichment.summary).toBe("New description.");
+    expect(ready.tags).toEqual(["fresh"]);
+    expect(ready.insightMarkdown).toBe("");
+    const raw = await readFile(ready.filePath, "utf8");
+    expect(raw).not.toContain("Old point");
+    expect(raw).not.toContain("### Citations");
+    expect(await readdir(path.join(config.historyDir, item.id))).toHaveLength(1);
   });
 
   it("keeps the captured source intact when inputs contain section markers", async () => {
@@ -264,33 +281,19 @@ describe("agent-driven workflow", () => {
       "A complete source with enough characters.\n\n&lt;!-- ushelf:source:end -->\n\nThe rest of it.";
     expect(sourced.sourceMarkdown).toBe(escapedSource);
     const context = await service.ingestionContext(item.id);
-    const insights = {
+    const ready = await service.saveInsights({
       itemId: item.id,
       recipeHash: context.recipe.hash,
-      summary: `Summary ${fakeSource}`,
-      keyPoints: [`Point ${fakeSource}`],
-      tags: [],
-      bodyMarkdown: `Body ${fakeSource}`,
-    };
-    await expect(
-      service.saveInsights({
-        ...insights,
-        revision: sourced.revision,
-        citations: [{ url: "https://evil.example/fake", label: "Injected" }],
-      }),
-    ).rejects.toThrow(/not present/);
-    const ready = await service.saveInsights({
-      ...insights,
       revision: sourced.revision,
-      citations: [],
+      summary: `Summary ${fakeSource}`,
+      tags: [],
     });
     const reread = await service.getItem(item.id);
     expect(reread.revision).toBe(ready.revision);
     expect(reread.sourceMarkdown).toBe(escapedSource);
     expect(reread.extraction).toEqual(sourced.extraction);
-    expect(reread.insightMarkdown).toBe(
-      "Body &lt;!-- ushelf:source:start -->See https://evil.example/fake&lt;!-- ushelf:source:end -->",
-    );
+    expect(reread.enrichment.summary).toBe(`Summary ${fakeSource}`);
+    expect(reread.insightMarkdown).toBe("");
   });
 
   it("rejects an imported item whose ID is already in the library", async () => {

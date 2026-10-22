@@ -1,10 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  citationSchema,
-  readingStatusSchema,
-  sourceTypeSchema,
-  type ShelfService,
-} from "@ushelf/core";
+import { readingStatusSchema, sourceTypeSchema, type ShelfService } from "@ushelf/core";
 import { z } from "zod";
 import { registerKindleTools } from "./kindle-tools.js";
 
@@ -95,16 +90,13 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     "save_insights",
     {
       title: "Save insights",
-      description: "Validate and atomically save source-grounded agent insights.",
+      description: "Validate and atomically save the agent-written description and tags.",
       inputSchema: {
         itemId: z.uuid(),
         recipeHash: z.string().length(64),
         revision: z.string().length(64),
         summary: z.string().min(1).max(1200),
-        keyPoints: z.array(z.string().min(1)).min(1).max(12),
         tags: z.array(z.string()).max(12),
-        citations: z.array(citationSchema),
-        bodyMarkdown: z.string().max(MAX_AGENT_MARKDOWN_LENGTH),
       },
     },
     async (input) => json(await service.saveInsights(input)),

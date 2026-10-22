@@ -6,7 +6,6 @@ import { resolveConfig } from "../configuration/ushelf-config.js";
 import { readAgentSkills, type AgentSkill } from "../agent/agent-skills.js";
 import { ingestionState } from "../domain/ingestion-state.js";
 import type {
-  Citation,
   IngestionState,
   ItemFrontmatter,
   LibraryListQuery,
@@ -319,14 +318,8 @@ export class ShelfService {
       item,
       recipe,
       outputContract: {
-        summary: "string (1-1200 characters)",
-        keyPoints: "string[] (1-12)",
+        summary: "short description, 1-3 sentences (1-1200 characters)",
         tags: "lowercase string[] (0-12)",
-        citations:
-          item.sourceType === "document"
-            ? "{page,label}[] using page numbers present in the document"
-            : "{url,label}[] using URLs present in the source or the original URL",
-        bodyMarkdown: "recipe-specific Markdown",
       },
     };
   }
@@ -336,20 +329,13 @@ export class ShelfService {
     recipeHash: string;
     revision: string;
     summary: string;
-    keyPoints: string[];
     tags: string[];
-    citations: Citation[];
-    bodyMarkdown: string;
   }): Promise<ShelfItem> {
     const item = await this.getItem(input.itemId);
     assertRevision(item, input.revision);
     const recipe = await this.repository.recipe(item.enrichment.recipe);
     if (recipe.hash !== input.recipeHash)
       throw new Error("The recipe changed; fetch a new ingestion context before saving");
-    validateCitations(item, input.citations);
-    const localized = await localizeMarkdownImages(input.bodyMarkdown, item.id, (filename) =>
-      this.mediaExists(item.id, filename),
-    );
     const latest = await this.getItem(input.itemId);
     assertRevision(latest, input.revision);
     if ((await this.repository.recipe(latest.enrichment.recipe)).hash !== input.recipeHash)
@@ -369,21 +355,10 @@ export class ShelfService {
         recipeHash: recipe.hash,
         completedAt: now,
         summary: input.summary.trim(),
-        keyPoints: input.keyPoints
-          .map((point) => point.trim())
-          .filter(Boolean)
-          .slice(0, 12),
-        citations: input.citations,
       },
-      media: { ...item.media, insights: localized.stats },
+      media: { ...item.media, insights: emptyMediaStats() },
     };
-    await this.repository.saveMediaAssets(item.id, localized.assets);
-    const saved = await this.repository.save(
-      frontmatter,
-      localized.markdown,
-      item.sourceMarkdown,
-      item.filePath,
-    );
+    const saved = await this.repository.save(frontmatter, "", item.sourceMarkdown, item.filePath);
     this.database.upsert(saved);
     return saved;
   }
@@ -753,24 +728,4 @@ function frontmatterOf(item: ShelfItem): ItemFrontmatter {
 function assertRevision(item: ShelfItem, revision?: string): void {
   if (revision && revision !== item.revision)
     throw new Error("Item changed since it was read; fetch it again before writing");
-}
-
-function validateCitations(item: ShelfItem, citations: Citation[]): void {
-  if (item.sourceType === "document") {
-    for (const citation of citations) {
-      if (!("page" in citation)) throw new Error("Document citations must use page numbers");
-      if (citation.page > item.file.pageCount) {
-        throw new Error(`Citation page is outside the document: ${citation.page}`);
-      }
-    }
-    return;
-  }
-  const available = new Set<string>([item.originalUrl, item.canonicalUrl]);
-  for (const match of item.sourceMarkdown.matchAll(/https?:\/\/[^\s)\]>]+/g))
-    available.add(match[0].replace(/[.,;:]$/, ""));
-  for (const citation of citations) {
-    if (!("url" in citation)) throw new Error("URL sources must use URL citations");
-    if (!available.has(citation.url))
-      throw new Error(`Citation URL is not present in the source: ${citation.url}`);
-  }
 }
