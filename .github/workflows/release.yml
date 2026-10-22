@@ -204,6 +204,8 @@ jobs:
   publish:
     needs: [context, verify, cli, image]
     runs-on: ubuntu-latest
+    # Holds RELEASE_SIGNING_KEY; restrict its deployments to main.
+    environment: release
     permissions:
       contents: write
       packages: write
@@ -228,6 +230,25 @@ jobs:
           cp install.sh release/install.sh
           cd release
           sha256sum ushelf_*.tar.gz > SHA256SUMS
+      # `ushelf update` only trusts SHA256SUMS signed by a key built into the CLI.
+      - name: Sign checksums
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$RELEASE_SIGNING_KEY" ]; then
+            echo "The RELEASE_SIGNING_KEY secret is not configured." >&2
+            exit 1
+          fi
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key_file"
+          # Refuse to publish a signature that released CLIs could not verify.
+          public_key="$(openssl pkey -in "$key_file" -pubout -outform DER | tail -c 32 | base64)"
+          if ! grep -qF "\"${public_key}\"" apps/cli/internal/cli/release_signature.go; then
+            echo "RELEASE_SIGNING_KEY does not match a key in apps/cli/internal/cli/release_signature.go." >&2
+            exit 1
+          fi
+          openssl pkeyutl -sign -rawin -inkey "$key_file" -in release/SHA256SUMS -out release/SHA256SUMS.sig
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release/ushelf_*.tar.gz
