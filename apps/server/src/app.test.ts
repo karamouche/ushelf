@@ -115,6 +115,35 @@ describe("createApp base path", () => {
     expect(Buffer.from(await response.arrayBuffer()).toString()).toBe("%PDF-test");
   });
 
+  it("validates item list paging before it reaches the library", async () => {
+    const queries: unknown[] = [];
+    const service = {
+      listItems: (query: unknown) => {
+        queries.push(query);
+        return [];
+      },
+    } as unknown as ShelfService;
+    const app = createApp(service);
+
+    expect((await app.request("/api/items")).status).toBe(200);
+    expect((await app.request("/api/items?limit=200&offset=40")).status).toBe(200);
+    expect(queries).toEqual([
+      { limit: 100, offset: 0 },
+      { limit: 200, offset: 40 },
+    ]);
+    for (const query of [
+      "limit=-1",
+      "limit=0",
+      "limit=201",
+      "limit=abc",
+      "limit=1.5",
+      "offset=-1",
+    ]) {
+      expect((await app.request(`/api/items?${query}`)).status, query).toBe(400);
+    }
+    expect(queries).toHaveLength(2);
+  });
+
   it("returns not found when a retained PDF is missing", async () => {
     const service = {
       getOriginalFile: async () => {

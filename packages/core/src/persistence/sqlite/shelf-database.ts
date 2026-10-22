@@ -184,8 +184,9 @@ export class ShelfDatabase {
       conditions.push(sql`${items.tags} LIKE ${`%\"${query.tag.replaceAll("%", "")}\"%`}`);
     }
 
-    const limit = Math.min(query.limit ?? 50, 200);
-    const offset = query.offset ?? 0;
+    // SQLite treats a negative LIMIT as unlimited, so only accept positive whole numbers.
+    const limit = isWholeNumber(query.limit) && query.limit >= 1 ? Math.min(query.limit, 200) : 50;
+    const offset = isWholeNumber(query.offset) ? query.offset : 0;
     const columns = getTableColumns(items);
     const search = query.query?.trim();
     const rows = search
@@ -510,4 +511,8 @@ function rowToSummary(row: typeof items.$inferSelect): ItemSummary {
 function toFtsQuery(value: string): string {
   const tokens = value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   return tokens.length ? tokens.map((token) => `"${token}"*`).join(" AND ") : '""';
+}
+
+function isWholeNumber(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
