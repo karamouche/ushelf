@@ -283,6 +283,36 @@ test("reader restoration is quiet and Read items stay complete", async ({ page }
   await expect(page.getByLabel("Reading status")).toHaveValue("read");
 });
 
+test("reader nav keeps the status select and sign-out in the header", async ({ page }) => {
+  await page.context().route("**/api/health", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, authRequired: true }),
+    }),
+  );
+  await page.context().route("**/api/items/signed-in-reader", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ item: progressItem("signed-in-reader") }),
+    }),
+  );
+
+  await page.goto("/items/signed-in-reader");
+  const nav = page.locator(".reader-nav");
+  const signOut = nav.getByRole("button", { name: "Sign out" });
+  const status = nav.getByLabel("Reading status");
+  await expect(signOut).toBeVisible();
+  await expect(status).toBeVisible();
+
+  const navBox = (await nav.boundingBox())!;
+  for (const control of [signOut, status]) {
+    const box = (await control.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(navBox.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(navBox.y + navBox.height);
+  }
+  await expect(signOut).toHaveCSS("font-size", "12px");
+});
+
 test("reader refreshes a stale revision once and reports persistent save failures", async ({
   page,
 }) => {
