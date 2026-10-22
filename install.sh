@@ -111,6 +111,22 @@ if [ "$actual" != "$expected" ]; then
   exit 1
 fi
 
+# The checksum file comes from the same release, so it only catches corruption. Build provenance
+# proves the archive was built by this repository's release workflow.
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if ! gh attestation verify "${temporary_dir}/${archive}" --repo "$repository" \
+    --signer-workflow "${repository}/.github/workflows/release.yml" >/dev/null 2>&1; then
+    echo "Build provenance verification failed for ${archive}." >&2
+    exit 1
+  fi
+  echo "Verified the build provenance of ${archive}."
+elif [ "${USHELF_REQUIRE_PROVENANCE:-0}" = "1" ]; then
+  echo "USHELF_REQUIRE_PROVENANCE=1 needs the GitHub CLI (gh), signed in, to verify ${archive}." >&2
+  exit 1
+else
+  echo "Skipped the build provenance check; install and sign in to the GitHub CLI (gh) to enable it."
+fi
+
 tar -xzf "${temporary_dir}/${archive}" -C "$temporary_dir" ushelf
 mkdir -p "$install_dir"
 install -m 0755 "${temporary_dir}/ushelf" "${install_dir}/ushelf.tmp"

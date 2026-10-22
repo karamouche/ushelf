@@ -3,6 +3,9 @@ set -eu
 
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/ushelf-installer-test.XXXXXX")
 trap 'rm -rf "$test_root"' EXIT HUP INT TERM
+# Keep a real, signed-in GitHub CLI from verifying the fake test archive.
+export GH_CONFIG_DIR="${test_root}/gh-config"
+unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
 
 case "$(uname -s)" in Darwin) platform=darwin ;; Linux) platform=linux ;; esac
 case "$(uname -m)" in x86_64|amd64) architecture=amd64 ;; arm64|aarch64) architecture=arm64 ;; esac
@@ -92,5 +95,54 @@ unknown_root="${test_root}/unknown"
 run_default_install "$unknown_root" /bin/example-shell "${test_root}/unknown.out"
 test ! -e "${unknown_root}/.example-shellrc"
 grep -qF "Add ${unknown_root}/.local/bin to PATH" "${test_root}/unknown.out"
+
+# A signed-in GitHub CLI makes provenance verification mandatory for the install.
+fake_gh_dir="${test_root}/fake-gh"
+mkdir -p "$fake_gh_dir"
+cat > "${fake_gh_dir}/gh" <<'GH'
+#!/bin/sh
+case "$1" in
+  auth) exit 0 ;;
+  attestation) exit "${FAKE_GH_VERIFY_STATUS:-0}" ;;
+esac
+exit 2
+GH
+chmod +x "${fake_gh_dir}/gh"
+
+run_provenance_install() {
+  case_root=$1
+  verify_status=$2
+  mkdir -p "$case_root"
+  HOME="$case_root" \
+  SHELL=/bin/zsh \
+  PATH="${fake_gh_dir}:/usr/bin:/bin" \
+  FAKE_GH_VERIFY_STATUS="$verify_status" \
+  USHELF_VERSION=v9.9.9 \
+  USHELF_RELEASE_BASE_URL="$release_base" \
+  USHELF_NO_MODIFY_PATH=1 \
+    sh ./install.sh > "${case_root}.out" 2>&1
+}
+
+run_provenance_install "${test_root}/provenance-ok" 0
+grep -qF "Verified the build provenance" "${test_root}/provenance-ok.out"
+test "$("${test_root}/provenance-ok/.local/bin/ushelf")" = "test-ushelf"
+
+if run_provenance_install "${test_root}/provenance-bad" 1; then
+  echo "Installer accepted an archive that failed provenance verification." >&2
+  exit 1
+fi
+grep -qF "Build provenance verification failed" "${test_root}/provenance-bad.out"
+test ! -e "${test_root}/provenance-bad/.local/bin/ushelf"
+
+grep -qF "Skipped the build provenance check" "${test_root}/custom.out"
+required_root="${test_root}/required"
+mkdir -p "$required_root"
+if HOME="$required_root" SHELL=/bin/zsh PATH="/usr/bin:/bin" USHELF_VERSION=v9.9.9 \
+  USHELF_RELEASE_BASE_URL="$release_base" USHELF_REQUIRE_PROVENANCE=1 \
+  sh ./install.sh > "${test_root}/required.out" 2>&1; then
+  echo "Installer ignored USHELF_REQUIRE_PROVENANCE without gh." >&2
+  exit 1
+fi
+test ! -e "${required_root}/.local/bin/ushelf"
 
 echo "Installer smoke test passed."
