@@ -13,6 +13,21 @@ The installer supports macOS and Linux on amd64 and arm64. On Windows, run it un
 
 Node.js, pnpm, and a repository clone are never required for normal use.
 
+## Verifying the download
+
+The installer downloads over HTTPS only and checks the archive against the release's `SHA256SUMS`. When the [GitHub CLI](https://cli.github.com/) is installed and signed in, it also verifies the archive's build provenance, which proves it was built by this repository's release workflow, and refuses to install if the check fails. Set `USHELF_REQUIRE_PROVENANCE=1` to make that check mandatory:
+
+```sh
+curl -fsSL https://github.com/karamouche/ushelf/releases/latest/download/install.sh | USHELF_REQUIRE_PROVENANCE=1 sh
+```
+
+To verify a downloaded archive yourself:
+
+```sh
+gh attestation verify ushelf_darwin_arm64.tar.gz --repo karamouche/ushelf \
+  --signer-workflow karamouche/ushelf/.github/workflows/release.yml
+```
+
 ## Requirements by deployment target
 
 What else you need depends on where the server will run:
@@ -31,4 +46,4 @@ ushelf update --check
 ushelf update
 ```
 
-`ushelf update` verifies the release checksum, replaces the CLI, and rolls the current context forward to the matching server image. See [Maintenance](../../guides/maintenance/#updating).
+`ushelf update` verifies the release checksum, replaces the CLI, and rolls the current context forward to the matching server image. It never installs a release older than the running CLI; to downgrade on purpose, rerun the installer with `USHELF_VERSION` set to the version you want. See [Maintenance](../../guides/maintenance/#updating).
