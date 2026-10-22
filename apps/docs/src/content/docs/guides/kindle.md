@@ -41,3 +41,7 @@ This deregisters uShelf from Amazon and removes the server's credential. If Amaz
 ```sh
 ushelf kindle disconnect --skip-deregister --yes
 ```
+
+## Read in the Kindle browser
+
+You can also open the reader directly in the Kindle's built-in browser. The web app is built with a compatibility layer for older browser engines: polyfills plus a fallback bundle for browsers without JavaScript modules. Layout spacing can differ slightly from a current browser, and very old firmware whose browser predates Chrome 62-era JavaScript can show the library but not open items.
