@@ -40,7 +40,7 @@ uShelf has three kinds of clients and a credential for each.
 
 - On your machine, `~/.ushelf/credentials.json` holds each context's token and password with owner-only permissions. `config.json` contains no secrets, and `ushelf config show` and `ushelf context show` report secrets only as `configured` or `unset`.
 - Secrets reach Docker through a temporary owner-only env file, and Fly.io through `fly secrets import` on stdin. They never appear in process arguments.
-- The Kindle credential lives only on the server, in `secrets/kindle.json`, and is never returned by the API or MCP tools.
+- The Kindle credential lives only on the server, in `secrets/kindle.json`, and is never returned by the API or MCP tools. The Kindle bridge process that uses it does not receive the server's API token or app password; only proxy, TLS certificate, locale, and path variables are passed through.
 
 ## Saved content in the browser
 
