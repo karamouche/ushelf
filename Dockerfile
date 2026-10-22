@@ -1,7 +1,7 @@
 ARG USHELF_WEB_BASE_PATH=/
 ARG USHELF_PORT=43110
 
-FROM golang:1.27.3-bookworm AS kindle-bridge-build
+FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS kindle-bridge-build
 
 WORKDIR /src/apps/cli
 COPY apps/cli/go.mod apps/cli/go.sum ./
@@ -9,7 +9,7 @@ RUN go mod download
 COPY apps/cli ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/ushelf-kindle-bridge ./cmd/ushelf-kindle-bridge
 
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -52,7 +52,7 @@ COPY packages/core/package.json packages/core/package.json
 
 RUN pnpm install --frozen-lockfile --prod --filter @ushelf/server... --filter @ushelf/mcp...
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS runtime
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
