@@ -4,6 +4,10 @@ import sanitizeHtml from "sanitize-html";
 import TurndownService from "turndown";
 import type { ExtractedSource } from "./source-extractor.js";
 
+const CODE_CONTROLS = "button, [role=button], svg";
+const NON_CODE_CONTENT =
+  "img, figure, video, audio, iframe, table, blockquote, ul, ol, h1, h2, h3, h4, h5, h6, p";
+
 export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): ExtractedSource {
   const document = dom.window.document;
   const metadataImage = metadataImageUrl(document, canonicalUrl);
@@ -121,6 +125,7 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
 
   // Readability can discard deeply nested presentation wrappers around otherwise semantic
   // code. Promote the normalized block through ancestors that contain no other content.
+  const crowded = new WeakSet<Element>();
   for (const pre of document.querySelectorAll("pre")) {
     const replacement = document.createElement("pre");
     const code = document.createElement("code");
@@ -132,12 +137,14 @@ function prepareDocumentForExtraction(document: Document, baseUrl: string): stri
     }
     code.textContent = text;
     replacement.append(code);
-    highestCodeOnlyAncestor(pre, text).replaceWith(replacement);
+    highestCodeOnlyAncestor(pre, text, crowded).replaceWith(replacement);
   }
   return [...classesToPreserve];
 }
 
 function normalizeImages(document: Document, baseUrl: string): void {
+  const figures = new Map<Element, FigureShape>();
+  const crowded = new WeakSet<Element>();
   for (const image of [...document.querySelectorAll("img")]) {
     if (!image.isConnected) continue;
     const pictureSource = image.closest("picture")?.querySelector("source");
@@ -152,41 +159,95 @@ function normalizeImages(document: Document, baseUrl: string): void {
     if (!source) continue;
     image.setAttribute("src", resolveUrl(source, baseUrl));
 
-    const target = highestImageOnlyAncestor(image);
+    const figure = image.closest("figure");
+    const shape = figure ? figureShape(figure, figures) : undefined;
+    const target = highestImageOnlyAncestor(image, figure, shape, crowded);
     if (target === image) continue;
-    const figure = document.createElement("figure");
+    const normalized = document.createElement("figure");
     const normalizedImage = document.createElement("img");
     for (const attribute of ["src", "alt", "title"] as const) {
       const value = image.getAttribute(attribute);
       if (value !== null) normalizedImage.setAttribute(attribute, value);
     }
-    figure.append(normalizedImage);
-    const caption = image.closest("figure")?.querySelector("figcaption");
-    if (caption) figure.append(caption.cloneNode(true));
-    target.replaceWith(figure);
+    normalized.append(normalizedImage);
+    if (shape?.caption) normalized.append(shape.caption.cloneNode(true));
+    target.replaceWith(normalized);
   }
 }
 
-function highestCodeOnlyAncestor(pre: Element, codeText: string): Element {
+function highestCodeOnlyAncestor(
+  pre: Element,
+  codeText: string,
+  crowded: WeakSet<Element>,
+): Element {
   const text = normalizedWhitespace(codeText);
-  let target = pre;
+  // The first wrapper gets the full check, which also covers controls and blocks inside the
+  // pre itself. Above it, a wrapper adds nothing exactly when its other children are empty,
+  // so only those siblings are checked and the climb stays linear however deep it goes.
+  const first = pre.parentElement;
+  if (
+    !first ||
+    first.tagName === "BODY" ||
+    !onlyChildWithContent(first, pre, hasCodeSiblingContent, crowded) ||
+    codeContentText(first) !== text ||
+    first.querySelectorAll("pre").length !== 1 ||
+    first.querySelector(NON_CODE_CONTENT)
+  ) {
+    return pre;
+  }
+  let target = first;
   while (
     target.parentElement &&
     target.parentElement.tagName !== "BODY" &&
-    codeContentText(target.parentElement) === text &&
-    target.parentElement.querySelectorAll("pre").length === 1 &&
-    !target.parentElement.querySelector(
-      "img, figure, video, audio, iframe, table, blockquote, ul, ol, h1, h2, h3, h4, h5, h6, p",
-    )
+    onlyChildWithContent(target.parentElement, target, hasCodeSiblingContent, crowded)
   ) {
     target = target.parentElement;
   }
   return target;
 }
 
+function hasCodeSiblingContent(node: Node): boolean {
+  if (node.nodeType === 3) return Boolean(node.textContent?.trim());
+  if (node.nodeType !== 1) return false;
+  const element = node as Element;
+  if (element.matches(`pre, ${NON_CODE_CONTENT}`)) return true;
+  if (element.querySelector(`pre, ${NON_CODE_CONTENT}`)) return true;
+  if (element.matches(CODE_CONTROLS) || !element.textContent?.trim()) return false;
+  const clone = element.cloneNode(true) as Element;
+  for (const control of clone.querySelectorAll(CODE_CONTROLS)) control.remove();
+  return Boolean(clone.textContent?.trim());
+}
+
+/**
+ * Whether every child of `parent` other than `child` is empty, so climbing to `parent` adds
+ * nothing to the promoted block. A parent with two children holding content can never be
+ * climbed, and replacing a promoted block keeps that count, so it is remembered: many blocks
+ * sharing one container then cost one scan of that container instead of one each.
+ */
+function onlyChildWithContent(
+  parent: Element,
+  child: Element,
+  hasContent: (node: Node) => boolean,
+  crowded: WeakSet<Element> | undefined,
+): boolean {
+  if (crowded?.has(parent)) return false;
+  let withContent = 0;
+  let others = false;
+  for (const node of parent.childNodes) {
+    if (node !== child && !hasContent(node)) continue;
+    withContent += 1;
+    if (node !== child) others = true;
+    if (withContent > 1) {
+      crowded?.add(parent);
+      return false;
+    }
+  }
+  return !others;
+}
+
 function codeContentText(element: Element): string {
   const clone = element.cloneNode(true) as Element;
-  for (const control of clone.querySelectorAll("button, [role=button], svg")) control.remove();
+  for (const control of clone.querySelectorAll(CODE_CONTROLS)) control.remove();
   const pre = clone.matches("pre") ? clone : clone.querySelector("pre");
   if (pre && clone.querySelectorAll("pre").length === 1) {
     pre.replaceWith(extractCodeText(pre));
@@ -219,19 +280,56 @@ function textWithBreaks(element: Element): string {
   return clone.textContent ?? "";
 }
 
-function highestImageOnlyAncestor(image: Element): Element {
-  const figure = image.closest("figure");
-  const caption = figure?.querySelector("figcaption");
-  const text = normalizedText(caption ?? null);
-  let target =
-    figure && figure.querySelectorAll("img").length === 1 && normalizedText(figure) === text
-      ? figure
-      : image;
+interface FigureShape {
+  caption: Element | null;
+  imageOnly: boolean;
+}
+
+// Every image of a figure needs the same caption and image count, so read them once.
+function figureShape(figure: Element, figures: Map<Element, FigureShape>): FigureShape {
+  let shape = figures.get(figure);
+  if (!shape) {
+    const caption = figure.querySelector("figcaption");
+    shape = {
+      caption,
+      imageOnly:
+        figure.querySelectorAll("img").length === 1 &&
+        normalizedText(figure) === normalizedText(caption),
+    };
+    figures.set(figure, shape);
+  }
+  return shape;
+}
+
+function highestImageOnlyAncestor(
+  image: Element,
+  figure: Element | null,
+  shape: FigureShape | undefined,
+  crowded: WeakSet<Element>,
+): Element {
+  const caption = shape?.caption ?? null;
+  const text = normalizedText(caption);
+  // A child holding the caption is left to the full check below.
+  const hasContent = (node: Node): boolean =>
+    !(caption && node.contains(caption)) &&
+    (node.nodeType === 3
+      ? Boolean(node.textContent?.trim())
+      : node.nodeType === 1 &&
+        ((node as Element).matches("img") ||
+          Boolean((node as Element).querySelector("img")) ||
+          Boolean(node.textContent?.trim())));
+  // Whether a parent can be climbed depends on the caption, so only share it without one.
+  const crowdedParents = caption ? undefined : crowded;
+  let target = figure && shape?.imageOnly ? figure : image;
+  // Without a caption the target holds one image and no text, and so does a parent whose other
+  // children are empty. A caption can sit beside the image, so it needs the full check.
   while (
     target.parentElement &&
     target.parentElement.tagName !== "BODY" &&
-    target.parentElement.querySelectorAll("img").length === 1 &&
-    normalizedText(target.parentElement) === text
+    onlyChildWithContent(target.parentElement, target, hasContent, crowdedParents) &&
+    (!caption ||
+      (target.parentElement.querySelectorAll("img").length === 1 &&
+        normalizedText(target.parentElement) === text))
   ) {
     target = target.parentElement;
   }
