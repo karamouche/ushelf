@@ -13,11 +13,20 @@ privateNetworkBlocks.addSubnet("100.64.0.0", 10, "ipv4");
 privateNetworkBlocks.addSubnet("127.0.0.0", 8, "ipv4");
 privateNetworkBlocks.addSubnet("169.254.0.0", 16, "ipv4");
 privateNetworkBlocks.addSubnet("172.16.0.0", 12, "ipv4");
+privateNetworkBlocks.addSubnet("192.0.0.0", 24, "ipv4");
+privateNetworkBlocks.addSubnet("192.0.2.0", 24, "ipv4");
 privateNetworkBlocks.addSubnet("192.168.0.0", 16, "ipv4");
+privateNetworkBlocks.addSubnet("198.18.0.0", 15, "ipv4");
+privateNetworkBlocks.addSubnet("198.51.100.0", 24, "ipv4");
+privateNetworkBlocks.addSubnet("203.0.113.0", 24, "ipv4");
 privateNetworkBlocks.addSubnet("224.0.0.0", 4, "ipv4");
 privateNetworkBlocks.addSubnet("240.0.0.0", 4, "ipv4");
-privateNetworkBlocks.addAddress("::", "ipv6");
-privateNetworkBlocks.addAddress("::1", "ipv6");
+// IPv4-compatible addresses (deprecated), including the unspecified and loopback addresses.
+privateNetworkBlocks.addSubnet("::", 96, "ipv6");
+privateNetworkBlocks.addSubnet("64:ff9b:1::", 48, "ipv6");
+privateNetworkBlocks.addSubnet("100::", 64, "ipv6");
+// Teredo hides the IPv4 address it tunnels to, so it cannot be checked.
+privateNetworkBlocks.addSubnet("2001::", 32, "ipv6");
 privateNetworkBlocks.addSubnet("fc00::", 7, "ipv6");
 privateNetworkBlocks.addSubnet("fe80::", 10, "ipv6");
 privateNetworkBlocks.addSubnet("ff00::", 8, "ipv6");
@@ -149,6 +158,45 @@ export function isPrivateAddress(address: string): boolean {
   const normalized = address.toLowerCase();
   const family = isIP(normalized);
   if (family === 4) return privateNetworkBlocks.check(normalized, "ipv4");
-  if (family === 6) return privateNetworkBlocks.check(normalized, "ipv6");
+  if (family === 6) {
+    if (privateNetworkBlocks.check(normalized, "ipv6")) return true;
+    const embedded = translatedIPv4(normalized);
+    return embedded !== undefined && privateNetworkBlocks.check(embedded, "ipv4");
+  }
   return false;
+}
+
+/**
+ * Returns the IPv4 address that NAT64 (64:ff9b::/96) or 6to4 (2002::/16) traffic is delivered to.
+ * These prefixes reach public IPv4 sites on IPv6-only hosts, so they are checked, not blocked.
+ */
+function translatedIPv4(address: string): string | undefined {
+  const groups = ipv6Groups(address);
+  if (!groups) return undefined;
+  const nat64Prefix = [0x64, 0xff9b, 0, 0, 0, 0];
+  if (nat64Prefix.every((value, index) => groups[index] === value)) {
+    return ipv4FromGroups(groups[6]!, groups[7]!);
+  }
+  if (groups[0] === 0x2002) return ipv4FromGroups(groups[1]!, groups[2]!);
+  return undefined;
+}
+
+function ipv6Groups(address: string): number[] | undefined {
+  let text = address;
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(text)?.[1];
+  if (dotted) {
+    const [a, b, c, d] = dotted.split(".").map(Number) as [number, number, number, number];
+    text = `${text.slice(0, -dotted.length)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head = "", tail] = text.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if (tail === undefined ? missing !== 0 : missing < 1) return undefined;
+  const groups = [...left, ...Array<string>(tail === undefined ? 0 : missing).fill("0"), ...right];
+  return groups.map((group) => Number.parseInt(group, 16));
+}
+
+function ipv4FromGroups(high: number, low: number): string {
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
 }
