@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -181,6 +182,31 @@ describe("createApp base path", () => {
       expect(html).toContain('globalThis.__USHELF_BASE_PATH__="/reader/"');
 
       expect((await app.request("/app.js")).status).toBe(404);
+    } finally {
+      await fs.rm(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("protects the reader with a CSP that allows only its own inline script", async () => {
+    const webRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ushelf-web-"));
+    try {
+      await fs.writeFile(
+        path.join(webRoot, "index.html"),
+        "<html><head></head><body></body></html>",
+      );
+      const app = createApp({} as ShelfService, webRoot, "/reader/");
+
+      for (const route of ["/reader/", "/reader/index.html", "/reader/items/example"]) {
+        const response = await app.request(route);
+        const policy = response.headers.get("content-security-policy") ?? "";
+        const inlineScript = /<script>(.*?)<\/script>/.exec(await response.text())?.[1] ?? "";
+        const hash = createHash("sha256").update(inlineScript).digest("base64");
+
+        expect(policy).toContain(`script-src 'self' 'sha256-${hash}'`);
+        expect(policy).toContain("object-src 'none'");
+        expect(policy).toContain("frame-ancestors 'none'");
+        expect(response.headers.get("x-frame-options")).toBe("DENY");
+      }
     } finally {
       await fs.rm(webRoot, { recursive: true, force: true });
     }

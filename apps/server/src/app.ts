@@ -11,6 +11,7 @@ import {
   ShelfService,
   sourceTypeSchema,
 } from "@ushelf/core";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { installApiTokenAuth, requireApiToken, requireMcpAccess, type AppEnv } from "./api-auth.js";
@@ -211,13 +212,15 @@ export function createApp(
   });
 
   if (webRoot) {
-    const indexHtml = injectRuntimeBasePath(
-      readFileSync(path.join(webRoot, "index.html"), "utf8"),
-      normalizedBasePath,
+    const basePathScript = runtimeBasePathScript(normalizedBasePath);
+    const indexHtml = readFileSync(path.join(webRoot, "index.html"), "utf8").replace(
+      "<head>",
+      `<head><base href="${normalizedBasePath}"><script>${basePathScript}</script>`,
     );
+    const indexHeaders = webAppHeaders(basePathScript);
     const webRoute = route("/*");
-    app.get(route("/"), (c) => c.html(indexHtml));
-    app.get(route("/index.html"), (c) => c.html(indexHtml));
+    app.get(route("/"), (c) => c.html(indexHtml, 200, indexHeaders));
+    app.get(route("/index.html"), (c) => c.html(indexHtml, 200, indexHeaders));
     app.use(
       webRoute,
       serveStatic({
@@ -226,7 +229,7 @@ export function createApp(
           prefix ? requestPath.slice(prefix.length) || "/" : requestPath,
       }),
     );
-    app.get(webRoute, (c) => c.html(indexHtml));
+    app.get(webRoute, (c) => c.html(indexHtml, 200, indexHeaders));
   }
   return app;
 }
@@ -281,10 +284,30 @@ function normalizeBasePath(value: string): string {
   return normalized.endsWith("/") ? normalized : `${normalized}/`;
 }
 
-function injectRuntimeBasePath(html: string, basePath: string): string {
-  const scriptValue = JSON.stringify(basePath).replaceAll("<", "\\u003c");
-  return html.replace(
-    "<head>",
-    `<head><base href="${basePath}"><script>globalThis.__USHELF_BASE_PATH__=${scriptValue};</script>`,
-  );
+function runtimeBasePathScript(basePath: string): string {
+  return `globalThis.__USHELF_BASE_PATH__=${JSON.stringify(basePath).replaceAll("<", "\\u003c")};`;
+}
+
+/**
+ * The reader renders sanitized third-party content, so the CSP is a second layer behind the
+ * sanitizers: only bundled scripts and the inline base-path script may run. Styles stay inline
+ * for React style props and Mermaid's generated SVG. Framing is refused to stop clickjacking.
+ */
+function webAppHeaders(inlineScript: string): Record<string, string> {
+  const scriptHash = createHash("sha256").update(inlineScript).digest("base64");
+  return {
+    "content-security-policy": [
+      "default-src 'self'",
+      `script-src 'self' 'sha256-${scriptHash}'`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "font-src 'self' data:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+  };
 }
