@@ -162,6 +162,8 @@ export function createApp(
     return c.body(new Uint8Array(file.bytes), 200, {
       "content-type": file.mediaType,
       "content-disposition": `inline; filename="original.pdf"; filename*=UTF-8''${encodeHeaderFilename(file.name)}`,
+      // Browser PDF viewers still render in a sandbox, but a viewer exploit cannot act as this origin.
+      "content-security-policy": "default-src 'none'; sandbox",
       "x-content-type-options": "nosniff",
     });
   });
