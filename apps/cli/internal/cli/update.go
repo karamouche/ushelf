@@ -78,8 +78,11 @@ func (s *commandState) update(ctx context.Context, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
-	actions.Step("Verifying the release archive...")
+	actions.Step("Verifying the release archive and its build provenance...")
 	if err := verifyChecksum(archiveName, archive, string(checksums)); err != nil {
+		return err
+	}
+	if err := s.verifyReleaseProvenance(ctx, archiveName, archive); err != nil {
 		return err
 	}
 	binary, err := extractBinary(archive)
