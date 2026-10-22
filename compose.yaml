@@ -16,6 +16,9 @@ services:
       # Host-side values still come from .env below for bind mounts and ports.
       USHELF_HOST: 0.0.0.0
       USHELF_ROOT: /data
+      # The host address the port is published on below. The server refuses to start when it is
+      # not loopback and USHELF_APP_PASSWORD is unset.
+      USHELF_PUBLISHED_HOST: ${USHELF_HOST:-127.0.0.1}
       USHELF_PORT: ${USHELF_PORT:-43110}
       USHELF_WEB_BASE_PATH: ${USHELF_WEB_BASE_PATH:-/}
       USHELF_APP_PASSWORD: ${USHELF_APP_PASSWORD:-}

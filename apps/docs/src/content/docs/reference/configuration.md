@@ -5,22 +5,23 @@ description: Server environment variables and the CLI's files.
 
 ## Server environment variables
 
-| Variable               | Default                 | Purpose                                                               |
-| ---------------------- | ----------------------- | --------------------------------------------------------------------- |
-| `USHELF_ROOT`          | `~/.ushelf`             | Root containing `library/`, `recipes/`, `state/`, and `secrets/`      |
-| `USHELF_STATE_DIR`     | `<USHELF_ROOT>/state`   | Optional override for the disposable SQLite state                     |
-| `USHELF_SECRETS_DIR`   | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                         |
-| `USHELF_HOST`          | `127.0.0.1`             | Address the HTTP server listens on                                    |
-| `USHELF_PORT`          | `43110`                 | HTTP port                                                             |
-| `USHELF_WEB_BASE_PATH` | `/`                     | Root or subpath where the reader, API, and MCP endpoint are served    |
-| `USHELF_APP_PASSWORD`  | unset                   | Password for browser access to library content                        |
-| `USHELF_API_TOKEN`     | unset                   | Bearer token, at least 32 characters, for the CLI, agents, and `/mcp` |
+| Variable                | Default                 | Purpose                                                               |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------- |
+| `USHELF_ROOT`           | `~/.ushelf`             | Root containing `library/`, `recipes/`, `state/`, and `secrets/`      |
+| `USHELF_STATE_DIR`      | `<USHELF_ROOT>/state`   | Optional override for the disposable SQLite state                     |
+| `USHELF_SECRETS_DIR`    | `<USHELF_ROOT>/secrets` | Optional override for integration credentials                         |
+| `USHELF_HOST`           | `127.0.0.1`             | Address the HTTP server listens on                                    |
+| `USHELF_PUBLISHED_HOST` | `USHELF_HOST`           | Host address a container port is published on, when it differs        |
+| `USHELF_PORT`           | `43110`                 | HTTP port                                                             |
+| `USHELF_WEB_BASE_PATH`  | `/`                     | Root or subpath where the reader, API, and MCP endpoint are served    |
+| `USHELF_APP_PASSWORD`   | unset                   | Password for browser access to library content                        |
+| `USHELF_API_TOKEN`      | unset                   | Bearer token, at least 32 characters, for the CLI, agents, and `/mcp` |
 
 Containers use `/data` as `USHELF_ROOT`. Set `USHELF_ROOT` to move the complete layout; use `USHELF_STATE_DIR` or `USHELF_SECRETS_DIR` only when either directory must live outside that root.
 
 For a subpath deployment, use an absolute path such as `/reader/`. uShelf normalizes the trailing slash, and a reverse proxy must preserve the prefix.
 
-Without `USHELF_API_TOKEN`, the MCP endpoint and administrative routes are unavailable. Without `USHELF_APP_PASSWORD`, browser access needs no sign-in, so the server answers only requests addressed to `localhost`, `127.0.0.1`, or `[::1]` and returns `421` for any other `Host` unless the request carries the API token. Set a password to reach the reader through any other address.
+Without `USHELF_API_TOKEN`, the MCP endpoint and administrative routes are unavailable. Without `USHELF_APP_PASSWORD`, browser access needs no sign-in, so the server refuses to start unless `USHELF_PUBLISHED_HOST` (or `USHELF_HOST` when it is unset) is a loopback address. A container listens on `0.0.0.0`, so Compose and the CLI set `USHELF_PUBLISHED_HOST` to the address they publish the port on. The server also answers only requests addressed to `localhost`, `127.0.0.1`, or `[::1]` and returns `421` for any other `Host` unless the request carries the API token. Set a password to reach the reader through any other address.
 
 ## CLI files
 

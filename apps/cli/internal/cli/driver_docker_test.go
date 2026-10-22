@@ -48,7 +48,7 @@ func TestLocalApplyUsesHardenedMountsAndKeepsSecretsOffTheCommandLine(t *testing
 	for _, expected := range []string{"--read-only", "no-new-privileges:true", "--user " + currentUser(),
 		deployment.libraryDir() + ":/data/library", deployment.stateDir() + ":/data/state",
 		deployment.recipesDir() + ":/data/recipes:ro", deployment.secretsDir() + ":/data/secrets",
-		"USHELF_ROOT=/data", "127.0.0.1:43110:43110", "ghcr.io/karamouche/ushelf:1.2.3"} {
+		"USHELF_ROOT=/data", "USHELF_PUBLISHED_HOST=127.0.0.1", "127.0.0.1:43110:43110", "ghcr.io/karamouche/ushelf:1.2.3"} {
 		if !strings.Contains(joined, expected) {
 			t.Errorf("docker run missing %q: %s", expected, joined)
 		}
