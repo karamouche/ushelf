@@ -31,6 +31,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REQUESTED_VERSION: ${{ inputs.version }}
+          COMMIT_AUTHOR: ${{ github.actor }}
+          COMMIT_AUTHOR_ID: ${{ github.actor_id }}
         run: |
           version="${REQUESTED_VERSION#v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -48,8 +50,8 @@ jobs:
 
           node scripts/set-version.mjs "$tag"
           git switch -c "$branch"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "$COMMIT_AUTHOR"
+          git config user.email "${COMMIT_AUTHOR_ID}+${COMMIT_AUTHOR}@users.noreply.github.com"
           git add package.json apps/mcp/package.json apps/server/package.json apps/web/package.json apps/docs/package.json packages/core/package.json
           git commit -m "chore: release ${tag}"
           git push origin "$branch"
