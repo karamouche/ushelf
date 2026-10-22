@@ -3,6 +3,11 @@ set -eu
 
 repository="karamouche/ushelf"
 release_base="${USHELF_RELEASE_BASE_URL:-https://github.com/${repository}/releases/download}"
+# Downloads use HTTPS only; an explicit release mirror may also be a local file:// directory.
+curl_protocols="=https"
+if [ -n "${USHELF_RELEASE_BASE_URL:-}" ]; then
+  curl_protocols="=https,file"
+fi
 if [ -n "${USHELF_INSTALL_DIR:-}" ]; then
   install_dir="$USHELF_INSTALL_DIR"
   install_dir_is_default=false
@@ -78,7 +83,7 @@ configure_user_path() {
 
 version="${USHELF_VERSION:-}"
 if [ -z "$version" ]; then
-  latest_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${repository}/releases/latest")
+  latest_url=$(curl -fsSLI --proto "=https" --tlsv1.2 -o /dev/null -w '%{url_effective}' "https://github.com/${repository}/releases/latest")
   version=${latest_url##*/}
 fi
 case "$version" in v*) ;; *) version="v${version}" ;; esac
@@ -88,8 +93,8 @@ base_url="${release_base}/${version}"
 temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/ushelf-install.XXXXXX")
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 
-curl -fsSL "${base_url}/${archive}" -o "${temporary_dir}/${archive}"
-curl -fsSL "${base_url}/SHA256SUMS" -o "${temporary_dir}/SHA256SUMS"
+curl -fsSL --proto "$curl_protocols" --tlsv1.2 "${base_url}/${archive}" -o "${temporary_dir}/${archive}"
+curl -fsSL --proto "$curl_protocols" --tlsv1.2 "${base_url}/SHA256SUMS" -o "${temporary_dir}/SHA256SUMS"
 
 expected=$(awk -v name="$archive" '$2 == name || $2 == "*" name { print $1 }' "${temporary_dir}/SHA256SUMS")
 if [ -z "$expected" ]; then
