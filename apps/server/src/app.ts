@@ -235,7 +235,8 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
  * Without an app password the reader API is unauthenticated, so it may only be reached through a
- * loopback Host. This blocks DNS-rebinding pages and LAN clients; token clients stay allowed.
+ * loopback Host. This blocks DNS-rebinding pages; token clients stay allowed. It is not
+ * authentication: other clients set their own Host, so startup refuses non-loopback exposure.
  */
 function installLoopbackHostGuard(app: Hono<AppEnv>): void {
   app.use("*", async (c, next) => {

@@ -191,7 +191,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.context.outputs.version }}
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY}:${RELEASE_VERSION}"
-          docker run -d --name ushelf-smoke -p 127.0.0.1:43110:43110 -e USHELF_HOST=0.0.0.0 "$image"
+          docker run -d --name ushelf-smoke -p 127.0.0.1:43110:43110 -e USHELF_HOST=0.0.0.0 -e USHELF_PUBLISHED_HOST=127.0.0.1 "$image"
           trap 'docker logs ushelf-smoke; docker rm -f ushelf-smoke' EXIT
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:43110/api/health; then exit 0; fi

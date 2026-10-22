@@ -21,7 +21,8 @@ uShelf has three kinds of clients and a credential for each.
 ## App password
 
 - Remote deployments made by the CLI always require one, and so do local deployments published on an address other than `127.0.0.1`, `::1`, or `localhost`. The CLI accepts only passwords of at least 12 characters. Otherwise it is optional because the server listens on loopback.
-- Without a password, the server answers only requests whose `Host` is `localhost`, `127.0.0.1`, or `[::1]` (others get `421`), unless they carry the API token. This blocks DNS-rebinding pages and other machines' browsers.
+- Without a password, the server refuses to start unless it is exposed only on loopback: its listen address, or for a container the address its port is published on (`USHELF_PUBLISHED_HOST`), must be `127.0.0.1`, `::1`, or `localhost`.
+- Without a password, the server also answers only requests whose `Host` is `localhost`, `127.0.0.1`, or `[::1]` (others get `421`), unless they carry the API token. This blocks DNS-rebinding pages. It is not authentication: a client other than a browser can send any `Host`, so anything that can reach the port, such as another container on the same Docker network, can use the reader.
 - Reader writes accept only `application/json` bodies up to 16 KiB, so cross-site pages cannot send them without a CORS preflight.
 - It covers the API, PDFs, media, and reader for browser sessions. Sign-in and the content-free health check remain public.
 - Sign-in uses a `Secure`, `SameSite=Strict` cookie that expires after 12 hours, on server restart, or on password change. Failed sign-ins are rate-limited: after ten wrong passwords within a minute, every attempt is refused for the rest of that minute, even with the correct password, so the limit caps guessing. Existing sessions, API tokens, and connector tokens keep working; only new sign-ins and approvals wait.
