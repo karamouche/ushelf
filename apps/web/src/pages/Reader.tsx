@@ -62,6 +62,7 @@ export function Reader() {
     <div className="reader-shell">
       <header className="reader-nav">
         <button
+          className="reader-back"
           onClick={() => {
             void flush({ keepalive: true });
             navigate(-1);
