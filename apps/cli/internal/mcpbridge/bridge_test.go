@@ -105,3 +105,24 @@ func TestBridgeAnswersRequestsWhenTheServerFails(t *testing.T) {
 		t.Fatalf("expected diagnostics on the log stream, got %q", log.String())
 	}
 }
+
+func TestBridgeRefusesRedirectsWithTheToken(t *testing.T) {
+	var leaked bool
+	target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked = leaked || r.Header.Get("Authorization") != ""
+	}))
+	defer target.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusPermanentRedirect)
+	}))
+	defer server.Close()
+	var stdout, log bytes.Buffer
+	bridge := &Bridge{Endpoint: server.URL, Token: "secret-token", Log: &log}
+	input := `{"jsonrpc":"2.0","id":"a","method":"tools/call"}` + "\n"
+	if err := bridge.Run(context.Background(), strings.NewReader(input), &stdout); err != nil {
+		t.Fatal(err)
+	}
+	if leaked || !strings.Contains(stdout.String(), "redirected") {
+		t.Fatalf("leaked = %v, stdout = %q", leaked, stdout.String())
+	}
+}

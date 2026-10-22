@@ -16,7 +16,7 @@ uShelf has three kinds of clients and a credential for each.
 - `ushelf deploy` generates a 256-bit random token per context. Self-hosted servers set `USHELF_API_TOKEN` themselves; the server rejects tokens shorter than 32 characters.
 - The MCP endpoint (`/mcp`) and administrative routes (server info, agent skills, Kindle credentials, connectors) never accept a browser session. Administrative routes accept only the API token; `/mcp` also accepts connector access tokens.
 - Token requests skip the browser session and same-origin checks, because a bearer header is not sent automatically by browsers. A present but invalid token is always rejected.
-- The CLI sends the token only over HTTPS, except to loopback addresses.
+- The CLI sends the token only over HTTPS, except to loopback addresses, and never follows a redirect with it. A redirect, such as a proxy sending `example.com` to `www.example.com`, means the context URL should point at the final address.
 
 ## App password
 
