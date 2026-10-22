@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Base images are pinned by digest in the Dockerfile; this keeps the digests patched.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
+  # Actions are pinned to commit SHAs; this keeps the pins on current releases.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
