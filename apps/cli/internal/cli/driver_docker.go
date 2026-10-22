@@ -24,7 +24,8 @@ const (
 	dataVolume         = "ushelf-data"
 	proxyDataVolume    = "ushelf-caddy-data"
 	networkName        = "ushelf"
-	proxyImage         = "caddy:2.10.2"
+	// Pinned by multi-arch digest; Dependabot cannot see this reference, so bump it by hand.
+	proxyImage = "caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb"
 	// imageUser is the node user baked into the runtime image; remote volumes are seeded with its ownership.
 	imageUser = "1000:1000"
 )
