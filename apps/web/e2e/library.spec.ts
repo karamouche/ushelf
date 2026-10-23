@@ -111,7 +111,7 @@ test("document reader opens the retained PDF and shows only its source", async (
     "href",
     "/api/items/pdf-document/original",
   );
-  await expect(page.getByRole("heading", { name: "Source" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Source" })).toHaveCount(0);
   await expect(page.getByText("Report text.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Insights" })).toHaveCount(0);
   await expect(page.getByText("A saved report.")).toHaveCount(0);

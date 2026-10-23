@@ -177,7 +177,7 @@ describe("agent-driven workflow", () => {
       status: "read",
       ingestionState: "ready",
     });
-    expect(await readFile(read.filePath, "utf8")).toContain("## Source");
+    expect(await readFile(read.filePath, "utf8")).not.toContain("## Source");
     expect(read.filePath.startsWith(config.itemsDir)).toBe(true);
   });
 
@@ -225,8 +225,8 @@ describe("agent-driven workflow", () => {
         "  recipe: default\n  keyPoints:\n    - Old point\n  citations:\n    - url: https://x.com/a/status/1\n      label: Original\n",
       )
       .replace(
-        "## Source",
-        "## Insights\n\n<!-- ushelf:insights:start -->\n### Key points\n\n- Old point\n<!-- ushelf:insights:end -->\n\n## Source",
+        "<!-- ushelf:source:start -->",
+        "## Insights\n\n<!-- ushelf:insights:start -->\n### Key points\n\n- Old point\n<!-- ushelf:insights:end -->\n\n## Source\n\n<!-- ushelf:source:start -->",
       );
     expect(old.match(/Old point/g)).toHaveLength(2);
     await writeFile(sourced.filePath, old);
@@ -239,6 +239,7 @@ describe("agent-driven workflow", () => {
     const rewritten = await readFile(read.filePath, "utf8");
     expect(rewritten).not.toContain("Old point");
     expect(rewritten).not.toContain("## Insights");
+    expect(rewritten).not.toContain("## Source");
     expect(service.listItems()).toHaveLength(1);
   });
 

@@ -103,8 +103,7 @@ export function Reader() {
             </span>
           </aside>
         ) : null}
-        <section className="document source">
-          <h2>Source</h2>
+        <section className="document">
           {item.sourceMarkdown ? (
             <Markdown value={item.sourceMarkdown} itemId={item.id} />
           ) : (

@@ -48,8 +48,6 @@ export function renderItemMarkdown(frontmatter: ItemFrontmatter, sourceMarkdown:
     "",
     sourceLine(frontmatter),
     "",
-    "## Source",
-    "",
     SOURCE_START,
     neutralizeMarkers(sourceMarkdown.trim()) || "_Source content has not been supplied yet._",
     SOURCE_END,
