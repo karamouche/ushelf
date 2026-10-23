@@ -46,7 +46,7 @@ Package-specific agent guidance lives beside each project:
 
 ## Setup and common commands
 
-Development requirements: Node.js 24 or newer, pnpm 11, and Go 1.26 or newer.
+Development requirements: Node.js 24.22.1 or newer (or 26.12.1+), pnpm 11, and Go 1.26.10 or newer (or 1.27.3+).
 
 ```sh
 pnpm install

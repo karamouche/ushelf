@@ -65,7 +65,7 @@ The site's source is in [`apps/docs`](apps/docs); preview it locally with `pnpm 
 
 ## Development
 
-Contributors need Node.js 24+, pnpm 11, Go 1.26+, and Docker:
+Contributors need Node.js 24.22.1+ (or 26.12.1+), pnpm 11, Go 1.26.10+ (or 1.27.3+), and Docker:
 
 ```sh
 pnpm install

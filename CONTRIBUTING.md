@@ -4,7 +4,7 @@ Thank you for contributing to uShelf. Please open an issue before undertaking a 
 
 ## Development setup
 
-Contributors need Node.js 24+, pnpm 11, Go 1.26+, and Docker.
+Contributors need Node.js 24.22.1+ (or 26.12.1+), pnpm 11, Go 1.26.10+ (or 1.27.3+), and Docker.
 
 ```sh
 git clone https://github.com/karamouche/ushelf.git
