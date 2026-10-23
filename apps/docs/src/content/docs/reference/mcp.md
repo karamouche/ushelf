@@ -14,21 +14,21 @@ The server exposes these tools and resources at `/mcp`, to the API token and to 
 | `get_ingestion`         | Inspect an item's current ingestion stage                                          |
 | `submit_source_content` | Supply X source Markdown (at most 5 MiB) when public extraction is blocked         |
 | `get_ingestion_context` | Return the source, recipe instructions, recipe hash, revision, and output contract |
-| `save_insights`         | Validate and atomically save source-grounded insights (body at most 5 MiB)         |
+| `save_insights`         | Validate and atomically save the item's description and tags                       |
 
 ## Library
 
-| Tool                   | Purpose                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `list_items`           | List items with optional status, source-type, and tag filters                              |
-| `search_items`         | Full-text search across source text, insights, titles, and tags                            |
-| `get_item`             | Read one complete item                                                                     |
-| `update_reading_state` | Set reading status and progress, with optional revision check                              |
-| `list_stale_items`     | Find items enriched with an older recipe version                                           |
-| `refresh_source`       | Re-fetch a URL source; changed content archives insights and returns to pending enrichment |
-| `request_reenrichment` | Archive current insights and mark the item pending, keeping its source                     |
-| `request_delete`       | Issue a short-lived confirmation token; deletes nothing                                    |
-| `confirm_delete`       | Permanently delete an item with its confirmation token                                     |
+| Tool                   | Purpose                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `list_items`           | List items with optional status, source-type, and tag filters                                     |
+| `search_items`         | Full-text search across source text, descriptions, titles, and tags                               |
+| `get_item`             | Read one complete item                                                                            |
+| `update_reading_state` | Set reading status and progress, with optional revision check                                     |
+| `list_stale_items`     | Find items enriched with an older recipe version                                                  |
+| `refresh_source`       | Re-fetch a URL source; changed content archives the description and returns to pending enrichment |
+| `request_reenrichment` | Archive the current description and mark the item pending, keeping its source                     |
+| `request_delete`       | Issue a short-lived confirmation token; deletes nothing                                           |
+| `confirm_delete`       | Permanently delete an item with its confirmation token                                            |
 
 ## Kindle
 

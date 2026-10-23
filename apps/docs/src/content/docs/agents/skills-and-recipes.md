@@ -1,9 +1,9 @@
 ---
 title: Skills and recipes
-description: How skills guide your agent and recipes shape the briefs it writes.
+description: How skills guide your agent and recipes shape the descriptions it writes.
 ---
 
-uShelf gives your agent two kinds of instructions: **skills** describe how to drive the MCP tools, and **recipes** describe what a saved brief should contain.
+uShelf gives your agent two kinds of instructions: **skills** describe how to drive the MCP tools, and **recipes** describe what a saved description and its tags should contain.
 
 ## Skills
 
@@ -26,14 +26,11 @@ The library skill archives rather than deletes by default, and permanently delet
 
 ## Recipes
 
-A recipe is a Markdown file in the server's `recipes/` directory. Its instructions are returned by `get_ingestion_context`, and its hash is recorded with every enrichment. The bundled `default` recipe produces a compact, source-grounded reading brief:
+A recipe is a Markdown file in the server's `recipes/` directory. Its instructions are returned by `get_ingestion_context`, and its hash is recorded with every enrichment. The bundled `default` recipe asks for two things, both grounded in the captured source:
 
-1. **Why it matters**: the practical significance in one short paragraph.
-2. **Notable references**: people, projects, papers, or links worth following.
-3. **Open questions**: unresolved claims or ideas to test.
-
-Every non-obvious claim must cite a source URL, or a page number for PDF documents.
+1. **Description**: one to three sentences on what the piece is and why it is worth reading, shown on the library card.
+2. **Tags**: up to 12 short, lowercase topical tags.
 
 When a recipe changes, its hash changes too, and `list_stale_items` finds items enriched with the older version. Ask your agent to re-enrich them explicitly; uShelf never spends tokens on its own.
 
-For a local deployment, recipes live in `~/.ushelf/recipes/`. Remote deployments keep them in their data volume.
+For a local deployment, recipes live in `~/.ushelf/recipes/`. Remote deployments keep them in their data volume. The default recipe is copied there only when it is missing, so an existing deployment keeps its current copy until you delete or replace it.

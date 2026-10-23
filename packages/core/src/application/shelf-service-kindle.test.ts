@@ -80,7 +80,6 @@ async function fixture(
     },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
   };
   const frontmatter: ItemFrontmatter =
@@ -104,11 +103,7 @@ async function fixture(
           canonicalUrl:
             sourceType === "x" ? "https://x.com/a/status/1" : "https://example.com/article",
         };
-  const item = await repository.save(
-    frontmatter,
-    "## Private insight\n\nDo not export.",
-    sourceMarkdown,
-  );
+  const item = await repository.save(frontmatter, sourceMarkdown);
   const gateway = new FakeKindleGateway();
   const service = new ShelfService(config, { kindleGateway: gateway });
   await service.initialize();
@@ -134,7 +129,7 @@ describe("ShelfService Kindle delivery", () => {
       const archive = unzipSync(gateway.sent!.bytes);
       const article = Buffer.from(archive["EPUB/article.xhtml"]!).toString();
       expect(article).toContain(sourceType === "document" ? "Document source" : "Captured source");
-      expect(article).not.toContain("Private insight");
+      expect(article).not.toContain("Do not export this insight");
       expect((await service.getItem(item.id)).revision).toBe(item.revision);
     });
   }

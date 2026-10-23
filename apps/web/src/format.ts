@@ -33,7 +33,7 @@ export function stateLabel(value: string) {
       {
         ready: "Ready",
         awaiting_source: "Needs source",
-        awaiting_enrichment: "Needs insights",
+        awaiting_enrichment: "Needs description",
         failed: "Failed",
         extracting: "Extracting",
       } as Record<string, string>

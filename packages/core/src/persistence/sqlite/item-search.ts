@@ -7,6 +7,6 @@ export const itemSearch = sqliteTable("item_search", {
   id: text("id"),
   title: text("title"),
   source: text("source"),
-  insights: text("insights"),
+  summary: text("summary"),
   tags: text("tags"),
 });

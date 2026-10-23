@@ -59,7 +59,6 @@ export class MarkdownRepository {
 
   async save(
     frontmatter: ItemFrontmatter,
-    insightMarkdown: string,
     sourceMarkdown: string,
     existingPath?: string,
   ): Promise<ShelfItem> {
@@ -72,7 +71,7 @@ export class MarkdownRepository {
         `${slugify(frontmatter.title)}--${frontmatter.id.slice(0, 8)}.md`,
       );
     await mkdir(path.dirname(filePath), { recursive: true });
-    const raw = renderItemMarkdown(frontmatter, insightMarkdown, sourceMarkdown);
+    const raw = renderItemMarkdown(frontmatter, sourceMarkdown);
     // Parse before writing so an invalid item never reaches the canonical library.
     const item = parseItemMarkdown(raw, filePath);
     await atomicWrite(filePath, raw);

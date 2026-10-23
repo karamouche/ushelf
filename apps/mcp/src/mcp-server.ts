@@ -1,10 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  citationSchema,
-  readingStatusSchema,
-  sourceTypeSchema,
-  type ShelfService,
-} from "@ushelf/core";
+import { readingStatusSchema, sourceTypeSchema, type ShelfService } from "@ushelf/core";
 import { z } from "zod";
 import { registerKindleTools } from "./kindle-tools.js";
 
@@ -94,17 +89,14 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
   server.registerTool(
     "save_insights",
     {
-      title: "Save insights",
-      description: "Validate and atomically save source-grounded agent insights.",
+      title: "Save description",
+      description: "Validate and atomically save the agent-written description and tags.",
       inputSchema: {
         itemId: z.uuid(),
         recipeHash: z.string().length(64),
         revision: z.string().length(64),
         summary: z.string().min(1).max(1200),
-        keyPoints: z.array(z.string().min(1)).min(1).max(12),
         tags: z.array(z.string()).max(12),
-        citations: z.array(citationSchema),
-        bodyMarkdown: z.string().max(MAX_AGENT_MARKDOWN_LENGTH),
       },
     },
     async (input) => json(await service.saveInsights(input)),
@@ -130,7 +122,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     "search_items",
     {
       title: "Search library",
-      description: "Full-text search across source text, insights, titles, and tags.",
+      description: "Full-text search across source text, descriptions, titles, and tags.",
       inputSchema: {
         query: z.string().min(1),
         status: readingStatusSchema.optional(),
@@ -182,7 +174,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     {
       title: "Refresh source",
       description:
-        "Re-fetch a source; changed content archives insights and returns to enrichment pending.",
+        "Re-fetch a source; changed content archives the description and returns to enrichment pending.",
       inputSchema: { itemId: z.uuid(), revision: z.string().optional() },
     },
     async ({ itemId, revision }) => json(await service.refreshSource(itemId, revision)),
@@ -193,7 +185,7 @@ export function createMcpServer(service: ShelfService, version: string): McpServ
     {
       title: "Request re-enrichment",
       description:
-        "Archive current insights and mark an item pending without changing source content.",
+        "Archive the current description and mark an item pending without changing source content.",
       inputSchema: { itemId: z.uuid() },
     },
     async ({ itemId }) => json(await service.markForReenrichment(itemId)),

@@ -90,10 +90,6 @@
 .notice span {
   color: var(--color-subtle);
 }
-.source {
-  margin-top: 44px;
-  border-top: 5px solid var(--color-ink);
-}
 .provenance {
   margin-top: 70px;
   border-top: 1px solid #bbb;

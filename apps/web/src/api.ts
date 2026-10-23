@@ -2,7 +2,6 @@ import { resolveRuntimeBasePath } from "./runtime-base-path.js";
 
 export type ReadingStatus = "inbox" | "reading" | "read" | "archived";
 export type SourceType = "article" | "document" | "x";
-export type Citation = { url: string; label: string } | { page: number; label: string };
 export type IngestionState =
   "extracting" | "awaiting_source" | "awaiting_enrichment" | "ready" | "failed";
 
@@ -45,16 +44,12 @@ export interface ShelfItem {
     recipe: string;
     recipeHash?: string;
     summary?: string;
-    keyPoints?: string[];
-    citations?: Citation[];
     error?: string;
   };
   media: {
     source: MediaCaptureStats;
-    insights: MediaCaptureStats;
   };
   sourceMarkdown: string;
-  insightMarkdown: string;
   revision: string;
 }
 

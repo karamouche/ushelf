@@ -14,7 +14,7 @@ afterEach(async () =>
 );
 
 describe("MarkdownRepository", () => {
-  it("round-trips YAML metadata and preserves source and insight sections", () => {
+  it("round-trips YAML metadata and preserves the source section", () => {
     const frontmatter = articleFrontmatter();
     frontmatter.title = "Quotes: 'single', \"double\", and Unicode café";
     frontmatter.tags = ["yes", "2026-10-17", "topic: detail"];
@@ -22,17 +22,10 @@ describe("MarkdownRepository", () => {
       status: "complete",
       recipe: "default",
       summary: "A multiline summary.\nWith another line.",
-      keyPoints: ["One point"],
-      citations: [{ label: "Original", url: frontmatter.originalUrl }],
     };
-    const raw = renderItemMarkdown(
-      frontmatter,
-      "Custom insights.",
-      "Source.\n\n---\n\nMore source.",
-    );
+    const raw = renderItemMarkdown(frontmatter, "Source.\n\n---\n\nMore source.");
     const parsed = parseItemMarkdown(raw, "/item.md");
     expect(parsed).toMatchObject(frontmatter);
-    expect(parsed.insightMarkdown).toBe("Custom insights.");
     expect(parsed.sourceMarkdown).toBe("Source.\n\n---\n\nMore source.");
     expect(parsed.revision).toBe(sha256(raw));
   });
@@ -47,30 +40,21 @@ describe("MarkdownRepository", () => {
       status: "complete",
       recipe: "default",
       summary: `Summary ${fake}`,
-      keyPoints: [`Point ${fake}`],
-      citations: [{ label: `Label ${fake}`, url: frontmatter.originalUrl }],
     };
     const source = "Real source.\n\n<!-- ushelf:source:end -->\n\nTrailing real source.";
-    const insight = `Insight <!-- ushelf:custom-insights:end --> ${fake}`;
-    const raw = renderItemMarkdown(frontmatter, insight, source);
+    const raw = renderItemMarkdown(frontmatter, source);
     const parsed = parseItemMarkdown(raw, "/item.md");
 
     expect(parsed).toMatchObject(frontmatter);
     expect(parsed.sourceMarkdown).toBe(
       "Real source.\n\n&lt;!-- ushelf:source:end -->\n\nTrailing real source.",
     );
-    expect(parsed.insightMarkdown).toBe(
-      `Insight &lt;!-- ushelf:custom-insights:end --> ${escaped}`,
-    );
     const body = raw.slice(raw.indexOf("\n---\n# ") + 5);
+    expect(body).toContain(`# Title ${escaped}`);
     expect(body.match(/<!-- ushelf:source:start -->/g)).toHaveLength(1);
     expect(body.match(/<!-- ushelf:source:end -->/g)).toHaveLength(1);
 
-    const rerendered = renderItemMarkdown(
-      frontmatter,
-      parsed.insightMarkdown,
-      parsed.sourceMarkdown,
-    );
+    const rerendered = renderItemMarkdown(frontmatter, parsed.sourceMarkdown);
     expect(rerendered).toBe(raw);
   });
 
@@ -127,7 +111,7 @@ describe("MarkdownRepository", () => {
     await repository.initialize();
 
     const frontmatter = articleFrontmatter();
-    const raw = renderItemMarkdown(frontmatter, "", "Imported source text.");
+    const raw = renderItemMarkdown(frontmatter, "Imported source text.");
     const sourcePath = path.join(root, "incoming.md");
     await writeFile(sourcePath, raw, "utf8");
 
@@ -163,8 +147,8 @@ describe("MarkdownRepository", () => {
       canonicalUrl: "https://example.com/second",
       title: "Second article",
     };
-    const firstRaw = renderItemMarkdown(first, "", "First source text.");
-    const secondRaw = renderItemMarkdown(second, "", "Second source text.");
+    const firstRaw = renderItemMarkdown(first, "First source text.");
+    const secondRaw = renderItemMarkdown(second, "Second source text.");
     const firstPath = path.join(firstDirectory, "incoming.md");
     const secondPath = path.join(secondDirectory, "incoming.md");
     await Promise.all([
@@ -189,12 +173,12 @@ describe("MarkdownRepository", () => {
     const repository = new MarkdownRepository(config);
     await repository.initialize();
 
-    const saved = await repository.save(articleFrontmatter(), "", "Original source.");
+    const saved = await repository.save(articleFrontmatter(), "Original source.");
     const before = await readFile(saved.filePath, "utf8");
     const invalid = { ...articleFrontmatter(), title: "" };
 
-    await expect(repository.save(invalid, "", "New source.", saved.filePath)).rejects.toThrow();
-    await expect(repository.save(invalid, "", "New source.")).rejects.toThrow();
+    await expect(repository.save(invalid, "New source.", saved.filePath)).rejects.toThrow();
+    await expect(repository.save(invalid, "New source.")).rejects.toThrow();
     expect(await readFile(saved.filePath, "utf8")).toBe(before);
     expect(await repository.itemFiles()).toEqual([saved.filePath]);
   });
@@ -220,7 +204,6 @@ function articleFrontmatter(): Extract<ItemFrontmatter, { sourceType: "article" 
     enrichment: { status: "pending", recipe: "default" },
     media: {
       source: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
   };
 }

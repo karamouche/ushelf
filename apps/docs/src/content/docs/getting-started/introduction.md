@@ -21,7 +21,7 @@ uShelf includes no model SDK, AI API key, embeddings store, or autonomous LLM pr
 
 1. Ask your connected agent to save something from the web or attach a PDF.
 2. uShelf captures and normalizes the source with deterministic code.
-3. The agent follows a versioned recipe to add cited summaries, insights, and tags.
+3. The agent follows a versioned recipe to add a short description and tags.
 4. You search and read everything in the web app, while the canonical record stays in Markdown.
 
 ## What is supported

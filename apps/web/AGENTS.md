@@ -9,7 +9,7 @@ This guide applies to `apps/web`. Read the repository `AGENTS.md`, root `README.
 ## Source responsibilities
 
 - `src/App.tsx`: the route table.
-- `src/pages/`: the `Library` view (search, filters, item cards) and the `Reader` view (article, insights, reading-state UX).
+- `src/pages/`: the `Library` view (search, filters, item cards) and the `Reader` view (article, reading-state UX).
 - `src/components/`: shared pieces such as the brand, sign-out button, empty state, sanitized `Markdown`, the lazy `MermaidDiagram`, and the Send to Kindle dialog.
 - `src/format.ts`: reading statuses and display labels shared by both views.
 - `src/use-reading-progress.ts`: live reader progress, restoration suppression, debounced and maximum-interval persistence, serialized revision-aware writes, and exit flushing.

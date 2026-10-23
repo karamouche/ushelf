@@ -10,16 +10,6 @@ export const ingestionStateSchema = z.enum([
   "failed",
 ]);
 
-export const urlCitationSchema = z.object({
-  url: z.url(),
-  label: z.string().min(1).max(240),
-});
-export const pageCitationSchema = z.object({
-  page: z.number().int().positive(),
-  label: z.string().min(1).max(240),
-});
-export const citationSchema = z.union([urlCitationSchema, pageCitationSchema]);
-
 export const sourceFileSchema = z.object({
   name: z
     .string()
@@ -56,8 +46,6 @@ const enrichmentSchema = z.object({
   recipeHash: z.string().optional(),
   completedAt: z.iso.datetime().optional(),
   summary: z.string().optional(),
-  keyPoints: z.array(z.string()).optional(),
-  citations: z.array(citationSchema).optional(),
   error: z.string().optional(),
 });
 
@@ -75,7 +63,6 @@ export const mediaCaptureStatsSchema = z
 
 export const mediaCaptureSchema = z.object({
   source: mediaCaptureStatsSchema,
-  insights: mediaCaptureStatsSchema,
 });
 
 const commonFields = {
@@ -112,14 +99,12 @@ export type SourceType = z.infer<typeof sourceTypeSchema>;
 export type SourceFile = z.infer<typeof sourceFileSchema>;
 export type ReadingStatus = z.infer<typeof readingStatusSchema>;
 export type IngestionState = z.infer<typeof ingestionStateSchema>;
-export type Citation = z.infer<typeof citationSchema>;
 export type MediaCaptureStats = z.infer<typeof mediaCaptureStatsSchema>;
 export type MediaCapture = z.infer<typeof mediaCaptureSchema>;
 
 export type ShelfItem = ItemFrontmatter & {
   filePath: string;
   sourceMarkdown: string;
-  insightMarkdown: string;
   revision: string;
 };
 

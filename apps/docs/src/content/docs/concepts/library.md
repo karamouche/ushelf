@@ -23,7 +23,7 @@ The server creates the directories it needs and seeds the bundled default recipe
 ## Integrity guarantees
 
 - **Canonical URLs** deduplicate web ingestion, and **original-file hashes** deduplicate PDF ingestion.
-- **Content hashes** detect source changes. A changed enriched source is archived before its insights are cleared.
+- **Content hashes** detect source changes. A changed enriched source is archived before its description is cleared.
 - **Recipe hashes** identify enrichment produced by an older recipe version.
 - **Revisions** protect concurrent updates: writes based on a stale revision are rejected.
 - Markdown is written atomically, so a crash never leaves a half-written item.

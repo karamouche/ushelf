@@ -6,7 +6,6 @@ import { resolveConfig } from "../configuration/ushelf-config.js";
 import { readAgentSkills, type AgentSkill } from "../agent/agent-skills.js";
 import { ingestionState } from "../domain/ingestion-state.js";
 import type {
-  Citation,
   IngestionState,
   ItemFrontmatter,
   LibraryListQuery,
@@ -170,11 +169,11 @@ export class ShelfService {
       tags: [],
       extraction,
       enrichment: { status: "pending", recipe: recipeName },
-      media: { source: sourceMedia, insights: emptyMediaStats() },
+      media: { source: sourceMedia },
     };
     const item = await this.storeNewItem(id, async () => {
       await this.repository.saveMediaAssets(id, mediaAssets);
-      return this.repository.save(frontmatter, "", sourceMarkdown);
+      return this.repository.save(frontmatter, sourceMarkdown);
     });
     return { item, duplicate: false, state: ingestionState(item) };
   }
@@ -229,12 +228,12 @@ export class ShelfService {
         contentHash: sha256(source.markdown),
       },
       enrichment: { status: "pending", recipe: recipeName },
-      media: { source: source.media, insights: emptyMediaStats() },
+      media: { source: source.media },
     };
     const item = await this.storeNewItem(id, async () => {
       await this.repository.saveOriginalFile(id, bytes);
       await this.repository.saveMediaAssets(id, source.assets);
-      return this.repository.save(frontmatter, "", source.markdown);
+      return this.repository.save(frontmatter, source.markdown);
     });
     return { item, duplicate: false, state: ingestionState(item) };
   }
@@ -290,18 +289,10 @@ export class ShelfService {
       ...(sourceChanged
         ? { enrichment: { status: "pending" as const, recipe: latest.enrichment.recipe } }
         : {}),
-      media: {
-        source: localized.stats,
-        insights: sourceChanged ? emptyMediaStats() : latest.media.insights,
-      },
+      media: { source: localized.stats },
     };
     await this.repository.saveMediaAssets(item.id, localized.assets);
-    const saved = await this.repository.save(
-      frontmatter,
-      sourceChanged ? "" : latest.insightMarkdown,
-      localized.markdown,
-      latest.filePath,
-    );
+    const saved = await this.repository.save(frontmatter, localized.markdown, latest.filePath);
     this.database.upsert(saved);
     return saved;
   }
@@ -319,14 +310,8 @@ export class ShelfService {
       item,
       recipe,
       outputContract: {
-        summary: "string (1-1200 characters)",
-        keyPoints: "string[] (1-12)",
+        summary: "short description, 1-3 sentences (1-1200 characters)",
         tags: "lowercase string[] (0-12)",
-        citations:
-          item.sourceType === "document"
-            ? "{page,label}[] using page numbers present in the document"
-            : "{url,label}[] using URLs present in the source or the original URL",
-        bodyMarkdown: "recipe-specific Markdown",
       },
     };
   }
@@ -336,20 +321,13 @@ export class ShelfService {
     recipeHash: string;
     revision: string;
     summary: string;
-    keyPoints: string[];
     tags: string[];
-    citations: Citation[];
-    bodyMarkdown: string;
   }): Promise<ShelfItem> {
     const item = await this.getItem(input.itemId);
     assertRevision(item, input.revision);
     const recipe = await this.repository.recipe(item.enrichment.recipe);
     if (recipe.hash !== input.recipeHash)
       throw new Error("The recipe changed; fetch a new ingestion context before saving");
-    validateCitations(item, input.citations);
-    const localized = await localizeMarkdownImages(input.bodyMarkdown, item.id, (filename) =>
-      this.mediaExists(item.id, filename),
-    );
     const latest = await this.getItem(input.itemId);
     assertRevision(latest, input.revision);
     if ((await this.repository.recipe(latest.enrichment.recipe)).hash !== input.recipeHash)
@@ -369,21 +347,9 @@ export class ShelfService {
         recipeHash: recipe.hash,
         completedAt: now,
         summary: input.summary.trim(),
-        keyPoints: input.keyPoints
-          .map((point) => point.trim())
-          .filter(Boolean)
-          .slice(0, 12),
-        citations: input.citations,
       },
-      media: { ...item.media, insights: localized.stats },
     };
-    await this.repository.saveMediaAssets(item.id, localized.assets);
-    const saved = await this.repository.save(
-      frontmatter,
-      localized.markdown,
-      item.sourceMarkdown,
-      item.filePath,
-    );
+    const saved = await this.repository.save(frontmatter, item.sourceMarkdown, item.filePath);
     this.database.upsert(saved);
     return saved;
   }
@@ -599,7 +565,6 @@ export class ShelfService {
         updatedAt: now,
         reading: { status, progress: status === "read" ? 1 : normalizedProgress, lastReadAt: now },
       },
-      item.insightMarkdown,
       item.sourceMarkdown,
       item.filePath,
     );
@@ -615,9 +580,7 @@ export class ShelfService {
         ...frontmatterOf(item),
         updatedAt: new Date().toISOString(),
         enrichment: { status: "pending", recipe: item.enrichment.recipe },
-        media: { ...item.media, insights: emptyMediaStats() },
       },
-      "",
       item.sourceMarkdown,
       item.filePath,
     );
@@ -650,12 +613,8 @@ export class ShelfService {
         ...(changed
           ? { enrichment: { status: "pending" as const, recipe: latest.enrichment.recipe } }
           : {}),
-        media: {
-          source: localized.stats,
-          insights: changed ? emptyMediaStats() : latest.media.insights,
-        },
+        media: { source: localized.stats },
       },
-      changed ? "" : latest.insightMarkdown,
       localized.markdown,
       latest.filePath,
     );
@@ -708,10 +667,7 @@ export class ShelfService {
           : "An item with this canonical URL already exists",
       );
     }
-    const filenames = [
-      ...assertLocalMarkdownImages(imported.sourceMarkdown, imported.id),
-      ...assertLocalMarkdownImages(imported.insightMarkdown, imported.id),
-    ];
+    const filenames = assertLocalMarkdownImages(imported.sourceMarkdown, imported.id);
     const assets = await Promise.all(
       [...new Set(filenames)].map(async (filename) => {
         const sourceAsset = path.resolve(
@@ -743,7 +699,6 @@ function frontmatterOf(item: ShelfItem): ItemFrontmatter {
   const {
     filePath: _filePath,
     sourceMarkdown: _source,
-    insightMarkdown: _insights,
     revision: _revision,
     ...frontmatter
   } = item;
@@ -753,24 +708,4 @@ function frontmatterOf(item: ShelfItem): ItemFrontmatter {
 function assertRevision(item: ShelfItem, revision?: string): void {
   if (revision && revision !== item.revision)
     throw new Error("Item changed since it was read; fetch it again before writing");
-}
-
-function validateCitations(item: ShelfItem, citations: Citation[]): void {
-  if (item.sourceType === "document") {
-    for (const citation of citations) {
-      if (!("page" in citation)) throw new Error("Document citations must use page numbers");
-      if (citation.page > item.file.pageCount) {
-        throw new Error(`Citation page is outside the document: ${citation.page}`);
-      }
-    }
-    return;
-  }
-  const available = new Set<string>([item.originalUrl, item.canonicalUrl]);
-  for (const match of item.sourceMarkdown.matchAll(/https?:\/\/[^\s)\]>]+/g))
-    available.add(match[0].replace(/[.,;:]$/, ""));
-  for (const citation of citations) {
-    if (!("url" in citation)) throw new Error("URL sources must use URL citations");
-    if (!available.has(citation.url))
-      throw new Error(`Citation URL is not present in the source: ${citation.url}`);
-  }
 }

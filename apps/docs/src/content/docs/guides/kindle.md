@@ -3,7 +3,7 @@ title: Send to Kindle
 description: Deliver saved items to a Kindle device as EPUB.
 ---
 
-uShelf can send a saved item to a Kindle as a reflowable EPUB of the saved source and its local images, without generated insights and without an Amazon cloud-library copy.
+uShelf can send a saved item to a Kindle as a reflowable EPUB of the saved source and its local images, without the generated description and without an Amazon cloud-library copy.
 
 :::caution
 This integration is unofficial. It uses Amazon's undocumented Send to Kindle protocol through [`cyrgim/stk`](https://github.com/cyrgim/stk), which Amazon may change or disable without notice. Use it only with an account you own.

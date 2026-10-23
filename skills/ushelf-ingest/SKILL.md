@@ -1,6 +1,6 @@
 ---
 name: ushelf-ingest
-description: Save articles, X sources, and attached PDFs into uShelf and create recipe-driven, source-grounded insights through its MCP server. Use when a user asks to save, bookmark, ingest, capture, summarize, or add a URL, X post, thread, or PDF to their reading library.
+description: Save articles, X sources, and attached PDFs into uShelf and write a recipe-driven, source-grounded description and tags through its MCP server. Use when a user asks to save, bookmark, ingest, capture, summarize, or add a URL, X post, thread, or PDF to their reading library.
 ---
 
 # Ingest into uShelf
@@ -17,9 +17,9 @@ Use the uShelf MCP tools for every mutation. Never edit library Markdown directl
    - For `awaiting_source` on an X source, obtain the complete content through the agent's available browser/context, then call `submit_source_content`. For threads, format each post under a heading and include its permalink. Never represent agent-supplied text as independently verified.
    - For `failed`, report the extraction error. Do not manufacture source text.
 4. Call `get_ingestion_context`. Follow its recipe instructions using only the supplied source.
-5. Produce every required typed field. For articles and X sources, cite only URLs present in the source or the original URL. For PDF documents, cite page numbers from the supplied source context. State uncertainty rather than adding unsupported claims.
+5. Produce only the typed fields in the output contract: a short `summary` used as the item's description, and `tags`. Ground both in the supplied source and state uncertainty rather than adding unsupported claims.
 6. Call `save_insights` with the exact `recipeHash` and item `revision` returned by the context call.
 7. If saving reports a changed revision or recipe, fetch a fresh context and redo only the affected step. Do not overwrite concurrent updates.
 8. Report the saved title, state, tags, and item ID.
 
-Keep summaries compact. Put recipe-specific analysis in `bodyMarkdown`; do not repeat the summary or key points there.
+Keep the description compact: one to three sentences. Do not write key points, citations, or extra analysis; `save_insights` does not accept them.

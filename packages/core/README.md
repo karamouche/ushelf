@@ -10,10 +10,10 @@ The domain and storage layer shared by uShelf's HTTP and MCP adapters. It owns s
 - Previous enriched revisions are archived under `library/history/`; recipe Markdown under `recipes/` is hash-versioned.
 - `MarkdownRepository` validates and atomically writes item documents. `ShelfDatabase` indexes summaries and searchable text.
 - Source ingestion uses Readability for articles, layout-aware PDF.js extraction for attached PDF documents, and a limited public extraction path for X. PDF text becomes page-scoped Markdown with joined paragraphs and conservative heading, list, and simple-table recovery. X sources can fall back to agent-supplied Markdown through `ShelfService`.
-- Article, X, PDF, and insight images are validated, stored content-addressably beneath `library/files/<item-id>/media/`, and referenced through relative Markdown paths. PDF raster figures are placed according to page coordinates.
+- Article, X, and PDF images are validated, stored content-addressably beneath `library/files/<item-id>/media/`, and referenced through relative Markdown paths. PDF raster figures are placed according to page coordinates.
 - Common Mermaid HTML forms are normalized to fenced `mermaid` Markdown so diagram source remains portable and canonical.
 - URL fetching rejects non-HTTP protocols, credentials, private-network targets, oversized responses, and excessive redirects.
-- Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and that citation URLs occur in the captured source.
+- Item `revision` values provide optimistic concurrency. Enrichment also verifies the recipe hash and saves only the agent's description (`summary`) and tags.
 - Kindle delivery builds a source-only EPUB with validated local media, then delegates device discovery and upload to the bundled Go bridge. Credentials remain outside Markdown and SQLite.
 - `USHELF_ROOT` controls the complete data root and defaults to `~/.ushelf`.
 - State and secrets default to `<USHELF_ROOT>/state` and `<USHELF_ROOT>/secrets`. `USHELF_STATE_DIR` and `USHELF_SECRETS_DIR` optionally place either directory elsewhere.

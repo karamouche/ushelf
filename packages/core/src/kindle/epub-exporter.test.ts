@@ -23,10 +23,8 @@ function article(): ShelfItem {
     enrichment: { status: "complete", recipe: "default", summary: "SECRET INSIGHT" },
     media: {
       source: { discovered: 1, localized: 1, omitted: 0, filtered: 0 },
-      insights: { discovered: 0, localized: 0, omitted: 0, filtered: 0 },
     },
     sourceMarkdown: `# Source heading\n\nA table:\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n\`\`\`typescript\nconst config = {\n  enabled: true,\n};\n\`\`\`\n\n<script>alert("no")</script>\n\n![Pixel](../../files/${itemId}/media/${"b".repeat(64)}.png)`,
-    insightMarkdown: "SECRET INSIGHT BODY",
     revision,
     filePath: "/tmp/item.md",
   };

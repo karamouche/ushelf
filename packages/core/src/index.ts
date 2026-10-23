@@ -7,7 +7,6 @@ export type {
 export { resolveConfig } from "./configuration/ushelf-config.js";
 export type { UshelfConfig } from "./configuration/ushelf-config.js";
 export {
-  citationSchema,
   ingestionStateSchema,
   itemFrontmatterSchema,
   mediaCaptureSchema,
@@ -17,7 +16,6 @@ export {
   sourceTypeSchema,
 } from "./domain/library-item.js";
 export type {
-  Citation,
   IngestionState,
   ItemFrontmatter,
   ItemSummary,
