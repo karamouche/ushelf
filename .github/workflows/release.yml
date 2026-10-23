@@ -7,8 +7,10 @@ on:
         description: Semantic version to release (for example, 1.2.3)
         required: true
         type: string
-  pull_request:
-    types: [closed]
+  # Publish from the push that merges a release PR: the run's ref is then refs/heads/main, which the
+  # release environment requires. A pull_request trigger would run on refs/pull/<n>/merge instead.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -61,15 +63,13 @@ jobs:
             --title "chore: release ${tag}" \
             --body "Updates all uShelf project versions to ${version}. Merging this PR publishes ${tag}."
 
+  # Leaves every output empty unless this push merged a release PR, which skips the remaining jobs.
   context:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.action == 'closed' &&
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.event.pull_request.head.ref, 'release/v')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -77,10 +77,22 @@ jobs:
     steps:
       - id: release
         env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_SHA: ${{ github.sha }}
         run: |
-          tag="${HEAD_BRANCH#release/}"
+          head_branch="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${MERGE_SHA}/pulls" --jq '
+            [.[] | select(
+              .merged_at != null and
+              .merge_commit_sha == env.MERGE_SHA and
+              .base.ref == "main" and
+              .head.repo.full_name == env.GITHUB_REPOSITORY and
+              (.head.ref | startswith("release/v"))
+            )] | first | .head.ref // empty')"
+          if [ -z "$head_branch" ]; then
+            echo "Commit ${MERGE_SHA} does not merge a release pull request; nothing to publish."
+            exit 0
+          fi
+          tag="${head_branch#release/}"
           version="${tag#v}"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -89,6 +101,7 @@ jobs:
 
   verify:
     needs: context
+    if: needs.context.outputs.tag != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
