@@ -120,6 +120,34 @@ describe("PDF ingestion", () => {
     );
   });
 
+  it("recognizes subheadings set in a bolder face slightly larger than the body", async () => {
+    const result = await extractPdf(
+      makeTextPdf([
+        textAt("F2", 16, 60, 714, "1. Conducting the interview"),
+        textAt("F1", 11, 60, 690, "A short introduction set slightly larger than the body"),
+        textAt("F2", 11, 60, 660, "Start from the problem, not the components"),
+        textAt(
+          "F1",
+          10,
+          60,
+          640,
+          "Interviewers rarely give every requirement up front, so restate",
+        ),
+        textAt("F1", 10, 60, 628, "the goal and ask about volume, latency, and quality targets."),
+      ]),
+      "interview.pdf",
+      ITEM_ID,
+    );
+
+    expect(result.markdown).toContain("### 1. Conducting the interview");
+    expect(result.markdown).toContain(
+      "\n\nA short introduction set slightly larger than the body\n\n",
+    );
+    expect(result.markdown).toContain(
+      "#### Start from the problem, not the components\n\nInterviewers rarely",
+    );
+  });
+
   it("skips images above the pixel limit before PDF.js decodes them", async () => {
     // 8000 x 8000 grayscale is 64 Mpx (61 MiB decoded) but deflates to well under 100 KiB.
     const bytes = makePdfWithImageObjects([grayImage(8000)]);

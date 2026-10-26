@@ -311,6 +311,7 @@ interface TextLine {
 interface PageTextLayout {
   lines: TextLine[];
   bodyHeight: number;
+  bodyFont: string;
   visibleCharacters: number;
 }
 
@@ -364,9 +365,11 @@ function pageTextLayout(items: readonly unknown[]): PageTextLayout {
   }
 
   const lines = grouped.map(textLine).sort((left, right) => right.y - left.y || left.x - right.x);
+  const bodyHeight = dominantBodyHeight(runs);
   return {
     lines,
-    bodyHeight: dominantBodyHeight(runs),
+    bodyHeight,
+    bodyFont: dominantBodyFont(runs, bodyHeight),
     visibleCharacters: runs.reduce((count, run) => count + run.text.replace(/\s/g, "").length, 0),
   };
 }
@@ -435,6 +438,15 @@ function dominantBodyHeight(runs: TextRun[]): number {
   return [...buckets.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? 10;
 }
 
+function dominantBodyFont(runs: TextRun[], bodyHeight: number): string {
+  const fonts = new Map<string, number>();
+  for (const run of runs) {
+    if (Math.round(run.height * 2) / 2 !== bodyHeight) continue;
+    fonts.set(run.fontName, (fonts.get(run.fontName) ?? 0) + Math.max(1, run.text.length));
+  }
+  return [...fonts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+}
+
 interface TitleHeading extends DetectedHeading {
   start: number;
 }
@@ -442,7 +454,7 @@ interface TitleHeading extends DetectedHeading {
 function inferTitle(layout: PageTextLayout): TitleHeading | undefined {
   const candidates: TitleHeading[] = [];
   for (let index = 0; index < Math.min(6, layout.lines.length);) {
-    const heading = headingAt(layout.lines, index, layout.bodyHeight);
+    const heading = headingAt(layout.lines, index, layout);
     if (!heading) {
       index += 1;
       continue;
@@ -464,7 +476,7 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
   const headingHeights = [
     ...new Set(
       lines
-        .map((_, index) => headingAt(lines, index, layout.bodyHeight))
+        .map((_, index) => headingAt(lines, index, layout))
         .filter((heading): heading is DetectedHeading => heading !== undefined)
         .map((heading) => Math.round(heading.height * 2) / 2),
     ),
@@ -479,7 +491,7 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
     }
 
     const line = lines[index]!;
-    const heading = headingAt(lines, index, layout.bodyHeight);
+    const heading = headingAt(lines, index, layout);
     if (heading) {
       const tier = Math.max(0, headingHeights.indexOf(Math.round(heading.height * 2) / 2));
       blocks.push({ y: line.y, markdown: `${"#".repeat(Math.min(6, 3 + tier))} ${heading.text}` });
@@ -495,7 +507,7 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
         const nextBullet = bulletText(lines[next]!.text);
         if (
           !nextBullet ||
-          headingAt(lines, next, layout.bodyHeight) ||
+          headingAt(lines, next, layout) ||
           tableAt(lines, next, layout.bodyHeight)
         ) {
           break;
@@ -514,7 +526,7 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
     while (next < lines.length) {
       const candidate = lines[next]!;
       if (
-        headingAt(lines, next, layout.bodyHeight) ||
+        headingAt(lines, next, layout) ||
         bulletText(candidate.text) ||
         tableAt(lines, next, layout.bodyHeight) ||
         !continuesParagraph(previous, candidate, layout.bodyHeight)
@@ -531,12 +543,11 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
   return blocks;
 }
 
-function isHeadingLine(line: TextLine, bodyHeight: number): boolean {
-  return (
-    line.segments.length === 1 &&
-    line.height >= bodyHeight * 1.18 &&
-    line.text.length <= MAX_HEADING_CHARACTERS
-  );
+function isHeadingLine(line: TextLine, layout: PageTextLayout): boolean {
+  if (line.segments.length !== 1 || line.text.length > MAX_HEADING_CHARACTERS) return false;
+  if (line.height >= layout.bodyHeight * 1.18) return true;
+  // Subheadings are often set only slightly larger than the body, in a bolder face.
+  return line.height >= layout.bodyHeight * 1.08 && line.fontName !== layout.bodyFont;
 }
 
 interface DetectedHeading {
@@ -550,10 +561,10 @@ interface DetectedHeading {
 function headingAt(
   lines: TextLine[],
   start: number,
-  bodyHeight: number,
+  layout: PageTextLayout,
 ): DetectedHeading | undefined {
   const first = lines[start];
-  if (!first || !isHeadingLine(first, bodyHeight)) return undefined;
+  if (!first || !isHeadingLine(first, layout)) return undefined;
   const wrapped = [first];
   let end = start + 1;
   while (end < lines.length) {
@@ -561,14 +572,14 @@ function headingAt(
     const candidate = lines[end]!;
     if (
       Math.abs(previous.height - candidate.height) > 1 ||
-      !continuesParagraph(previous, candidate, bodyHeight)
+      !continuesParagraph(previous, candidate, layout.bodyHeight)
     ) {
       break;
     }
     if (
       wrapped.length === MAX_HEADING_LINES ||
       candidate.fontName !== first.fontName ||
-      !isHeadingLine(candidate, bodyHeight)
+      !isHeadingLine(candidate, layout)
     ) {
       return undefined;
     }
