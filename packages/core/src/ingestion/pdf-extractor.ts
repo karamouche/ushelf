@@ -14,6 +14,8 @@ export const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_PDF_PAGES = 500;
 const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024;
 const MIN_VISIBLE_CHARACTERS = 40;
+const MAX_HEADING_CHARACTERS = 160;
+const MAX_HEADING_LINES = 3;
 const MIN_IMAGE_PIXELS = 64;
 const MIN_RENDERED_POINTS = 32;
 const MAX_IMAGE_PIXELS = 25_000_000;
@@ -122,13 +124,15 @@ async function readPdf(
       page.getOperatorList(),
     ]);
     const layout = pageTextLayout(content.items);
-    const titleLine = pageNumber === 1 ? inferTitleLine(layout) : undefined;
-    if (!metadataTitle && titleLine) inferredTitle = titleLine.text;
+    const titleHeading = pageNumber === 1 ? inferTitle(layout) : undefined;
+    if (!metadataTitle && titleHeading) inferredTitle = titleHeading.text;
     const chosenTitle = metadataTitle ?? inferredTitle;
     const textBlocks = renderTextBlocks(
       layout,
-      titleLine && chosenTitle && normalizedText(titleLine.text) === normalizedText(chosenTitle)
-        ? titleLine
+      titleHeading &&
+        chosenTitle &&
+        normalizedText(titleHeading.text) === normalizedText(chosenTitle)
+        ? titleHeading
         : undefined,
     );
     const blocks: PositionedBlock[] = [...textBlocks];
@@ -307,6 +311,7 @@ interface TextLine {
 interface PageTextLayout {
   lines: TextLine[];
   bodyHeight: number;
+  bodyFont: string;
   visibleCharacters: number;
 }
 
@@ -360,9 +365,11 @@ function pageTextLayout(items: readonly unknown[]): PageTextLayout {
   }
 
   const lines = grouped.map(textLine).sort((left, right) => right.y - left.y || left.x - right.x);
+  const bodyHeight = dominantBodyHeight(runs);
   return {
     lines,
-    bodyHeight: dominantBodyHeight(runs),
+    bodyHeight,
+    bodyFont: dominantBodyFont(runs, bodyHeight),
     visibleCharacters: runs.reduce((count, run) => count + run.text.replace(/\s/g, "").length, 0),
   };
 }
@@ -431,28 +438,47 @@ function dominantBodyHeight(runs: TextRun[]): number {
   return [...buckets.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? 10;
 }
 
-function inferTitleLine(layout: PageTextLayout): TextLine | undefined {
-  const candidates = layout.lines
-    .slice(0, 6)
-    .filter(
-      (line) =>
-        line.segments.length === 1 &&
-        line.text.length <= 200 &&
-        line.height >= layout.bodyHeight * 1.2 &&
-        !endsLikeSentence(line.text) &&
-        !bulletText(line.text),
-    );
-  return candidates.sort((left, right) => right.height - left.height || right.y - left.y)[0];
+function dominantBodyFont(runs: TextRun[], bodyHeight: number): string {
+  const fonts = new Map<string, number>();
+  for (const run of runs) {
+    if (Math.round(run.height * 2) / 2 !== bodyHeight) continue;
+    fonts.set(run.fontName, (fonts.get(run.fontName) ?? 0) + Math.max(1, run.text.length));
+  }
+  return [...fonts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
 }
 
-function renderTextBlocks(layout: PageTextLayout, skippedLine?: TextLine): PositionedBlock[] {
-  const lines = layout.lines.filter((line) => line !== skippedLine);
+interface TitleHeading extends DetectedHeading {
+  start: number;
+}
+
+function inferTitle(layout: PageTextLayout): TitleHeading | undefined {
+  const candidates: TitleHeading[] = [];
+  for (let index = 0; index < Math.min(6, layout.lines.length);) {
+    const heading = headingAt(layout.lines, index, layout);
+    if (!heading) {
+      index += 1;
+      continue;
+    }
+    if (heading.height >= layout.bodyHeight * 1.2 && !listItem(heading.text)) {
+      candidates.push({ ...heading, start: index });
+    }
+    index = heading.end;
+  }
+  return candidates.sort(
+    (left, right) => right.height - left.height || left.start - right.start,
+  )[0];
+}
+
+function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): PositionedBlock[] {
+  const lines = layout.lines.filter(
+    (_, index) => !skipped || index < skipped.start || index >= skipped.end,
+  );
   const headingHeights = [
     ...new Set(
       lines
-        .map((line, index) => (isHeadingAt(lines, index, layout.bodyHeight) ? line : undefined))
-        .filter((line): line is TextLine => line !== undefined)
-        .map((line) => Math.round(line.height * 2) / 2),
+        .map((_, index) => headingAt(lines, index, layout))
+        .filter((heading): heading is DetectedHeading => heading !== undefined)
+        .map((heading) => Math.round(heading.height * 2) / 2),
     ),
   ].sort((left, right) => right - left);
   const blocks: PositionedBlock[] = [];
@@ -465,30 +491,31 @@ function renderTextBlocks(layout: PageTextLayout, skippedLine?: TextLine): Posit
     }
 
     const line = lines[index]!;
-    if (isHeadingAt(lines, index, layout.bodyHeight)) {
-      const tier = Math.max(0, headingHeights.indexOf(Math.round(line.height * 2) / 2));
-      blocks.push({ y: line.y, markdown: `${"#".repeat(Math.min(6, 3 + tier))} ${line.text}` });
-      index += 1;
+    const heading = headingAt(lines, index, layout);
+    if (heading) {
+      const tier = Math.max(0, headingHeights.indexOf(Math.round(heading.height * 2) / 2));
+      blocks.push({ y: line.y, markdown: `${"#".repeat(Math.min(6, 3 + tier))} ${heading.text}` });
+      index = heading.end;
       continue;
     }
 
-    const bullet = bulletText(line.text);
-    if (bullet) {
-      const listLines = [bullet];
+    const item = listItem(line.text);
+    if (item) {
+      const listLines = [item];
       let next = index + 1;
       while (next < lines.length) {
-        const nextBullet = bulletText(lines[next]!.text);
+        const nextItem = listItem(lines[next]!.text);
         if (
-          !nextBullet ||
-          isHeadingAt(lines, next, layout.bodyHeight) ||
+          !nextItem ||
+          headingAt(lines, next, layout) ||
           tableAt(lines, next, layout.bodyHeight)
         ) {
           break;
         }
-        listLines.push(nextBullet);
+        listLines.push(nextItem);
         next += 1;
       }
-      blocks.push({ y: line.y, markdown: listLines.map((value) => `- ${value}`).join("\n") });
+      blocks.push({ y: line.y, markdown: listLines.join("\n") });
       index = next;
       continue;
     }
@@ -499,8 +526,8 @@ function renderTextBlocks(layout: PageTextLayout, skippedLine?: TextLine): Posit
     while (next < lines.length) {
       const candidate = lines[next]!;
       if (
-        isHeadingAt(lines, next, layout.bodyHeight) ||
-        bulletText(candidate.text) ||
+        headingAt(lines, next, layout) ||
+        listItem(candidate.text) ||
         tableAt(lines, next, layout.bodyHeight) ||
         !continuesParagraph(previous, candidate, layout.bodyHeight)
       ) {
@@ -516,24 +543,52 @@ function renderTextBlocks(layout: PageTextLayout, skippedLine?: TextLine): Posit
   return blocks;
 }
 
-function isHeadingLine(line: TextLine, bodyHeight: number): boolean {
-  return (
-    line.segments.length === 1 &&
-    line.height >= bodyHeight * 1.18 &&
-    line.text.length <= 160 &&
-    !endsLikeSentence(line.text)
-  );
+function isHeadingLine(line: TextLine, layout: PageTextLayout): boolean {
+  if (line.segments.length !== 1 || line.text.length > MAX_HEADING_CHARACTERS) return false;
+  if (line.height >= layout.bodyHeight * 1.18) return true;
+  // Subheadings are often set only slightly larger than the body, in a bolder face.
+  return line.height >= layout.bodyHeight * 1.08 && line.fontName !== layout.bodyFont;
 }
 
-function isHeadingAt(lines: TextLine[], index: number, bodyHeight: number): boolean {
-  const line = lines[index];
-  if (!line || !isHeadingLine(line, bodyHeight)) return false;
-  const next = lines[index + 1];
-  return !(
-    next &&
-    Math.abs(line.height - next.height) <= 1 &&
-    continuesParagraph(line, next, bodyHeight)
-  );
+interface DetectedHeading {
+  text: string;
+  height: number;
+  end: number;
+}
+
+// A heading may wrap onto a few lines set in the same font and size; a longer run of
+// heading-sized lines, or one that ends like a sentence, is large body text instead.
+function headingAt(
+  lines: TextLine[],
+  start: number,
+  layout: PageTextLayout,
+): DetectedHeading | undefined {
+  const first = lines[start];
+  if (!first || !isHeadingLine(first, layout)) return undefined;
+  const wrapped = [first];
+  let end = start + 1;
+  while (end < lines.length) {
+    const previous = wrapped.at(-1)!;
+    const candidate = lines[end]!;
+    if (
+      Math.abs(previous.height - candidate.height) > 1 ||
+      !continuesParagraph(previous, candidate, layout.bodyHeight)
+    ) {
+      break;
+    }
+    if (
+      wrapped.length === MAX_HEADING_LINES ||
+      candidate.fontName !== first.fontName ||
+      !isHeadingLine(candidate, layout)
+    ) {
+      return undefined;
+    }
+    wrapped.push(candidate);
+    end += 1;
+  }
+  const text = joinWrappedLines(wrapped.map((line) => line.text));
+  if (text.length > MAX_HEADING_CHARACTERS || endsLikeSentence(text)) return undefined;
+  return { text, height: first.height, end };
 }
 
 function continuesParagraph(previous: TextLine, current: TextLine, bodyHeight: number): boolean {
@@ -555,9 +610,12 @@ function joinWrappedLines(lines: string[]): string {
   }, "");
 }
 
-function bulletText(value: string): string | undefined {
-  const match = value.match(/^\s*(?:[•●▪◦‣⁃*\-–—]|\d+[.)])\s+(.+)$/u);
-  return match?.[1]?.trim() || undefined;
+// Returns the line as a Markdown list item, keeping the number of an ordered item.
+function listItem(value: string): string | undefined {
+  const match = value.match(/^\s*(?:[•●▪◦‣⁃*\-–—]|(\d+)[.)])\s+(.+)$/u);
+  const text = match?.[2]?.trim();
+  if (!text) return undefined;
+  return match?.[1] ? `${match[1]}. ${text}` : `- ${text}`;
 }
 
 function endsLikeSentence(value: string): boolean {
