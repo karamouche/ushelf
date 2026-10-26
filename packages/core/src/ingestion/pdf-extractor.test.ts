@@ -78,6 +78,48 @@ describe("PDF ingestion", () => {
     expect(result.media).toEqual({ discovered: 1, localized: 1, omitted: 0, filtered: 0 });
   });
 
+  it("joins a numbered heading that wraps onto a second line", async () => {
+    const result = await extractPdf(
+      makeTextPdf([
+        textAt("F2", 18, 60, 714, "2. Choosing between prompting, retrieval, tools or"),
+        textAt("F2", 18, 60, 692, "fine-tuning"),
+        textAt("F1", 10, 60, 660, "Structured prompting is often enough to classify tickets and"),
+        textAt(
+          "F1",
+          10,
+          60,
+          648,
+          "extract fields, provided the facts it needs are in the request.",
+        ),
+      ]),
+      "wrapped.pdf",
+      ITEM_ID,
+    );
+
+    expect(result.markdown).toContain(
+      "### 2. Choosing between prompting, retrieval, tools or fine-tuning\n\nStructured prompting",
+    );
+    expect(result.markdown).not.toContain("- Choosing");
+  });
+
+  it("infers a document title that wraps onto a second line", async () => {
+    const result = await extractPdf(
+      makeTextPdf([
+        textAt("F2", 24, 60, 714, "A Practical Guide to Machine Learning"),
+        textAt("F2", 24, 60, 686, "System Design"),
+        textAt("F1", 10, 60, 650, "This guide explains how to turn an imprecise request into a"),
+        textAt("F1", 10, 60, 638, "reliable system and how to justify every design decision."),
+      ]),
+      "guide.pdf",
+      ITEM_ID,
+    );
+
+    expect(result.title).toBe("A Practical Guide to Machine Learning System Design");
+    expect(result.markdown).toBe(
+      "## Page 1\n\nThis guide explains how to turn an imprecise request into a reliable system and how to justify every design decision.",
+    );
+  });
+
   it("skips images above the pixel limit before PDF.js decodes them", async () => {
     // 8000 x 8000 grayscale is 64 Mpx (61 MiB decoded) but deflates to well under 100 KiB.
     const bytes = makePdfWithImageObjects([grayImage(8000)]);
@@ -323,6 +365,19 @@ function makeLayoutAwarePdf(): Buffer {
     ],
     12,
   );
+}
+
+function makeTextPdf(lines: string[]): Buffer {
+  return buildPdf([
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    Buffer.from(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+    ),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"),
+    pdfStream(Buffer.from(lines.join("\n"))),
+  ]);
 }
 
 function textAt(font: string, size: number, x: number, y: number, value: string): string {
