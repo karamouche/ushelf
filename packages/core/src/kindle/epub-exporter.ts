@@ -12,6 +12,8 @@ import { mediaPath } from "../ingestion/media-localizer.js";
 
 const MAX_EPUB_BYTES = 60 * 1024 * 1024;
 const FIXED_TIME = new Date("2000-01-01T12:00:00.000Z");
+/** Amazon rejects Send to Kindle requests without an author, so authorless items use this. */
+export const UNKNOWN_AUTHOR = "Unknown";
 
 export interface EpubMedia {
   filename: string;
@@ -41,7 +43,7 @@ export async function exportKindleEpub(item: ShelfItem, media: EpubMedia[]): Pro
       .process(markdown),
   );
   const title = escapeXml(item.title);
-  const author = escapeXml(item.author ?? "Unknown author");
+  const author = escapeXml(item.author?.trim() || UNKNOWN_AUTHOR);
   const provenance =
     item.sourceType === "document"
       ? `Source file: ${escapeXml(item.file.name)}`
