@@ -459,7 +459,7 @@ function inferTitle(layout: PageTextLayout): TitleHeading | undefined {
       index += 1;
       continue;
     }
-    if (heading.height >= layout.bodyHeight * 1.2 && !bulletText(heading.text)) {
+    if (heading.height >= layout.bodyHeight * 1.2 && !listItem(heading.text)) {
       candidates.push({ ...heading, start: index });
     }
     index = heading.end;
@@ -499,23 +499,23 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
       continue;
     }
 
-    const bullet = bulletText(line.text);
-    if (bullet) {
-      const listLines = [bullet];
+    const item = listItem(line.text);
+    if (item) {
+      const listLines = [item];
       let next = index + 1;
       while (next < lines.length) {
-        const nextBullet = bulletText(lines[next]!.text);
+        const nextItem = listItem(lines[next]!.text);
         if (
-          !nextBullet ||
+          !nextItem ||
           headingAt(lines, next, layout) ||
           tableAt(lines, next, layout.bodyHeight)
         ) {
           break;
         }
-        listLines.push(nextBullet);
+        listLines.push(nextItem);
         next += 1;
       }
-      blocks.push({ y: line.y, markdown: listLines.map((value) => `- ${value}`).join("\n") });
+      blocks.push({ y: line.y, markdown: listLines.join("\n") });
       index = next;
       continue;
     }
@@ -527,7 +527,7 @@ function renderTextBlocks(layout: PageTextLayout, skipped?: TitleHeading): Posit
       const candidate = lines[next]!;
       if (
         headingAt(lines, next, layout) ||
-        bulletText(candidate.text) ||
+        listItem(candidate.text) ||
         tableAt(lines, next, layout.bodyHeight) ||
         !continuesParagraph(previous, candidate, layout.bodyHeight)
       ) {
@@ -610,9 +610,12 @@ function joinWrappedLines(lines: string[]): string {
   }, "");
 }
 
-function bulletText(value: string): string | undefined {
-  const match = value.match(/^\s*(?:[•●▪◦‣⁃*\-–—]|\d+[.)])\s+(.+)$/u);
-  return match?.[1]?.trim() || undefined;
+// Returns the line as a Markdown list item, keeping the number of an ordered item.
+function listItem(value: string): string | undefined {
+  const match = value.match(/^\s*(?:[•●▪◦‣⁃*\-–—]|(\d+)[.)])\s+(.+)$/u);
+  const text = match?.[2]?.trim();
+  if (!text) return undefined;
+  return match?.[1] ? `${match[1]}. ${text}` : `- ${text}`;
 }
 
 function endsLikeSentence(value: string): boolean {

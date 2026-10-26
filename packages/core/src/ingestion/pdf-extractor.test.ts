@@ -148,6 +148,27 @@ describe("PDF ingestion", () => {
     );
   });
 
+  it("keeps the numbers of ordered list items", async () => {
+    const result = await extractPdf(
+      makeTextPdf([
+        textAt("F1", 10, 60, 714, "Before adding capacity, check these optimizations in order:"),
+        textAt("F1", 10, 60, 690, "1. Trim unnecessary context from the prompt"),
+        textAt("F1", 10, 60, 676, "2) Route simple requests to a smaller model"),
+        textAt("F1", 10, 60, 662, "- Cache only where isolation allows it"),
+      ]),
+      "list.pdf",
+      ITEM_ID,
+    );
+
+    expect(result.markdown).toContain(
+      [
+        "1. Trim unnecessary context from the prompt",
+        "2. Route simple requests to a smaller model",
+        "- Cache only where isolation allows it",
+      ].join("\n"),
+    );
+  });
+
   it("skips images above the pixel limit before PDF.js decodes them", async () => {
     // 8000 x 8000 grayscale is 64 Mpx (61 MiB decoded) but deflates to well under 100 KiB.
     const bytes = makePdfWithImageObjects([grayImage(8000)]);
