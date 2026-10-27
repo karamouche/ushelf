@@ -49,6 +49,7 @@ async function fixture(
   sourceMarkdown = sourceType === "document"
     ? "## Page 1\n\nDocument source."
     : "## Source\n\nCaptured source.",
+  author: string | null = "Reader",
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), "ushelf-kindle-test-"));
   roots.push(root);
@@ -59,7 +60,7 @@ async function fixture(
   const common = {
     id: "e7cf9d0d-bba8-4b93-9503-ab8f15de9d2f",
     title: `Kindle ${sourceType}`,
-    author: "Reader",
+    ...(author === null ? {} : { author }),
     capturedAt: now,
     updatedAt: now,
     reading: { status: "inbox" as const, progress: 0 },
@@ -133,6 +134,23 @@ describe("ShelfService Kindle delivery", () => {
       expect((await service.getItem(item.id)).revision).toBe(item.revision);
     });
   }
+
+  for (const author of [null, "  "]) {
+    it(`sends "Unknown" as the author when the item has ${author ? "a blank" : "no"} author`, async () => {
+      const { service, gateway, item } = await fixture("document", undefined, author);
+      await service.sendToKindle(item.id, "DEVICE123");
+      expect(gateway.sent?.author).toBe("Unknown");
+      const archive = unzipSync(gateway.sent!.bytes);
+      const opf = Buffer.from(archive["EPUB/package.opf"]!).toString();
+      expect(opf).toContain("<dc:creator>Unknown</dc:creator>");
+    });
+  }
+
+  it("sends the item author when one is saved", async () => {
+    const { service, gateway, item } = await fixture();
+    await service.sendToKindle(item.id, "DEVICE123");
+    expect(gateway.sent?.author).toBe("Reader");
+  });
 
   it("rejects unknown devices without sending", async () => {
     const { service, gateway, item } = await fixture();

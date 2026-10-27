@@ -30,7 +30,7 @@ import {
   type KindleDevices,
   type KindleStatus,
 } from "../domain/kindle.js";
-import { exportKindleEpub } from "../kindle/epub-exporter.js";
+import { exportKindleEpub, UNKNOWN_AUTHOR } from "../kindle/epub-exporter.js";
 import { KindleBridgeGateway, type KindleGateway } from "../kindle/kindle-bridge.js";
 import { ConnectorAuthorization } from "../connectors/connector-authorization.js";
 import { canonicalizeUrl, detectSourceType } from "../ingestion/source-url.js";
@@ -511,7 +511,7 @@ export class ShelfService {
         {
           bytes,
           title: item.title,
-          ...(item.author ? { author: item.author } : {}),
+          author: item.author?.trim() || UNKNOWN_AUTHOR,
           targetSerial,
         },
         signal,
