@@ -17,7 +17,8 @@ export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): Extrac
   if (!article?.content || (article.textContent ?? "").trim().length < 120) {
     throw new Error("The page did not contain a readable article");
   }
-  const title = clean(article.title ?? "") || new URL(canonicalUrl).hostname;
+  const title =
+    clean(decodeEntities(document, article.title ?? "")) || new URL(canonicalUrl).hostname;
   let markdown = htmlToMarkdown(article.content);
   if (metadataImage && !containsMarkdownImage(markdown)) {
     markdown = `![${escapeImageAlt(title)}](${metadataImage})\n\n${markdown}`;
@@ -25,7 +26,7 @@ export function extractReadableArticle(dom: JSDOM, canonicalUrl: string): Extrac
   return {
     sourceType: "article",
     title,
-    ...(article.byline ? { author: clean(article.byline) } : {}),
+    ...(article.byline ? { author: clean(decodeEntities(document, article.byline)) } : {}),
     markdown,
     method: "readability",
   };
@@ -396,6 +397,19 @@ function containsMarkdownImage(markdown: string): boolean {
 
 function escapeImageAlt(value: string): string {
   return value.replaceAll("[", "\\[").replaceAll("]", "\\]");
+}
+
+/**
+ * Readability treats metadata (including JSON-LD, where publishers often embed HTML entities) as
+ * escaped HTML but only decodes the XML entities and numeric references, so named entities such as
+ * `&nbsp;` survive as literal text. A textarea parses its content as RCDATA, which decodes every
+ * HTML entity without ever creating markup.
+ */
+function decodeEntities(document: Document, value: string): string {
+  if (!value.includes("&")) return value;
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = value;
+  return textarea.value;
 }
 
 function clean(value: string): string {

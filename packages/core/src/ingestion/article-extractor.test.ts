@@ -201,6 +201,24 @@ describe("readable article extraction", () => {
     expect(result.markdown).toContain("![Guide](https://docs.example.test/generated/cover.png)");
   });
 
+  it("decodes named HTML entities left in structured-data metadata", () => {
+    const dom = articleDom(
+      `<h1>Fundamentals matter more than&nbsp;ever</h1>
+       <p>This article contains enough useful explanatory text for Readability to extract it reliably without requiring any unrelated navigation content.</p>`,
+      `<script type="application/ld+json">${JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: "Fundamentals matter more than&nbsp;ever &hellip; again",
+        author: { "@type": "Person", name: "Jos&eacute; Heck" },
+      })}</script>`,
+    );
+
+    const result = extractReadableArticle(dom, "https://docs.example.test/guides/overview");
+
+    expect(result.title).toBe("Fundamentals matter more than ever … again");
+    expect(result.author).toBe("José Heck");
+  });
+
   it("resolves relative links and images against the final response URL", () => {
     const dom = articleDom(`
       <h1>Redirected guide</h1>
