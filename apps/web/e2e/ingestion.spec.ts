@@ -32,7 +32,7 @@ test("ingests public X content into canonical Markdown", async () => {
     await expectLocalizedImage(result, /X Open Source/);
     expect(result.item.sourceMarkdown).toContain(`[View post on X](${xUrl})`);
 
-    await expectCanonicalDocument(result, {
+    await expectCanonicalDocument(service, result, {
       title: result.item.title,
       originalUrl: xUrl,
       canonicalUrl: xUrl,
@@ -66,7 +66,7 @@ test("ingests a readable article into canonical Markdown", async () => {
       "[The Illusion of Thinking](https://machinelearning.apple.com/research/illusion-of-thinking)",
     );
 
-    await expectCanonicalDocument(result, {
+    await expectCanonicalDocument(service, result, {
       title: "Software Engineering fundamentals matter more than ever",
       originalUrl: blogUrl,
       canonicalUrl: blogCanonicalUrl,
@@ -121,13 +121,20 @@ async function expectLocalizedImage(result: IngestResult, alt?: RegExp): Promise
 }
 
 async function expectCanonicalDocument(
+  service: ShelfService,
   result: IngestResult,
   expected: { title: string; originalUrl: string; canonicalUrl: string; sourceAnchor: string },
 ): Promise<void> {
+  // YAML quotes scalars such as titles containing ": ", so compare the parsed frontmatter rather
+  // than its serialized text.
+  const stored = await service.getItem(result.item.id);
+  expect(stored).toMatchObject({
+    title: expected.title,
+    originalUrl: expected.originalUrl,
+    canonicalUrl: expected.canonicalUrl,
+    sourceMarkdown: result.item.sourceMarkdown,
+  });
   const document = await readFile(result.item.filePath, "utf8");
-  expect(document).toContain(`title: ${expected.title}`);
-  expect(document).toContain("canonicalUrl:");
-  expect(document).toContain(expected.canonicalUrl);
   expect(document).toContain(`# ${expected.title}`);
   expect(document).toContain(`[Open original](${expected.originalUrl})`);
   expect(document).not.toContain("## Insights");
