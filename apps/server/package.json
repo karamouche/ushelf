@@ -12,7 +12,7 @@
     "import": "tsx src/cli.ts import"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.1",
+    "@hono/node-server": "^2.1.6",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@ushelf/core": "workspace:*",
     "@ushelf/mcp": "workspace:*",
